@@ -54,12 +54,23 @@ Output:
 Installs a stack into your project for all detected AI tools.
 
 ```bash
+pit install                              # from .promptpit/ in current dir
 pit install .promptpit                    # from local bundle
 pit install github:user/repo             # from GitHub (auto-collects if no .promptpit/)
 pit install github:user/repo@v2.0        # specific tag/branch
 pit install github:user/repo --global    # install to ~/.claude/, ~/.cursor/ (all projects)
-pit install .promptpit --dry-run         # preview without writing
+pit install --dry-run                    # preview without writing
 ```
+
+### Team setup
+
+Commit `.promptpit/` to your repo. Teammates install with:
+
+```bash
+pit install
+```
+
+Everyone gets the same AI config in their tool's native format. Like `.editorconfig`, but for AI coding tools.
 
 ## Supported Tools
 

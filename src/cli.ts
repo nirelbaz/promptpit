@@ -37,7 +37,7 @@ program
 program
   .command("install")
   .description("Install a stack into your project")
-  .argument("<source>", "Stack source: local path or github:owner/repo[@ref]")
+  .argument("[source]", "Stack source: local path or github:owner/repo[@ref] (default: .promptpit)")
   .argument("[target]", "Target project directory", ".")
   .option(
     "--global",
@@ -47,13 +47,14 @@ program
   .option("--force", "Overwrite existing content outside markers")
   .action(
     async (
-      source: string,
+      source: string | undefined,
       target: string,
       opts: { global?: boolean; dryRun?: boolean; force?: boolean },
     ) => {
       try {
+        const resolvedSource = source ?? ".promptpit";
         const targetDir = path.resolve(target);
-        await installStack(source, targetDir, opts);
+        await installStack(resolvedSource, targetDir, opts);
       } catch (err: unknown) {
         if (err instanceof Error) {
           log.error(err.message);

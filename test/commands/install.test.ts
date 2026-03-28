@@ -64,6 +64,30 @@ describe("installStack", () => {
     expect(envFile).toMatch(/^DATABASE_URL=/m);
   });
 
+  it("installs from .promptpit/ in target dir when source is default", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    // Copy valid stack into target/.promptpit/
+    const { cp } = await import("node:fs/promises");
+    await cp(VALID_STACK, path.join(target, ".promptpit"), { recursive: true });
+
+    await installStack(".promptpit", target, {});
+
+    const claudeMd = await readFile(path.join(target, "CLAUDE.md"), "utf-8");
+    expect(claudeMd).toContain("promptpit:start:test-stack");
+  });
+
+  it("shows helpful error when no .promptpit/ found", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+
+    await expect(
+      installStack(".promptpit", target, {}),
+    ).rejects.toThrow("No .promptpit/ found");
+  });
+
   it("re-install replaces marker content", async () => {
     const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
     tmpDirs.push(target);

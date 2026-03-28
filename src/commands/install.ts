@@ -21,6 +21,20 @@ export async function installStack(
   let resolvedSource = source;
   let tmpDir: string | null = null;
 
+  // Default source: resolve .promptpit relative to target directory
+  if (source === ".promptpit") {
+    resolvedSource = path.resolve(target, ".promptpit");
+    if (!(await exists(path.join(resolvedSource, "stack.json")))) {
+      throw new Error(
+        "No .promptpit/ found in this directory.\n" +
+          "Usage:\n" +
+          "  pit install                              # install from .promptpit/ in current dir\n" +
+          "  pit install ./path/to/.promptpit          # install from local path\n" +
+          "  pit install github:user/repo              # install from GitHub",
+      );
+    }
+  }
+
   const gh = parseGitHubSource(source);
   if (gh) {
     const resolved = await cloneAndResolve(gh);
