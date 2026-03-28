@@ -2,8 +2,6 @@
 
 Portable AI agent stacks. Collect, install, and share across Claude Code, Cursor, and more.
 
-![promptpit demo](./demo.gif)
-
 ## The Problem
 
 Every AI coding tool has its own config format. Real-world stacks like [gstack](https://github.com/garrytan/gstack) require manual `git clone`, editing CLAUDE.md by hand, and running setup scripts — and only work in one tool. There's no `npm install` for AI agent configurations.
@@ -71,6 +69,8 @@ pit install
 ```
 
 Everyone gets the same AI config in their tool's native format. Like `.editorconfig`, but for AI coding tools.
+
+**Tip:** Add `.promptpit/` to your AI tool's ignore list so it doesn't scan the raw bundle files (they're already installed in the tool's native format). For Claude Code, add `.promptpit` to `ignorePatterns` in `.claude/settings.json`. For Cursor, add it to `.cursorignore`.
 
 ## Supported Tools
 
