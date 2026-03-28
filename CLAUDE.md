@@ -7,7 +7,7 @@ PromptPit (`pit`) — a CLI tool that makes AI agent stacks portable across Clau
 ## Commands
 
 ```bash
-npm test          # run tests (vitest, 71 tests)
+npm test          # run tests (vitest, 74 tests)
 npm run build     # build dist/cli.js (tsup, ESM)
 npm run lint      # TypeScript strict mode check
 npm run dev       # watch mode build
@@ -41,6 +41,16 @@ src/
 ## Testing
 
 Tests use vitest with real filesystem (not memfs) for E2E. Test fixtures in `test/__fixtures__/`. Contract tests in `test/adapters/contract.test.ts` are parameterized across all adapters (7 checks each).
+
+## Before Pushing
+
+Always run before committing or pushing:
+
+```bash
+npm test && npm run lint && npm run build
+```
+
+All three must pass. No exceptions.
 
 ## Adding a New Adapter
 
