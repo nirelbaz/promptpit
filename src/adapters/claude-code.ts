@@ -48,9 +48,18 @@ async function read(root: string): Promise<PlatformConfig> {
   const p = projectPaths(root);
 
   const agentInstructions = (await readFileOrNull(p.config)) ?? "";
-  const skills = (await exists(p.skills))
+  let skills = (await exists(p.skills))
     ? await readSkillsFromDir(p.skills)
     : [];
+
+  // Fallback: scan repo root for */SKILL.md (handles repos like gstack
+  // where the repo itself is a skills directory, not a project with .claude/skills/)
+  if (skills.length === 0) {
+    const rootSkills = await readSkillsFromDir(root);
+    if (rootSkills.length > 0) {
+      skills = rootSkills;
+    }
+  }
   const mcpServers = await readMcpFromSettings(p.mcp);
 
   return {
