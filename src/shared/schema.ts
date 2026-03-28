@@ -5,7 +5,13 @@ const semverRegex = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[\w.]+)?(\+[\w.]
 // --- Stack Manifest (stack.json) ---
 
 export const stackManifestSchema = z.object({
-  name: z.string().min(1),
+  name: z
+    .string()
+    .min(1)
+    .regex(
+      /^[a-zA-Z0-9_@][a-zA-Z0-9_.\-/]*$/,
+      "Only alphanumeric, dash, underscore, dot, @, and / allowed",
+    ),
   version: z.string().regex(semverRegex, "Must be valid semver (e.g., 1.0.0)"),
   description: z.string().optional(),
   license: z.string().optional(),

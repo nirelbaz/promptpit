@@ -18,6 +18,18 @@ describe("stackManifestSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("rejects names with unsafe characters", () => {
+    const bad = { name: "../../etc/passwd", version: "1.0.0" };
+    const result = stackManifestSchema.safeParse(bad);
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts scoped npm-style names", () => {
+    const valid = { name: "@scope/my-stack", version: "1.0.0" };
+    const result = stackManifestSchema.safeParse(valid);
+    expect(result.success).toBe(true);
+  });
+
   it("rejects invalid semver", () => {
     const bad = { name: "test", version: "not-semver" };
     const result = stackManifestSchema.safeParse(bad);

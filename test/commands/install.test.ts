@@ -46,6 +46,24 @@ describe("installStack", () => {
     expect(envFile).toContain("DATABASE_URL");
   });
 
+  it("appends missing .env keys without substring false positives", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+    // Pre-populate .env with a key whose name is a superstring of a required key
+    await writeFile(
+      path.join(target, ".env"),
+      "DATABASE_URL_BACKUP=old-value\n",
+    );
+
+    await installStack(VALID_STACK, target, {});
+
+    const envFile = await readFile(path.join(target, ".env"), "utf-8");
+    // DATABASE_URL should still be added even though DATABASE_URL_BACKUP exists
+    expect(envFile).toContain("DATABASE_URL_BACKUP=old-value");
+    expect(envFile).toMatch(/^DATABASE_URL=/m);
+  });
+
   it("re-install replaces marker content", async () => {
     const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
     tmpDirs.push(target);

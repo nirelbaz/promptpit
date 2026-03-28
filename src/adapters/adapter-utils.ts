@@ -33,7 +33,8 @@ export async function readSkillsFromDir(
     const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
     const validation = skillFrontmatterSchema.safeParse(parsed.data);
     if (!validation.success) {
-      log.warn(`Skipping ${file}: invalid frontmatter`);
+      const reasons = validation.error.errors.map((e) => e.message).join(", ");
+      log.warn(`Skipping ${file}: invalid frontmatter (${reasons})`);
       continue;
     }
 
@@ -58,8 +59,9 @@ export async function readMcpFromSettings(
   try {
     const settings = JSON.parse(raw);
     return settings[mcpKey] ?? {};
-  } catch {
-    log.warn(`Could not parse ${settingsPath}`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "unknown error";
+    log.warn(`Could not parse ${settingsPath}: ${msg}`);
     return {};
   }
 }

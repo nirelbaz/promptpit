@@ -102,8 +102,13 @@ export async function installStack(
       const envPath = path.join(target, ".env");
       if (await exists(envPath)) {
         const existing = await readFileOrNull(envPath);
+        const existingLines = existing?.split("\n") ?? [];
         const missingKeys = Object.keys(bundle.envExample).filter(
-          (key) => !existing?.includes(`${key}=`),
+          (key) =>
+            !existingLines.some(
+              (line) =>
+                line.startsWith(`${key}=`) || line.startsWith(`${key} =`),
+            ),
         );
         if (missingKeys.length > 0) {
           const additions = missingKeys
