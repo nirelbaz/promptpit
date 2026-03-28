@@ -1,0 +1,7 @@
+---
+description: Testing rules
+globs: **/*.test.ts
+---
+
+Always use vitest for testing.
+Use describe/it blocks.

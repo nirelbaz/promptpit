@@ -1,7 +1,8 @@
 import type { PlatformAdapter, DetectionResult } from "./types.js";
 import { claudeCodeAdapter } from "./claude-code.js";
+import { cursorAdapter } from "./cursor.js";
 
-const adapters: PlatformAdapter[] = [claudeCodeAdapter];
+const adapters: PlatformAdapter[] = [claudeCodeAdapter, cursorAdapter];
 
 export function getAdapter(id: string): PlatformAdapter {
   const adapter = adapters.find((a) => a.id === id);
