@@ -1,3 +1,10 @@
+---
+name: promptpit
+description: >-
+  Portable AI agent stacks — collect, install, and share across Claude Code,
+  Cursor, and more
+---
+
 # CLAUDE.md
 
 ## Project
