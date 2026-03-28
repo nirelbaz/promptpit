@@ -1,0 +1,7 @@
+{
+  "name": "test-stack",
+  "version": "1.0.0",
+  "description": "A test stack for fixtures",
+  "skills": ["skills/browse"],
+  "compatibility": ["claude-code"]
+}
