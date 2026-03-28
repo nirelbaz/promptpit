@@ -1,6 +1,6 @@
 {
   "name": "promptpit",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Portable AI agent stacks — collect, install, and share across Claude Code, Cursor, and more",
   "type": "module",
   "bin": {
