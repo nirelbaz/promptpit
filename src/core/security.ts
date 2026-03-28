@@ -13,7 +13,6 @@ const SECRET_PATTERNS: RegExp[] = [
   /^xoxp-[a-zA-Z0-9-]+/,
   /^AKIA[A-Z0-9]{16}/,
   /^Bearer\s+[a-zA-Z0-9._\-]+/i,
-  /^[a-zA-Z0-9+/=_\-]{30,}$/,
 ];
 
 function looksLikeSecret(value: string): boolean {

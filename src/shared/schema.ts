@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const semverRegex = /^\d+\.\d+\.\d+(-[\w.]+)?(\+[\w.]+)?$/;
+const semverRegex = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[\w.]+)?(\+[\w.]+)?$/;
 
 // --- Stack Manifest (stack.json) ---
 

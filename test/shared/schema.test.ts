@@ -24,6 +24,12 @@ describe("stackManifestSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("rejects semver with leading zeros", () => {
+    const bad = { name: "test", version: "01.0.0" };
+    const result = stackManifestSchema.safeParse(bad);
+    expect(result.success).toBe(false);
+  });
+
   it("accepts optional fields", () => {
     const full = {
       name: "my-stack",
