@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -12,10 +12,17 @@ export interface GitHubSource {
   ref?: string;
 }
 
+const SAFE_NAME = /^[a-zA-Z0-9_.\-]+$/;
+
 export function parseGitHubSource(source: string): GitHubSource | null {
   const match = source.match(/^github:([^/]+)\/([^@]+)(?:@(.+))?$/);
   if (!match) return null;
-  return { owner: match[1]!, repo: match[2]!, ref: match[3] };
+  const owner = match[1]!;
+  const repo = match[2]!;
+  const ref = match[3];
+  if (!SAFE_NAME.test(owner) || !SAFE_NAME.test(repo)) return null;
+  if (ref && !SAFE_NAME.test(ref)) return null;
+  return { owner, repo, ref };
 }
 
 export async function cloneAndResolve(
@@ -28,18 +35,17 @@ export async function cloneAndResolve(
 
   try {
     try {
-      execSync("git --version", { stdio: "ignore" });
+      execFileSync("git", ["--version"], { stdio: "ignore" });
     } catch {
       throw new Error(
         "git is not installed or not in PATH. Install git to use github: sources.",
       );
     }
 
-    const refArgs = gh.ref ? `--branch ${gh.ref}` : "";
-    execSync(
-      `git clone --depth 1 ${refArgs} "${url}" "${tmpDir}/repo"`,
-      { stdio: "pipe", timeout: 60000 },
-    );
+    const args = ["clone", "--depth", "1"];
+    if (gh.ref) args.push("--branch", gh.ref);
+    args.push(url, path.join(tmpDir, "repo"));
+    execFileSync("git", args, { stdio: "pipe", timeout: 60000 });
     spin.succeed(`Cloned ${gh.owner}/${gh.repo}`);
   } catch (err: unknown) {
     spin.fail(`Failed to clone ${gh.owner}/${gh.repo}`);

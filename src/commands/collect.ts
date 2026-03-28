@@ -55,7 +55,7 @@ export async function collectStack(
   );
   readSpin.succeed("Configurations read");
 
-  const mergeResult = mergeConfigs(configs, { returnWarnings: true });
+  const mergeResult = mergeConfigs(configs);
 
   if (mergeResult.warnings && mergeResult.warnings.length > 0) {
     for (const w of mergeResult.warnings) {

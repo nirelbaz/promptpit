@@ -1,5 +1,6 @@
 import path from "node:path";
 import matter from "gray-matter";
+import { SAFE_MATTER_OPTIONS } from "../adapters/adapter-utils.js";
 import {
   stackManifestSchema,
   mcpConfigSchema,
@@ -8,6 +9,7 @@ import {
 } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
 import { readSkillsFromDir } from "../adapters/adapter-utils.js";
+import { log } from "../shared/io.js";
 
 export async function readStack(stackDir: string): Promise<StackBundle> {
   const manifestPath = path.join(stackDir, "stack.json");
@@ -35,7 +37,7 @@ export async function readStack(stackDir: string): Promise<StackBundle> {
   const agentRaw = await readFileOrNull(agentPath);
   let agentInstructions = "";
   if (agentRaw) {
-    const parsed = matter(agentRaw);
+    const parsed = matter(agentRaw, SAFE_MATTER_OPTIONS as never);
     agentInstructions = parsed.content.trim();
   }
 
@@ -55,7 +57,7 @@ export async function readStack(stackDir: string): Promise<StackBundle> {
         mcpServers = mcpResult.data;
       }
     } catch {
-      // Invalid MCP JSON — skip
+      log.warn(`Could not parse ${mcpPath}, skipping MCP config`);
     }
   }
 
@@ -93,7 +95,12 @@ export async function writeStack(
   );
 
   if (bundle.agentInstructions) {
-    const frontmatter = `---\nname: ${bundle.manifest.name}\ndescription: ${bundle.manifest.description ?? ""}\n---\n\n`;
+    const yamlImport = await import("js-yaml");
+    const fmData = {
+      name: bundle.manifest.name,
+      description: bundle.manifest.description ?? "",
+    };
+    const frontmatter = `---\n${yamlImport.default.dump(fmData).trim()}\n---\n\n`;
     await writeFileEnsureDir(
       path.join(outputDir, "agent.promptpit.md"),
       frontmatter + bundle.agentInstructions,

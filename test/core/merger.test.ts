@@ -78,7 +78,7 @@ describe("mergeConfigs", () => {
         redis: { command: "redis" },
       },
     });
-    const result = mergeConfigs([a, b], { returnWarnings: true });
+    const result = mergeConfigs([a, b]);
     expect(result.mcpServers).toHaveProperty("postgres");
     expect(result.mcpServers).toHaveProperty("redis");
     expect(result.mcpServers.postgres.command).toBe("pg-a");

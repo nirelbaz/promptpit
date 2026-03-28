@@ -2,7 +2,7 @@ import path from "node:path";
 import { readStack } from "../core/stack.js";
 import { detectAdapters } from "../adapters/registry.js";
 import { validateEnvNames } from "../core/security.js";
-import { writeFileEnsureDir, removeDir } from "../shared/utils.js";
+import { writeFileEnsureDir, removeDir, readFileOrNull, exists } from "../shared/utils.js";
 import { log, spinner } from "../shared/io.js";
 import { parseGitHubSource, cloneAndResolve } from "../sources/github.js";
 import type { WriteOptions } from "../adapters/types.js";
@@ -97,16 +97,34 @@ export async function installStack(
       }
     }
 
-    // Write .env file with placeholders
+    // Write .env file with placeholders (don't overwrite existing)
     if (Object.keys(bundle.envExample).length > 0 && !opts.dryRun) {
       const envPath = path.join(target, ".env");
-      const envLines = Object.entries(bundle.envExample)
-        .map(([key, comment]) => `${key}= ${comment}`)
-        .join("\n");
-      await writeFileEnsureDir(envPath, envLines + "\n");
-      log.info(
-        `Created .env with ${Object.keys(bundle.envExample).length} placeholder(s). Fill in your values.`,
-      );
+      if (await exists(envPath)) {
+        const existing = await readFileOrNull(envPath);
+        const missingKeys = Object.keys(bundle.envExample).filter(
+          (key) => !existing?.includes(`${key}=`),
+        );
+        if (missingKeys.length > 0) {
+          const additions = missingKeys
+            .map((key) => `${key}= ${bundle.envExample[key]}`)
+            .join("\n");
+          await writeFileEnsureDir(envPath, existing + "\n" + additions + "\n");
+          log.info(
+            `Appended ${missingKeys.length} new placeholder(s) to existing .env.`,
+          );
+        } else {
+          log.info("All env vars already present in .env, skipping.");
+        }
+      } else {
+        const envLines = Object.entries(bundle.envExample)
+          .map(([key, comment]) => `${key}= ${comment}`)
+          .join("\n");
+        await writeFileEnsureDir(envPath, envLines + "\n");
+        log.info(
+          `Created .env with ${Object.keys(bundle.envExample).length} placeholder(s). Fill in your values.`,
+        );
+      }
     }
 
     log.success("Stack installed successfully!");

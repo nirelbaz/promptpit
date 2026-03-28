@@ -2,6 +2,7 @@ import path from "node:path";
 import { homedir } from "node:os";
 import fg from "fast-glob";
 import matter from "gray-matter";
+import { SAFE_MATTER_OPTIONS } from "./adapter-utils.js";
 import type {
   PlatformAdapter,
   PlatformConfig,
@@ -37,8 +38,8 @@ function userPaths() {
   };
 }
 
-export function skillToMdc(skillContent: string, skillName: string): string {
-  const parsed = matter(skillContent);
+export function skillToMdc(skillContent: string, _skillName: string): string {
+  const parsed = matter(skillContent, SAFE_MATTER_OPTIONS as never);
   const fm = parsed.data as Record<string, unknown>;
 
   const mdcFrontmatter: Record<string, unknown> = {};

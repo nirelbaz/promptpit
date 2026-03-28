@@ -8,18 +8,13 @@ export interface MergedStack {
   rules: string[];
 }
 
-interface MergeOptions {
-  returnWarnings?: boolean;
-}
-
-type MergeResult = MergedStack & { warnings?: string[] };
+type MergeResult = MergedStack & { warnings: string[] };
 
 export function mergeConfigs(
   configs: PlatformConfig[],
-  opts?: MergeOptions,
 ): MergeResult {
   if (configs.length === 0) {
-    return { agentInstructions: "", skills: [], mcpServers: {}, rules: [] };
+    return { agentInstructions: "", skills: [], mcpServers: {}, rules: [], warnings: [] };
   }
   if (configs.length === 1) {
     const c = configs[0]!;
@@ -28,6 +23,7 @@ export function mergeConfigs(
       skills: [...c.skills],
       mcpServers: { ...c.mcpServers },
       rules: [...c.rules],
+      warnings: [],
     };
   }
 
@@ -62,16 +58,11 @@ export function mergeConfigs(
 
   const rules = configs.flatMap((c) => c.rules);
 
-  const result: MergeResult = {
+  return {
     agentInstructions: instructions,
     skills: [...seenSkills.values()],
     mcpServers: seenMcp,
     rules,
+    warnings,
   };
-
-  if (opts?.returnWarnings) {
-    result.warnings = warnings;
-  }
-
-  return result;
 }

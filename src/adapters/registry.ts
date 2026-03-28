@@ -2,7 +2,8 @@ import type { PlatformAdapter, DetectionResult } from "./types.js";
 import { claudeCodeAdapter } from "./claude-code.js";
 import { cursorAdapter } from "./cursor.js";
 
-const adapters: PlatformAdapter[] = [claudeCodeAdapter, cursorAdapter];
+const defaultAdapters: PlatformAdapter[] = [claudeCodeAdapter, cursorAdapter];
+let adapters: PlatformAdapter[] = [...defaultAdapters];
 
 export function getAdapter(id: string): PlatformAdapter {
   const adapter = adapters.find((a) => a.id === id);
@@ -37,4 +38,8 @@ export function registerAdapter(adapter: PlatformAdapter): void {
     throw new Error(`Adapter "${adapter.id}" is already registered`);
   }
   adapters.push(adapter);
+}
+
+export function resetAdapters(): void {
+  adapters = [...defaultAdapters];
 }
