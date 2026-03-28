@@ -8,7 +8,7 @@ import type {
   WriteOptions,
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
-import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
+import { readFileOrNull, writeFileEnsureDir, exists, removeSymlink } from "../shared/utils.js";
 import { readSkillsFromDir, readMcpFromSettings } from "./adapter-utils.js";
 import {
   hasMarkers,
@@ -114,8 +114,11 @@ async function write(
 
     // Copy skills
     for (const skill of stack.skills) {
-      const dest = path.join(p.skills, skill.name, "SKILL.md");
+      const skillDir = path.join(p.skills, skill.name);
+      const dest = path.join(skillDir, "SKILL.md");
       if (!opts.dryRun) {
+        // Remove existing symlink (e.g., gstack installs skills as symlinks)
+        await removeSymlink(skillDir);
         await writeFileEnsureDir(dest, skill.content);
         filesWritten.push(dest);
       }

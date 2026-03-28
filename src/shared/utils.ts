@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, access, rm } from "node:fs/promises";
+import { readFile, writeFile, mkdir, access, rm, lstat, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
 
 export async function readFileOrNull(path: string): Promise<string | null> {
@@ -23,6 +23,17 @@ export async function exists(path: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+export async function removeSymlink(path: string): Promise<void> {
+  try {
+    const stat = await lstat(path);
+    if (stat.isSymbolicLink()) {
+      await unlink(path);
+    }
+  } catch {
+    // Path doesn't exist, nothing to remove
   }
 }
 
