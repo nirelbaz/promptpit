@@ -1,8 +1,5 @@
 import path from "node:path";
 import { homedir } from "node:os";
-import fg from "fast-glob";
-import matter from "gray-matter";
-import yaml from "js-yaml";
 import type {
   PlatformAdapter,
   PlatformConfig,
@@ -10,25 +7,14 @@ import type {
   WriteResult,
   WriteOptions,
 } from "./types.js";
-import type { StackBundle, SkillEntry, McpConfig } from "../shared/schema.js";
-import { skillFrontmatterSchema } from "../shared/schema.js";
+import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
+import { readSkillsFromDir, readMcpFromSettings } from "./adapter-utils.js";
 import {
   hasMarkers,
   insertMarkers,
   replaceMarkerContent,
 } from "../shared/markers.js";
-import { log } from "../shared/io.js";
-
-// Safe YAML parsing — prevents !!js/function RCE from untrusted SKILL.md
-const SAFE_MATTER_OPTIONS = {
-  engines: {
-    yaml: {
-      parse: (str: string) => yaml.load(str, { schema: yaml.JSON_SCHEMA }),
-      stringify: (obj: unknown) => yaml.dump(obj),
-    },
-  },
-};
 
 function projectPaths(root: string) {
   return {
@@ -58,54 +44,14 @@ async function detect(root: string): Promise<DetectionResult> {
   return { detected: found.length > 0, configPaths: found };
 }
 
-async function readSkills(skillsDir: string): Promise<SkillEntry[]> {
-  const skillFiles = await fg("*/SKILL.md", {
-    cwd: skillsDir,
-    absolute: true,
-  });
-
-  const skills: SkillEntry[] = [];
-  for (const file of skillFiles) {
-    const raw = await readFileOrNull(file);
-    if (!raw) continue;
-
-    const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
-    const validation = skillFrontmatterSchema.safeParse(parsed.data);
-    if (!validation.success) {
-      log.warn(`Skipping ${file}: invalid frontmatter`);
-      continue;
-    }
-
-    const skillName = path.basename(path.dirname(file));
-    skills.push({
-      name: skillName,
-      path: `skills/${skillName}`,
-      frontmatter: validation.data,
-      content: raw,
-    });
-  }
-  return skills;
-}
-
-async function readMcpConfig(mcpPath: string): Promise<McpConfig> {
-  const raw = await readFileOrNull(mcpPath);
-  if (!raw) return {};
-
-  try {
-    const settings = JSON.parse(raw);
-    return settings.mcpServers ?? {};
-  } catch {
-    log.warn(`Could not parse ${mcpPath}`);
-    return {};
-  }
-}
-
 async function read(root: string): Promise<PlatformConfig> {
   const p = projectPaths(root);
 
   const agentInstructions = (await readFileOrNull(p.config)) ?? "";
-  const skills = (await exists(p.skills)) ? await readSkills(p.skills) : [];
-  const mcpServers = await readMcpConfig(p.mcp);
+  const skills = (await exists(p.skills))
+    ? await readSkillsFromDir(p.skills)
+    : [];
+  const mcpServers = await readMcpFromSettings(p.mcp);
 
   return {
     adapterId: "claude-code",
