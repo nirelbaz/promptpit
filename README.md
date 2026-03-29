@@ -1,8 +1,11 @@
 # promptpit
 
+[![npm](https://img.shields.io/npm/v/promptpit)](https://www.npmjs.com/package/promptpit)
+[![license](https://img.shields.io/github/license/nirelbaz/promptpit)](LICENSE)
+
 Every AI coding tool stores config differently. Claude Code uses CLAUDE.md, Cursor uses .cursorrules. Sharing your setup means copy-pasting into formats that only work for one tool.
 
-pit fixes that. Two commands: `pit collect` bundles your configs, `pit install` writes them into each tool's native format.
+pit fixes that. Two commands: `pit collect` bundles your configs, `pit install` writes them into each tool's native format. Point it at any GitHub repo — even ones that don't use promptpit — and it auto-detects what's there.
 
 ```sh
 npx promptpit install github:nirelbaz/promptpit-starter
@@ -10,11 +13,11 @@ npx promptpit install github:nirelbaz/promptpit-starter
 
 ## Features
 
-- `pit collect` bundles configs, `pit install` writes them to each tool's native format
-- SKILL.md files auto-convert to .mdc for Cursor
 - Install directly from any GitHub repo, even ones that don't use promptpit
+- SKILL.md files auto-convert to .mdc for Cursor
 - Commit `.promptpit/` to your repo, teammates run `pit install`, everyone gets the same setup
 - Secrets are auto-stripped from MCP configs during collect
+- Supports Claude Code and Cursor today, new tools are one adapter file to add
 
 ## Installation
 
@@ -59,12 +62,6 @@ This scans for Claude Code and Cursor configs, merges them, strips secrets from 
 └── .env.example        # Required environment variables
 ```
 
-Preview what would be stripped without writing anything:
-
-```sh
-pit collect --dry-run
-```
-
 ## Installing a stack
 
 Install from a local bundle, a GitHub repo, or a specific tag:
@@ -74,8 +71,7 @@ pit install                              # from .promptpit/ in current dir
 pit install ./path/to/.promptpit         # from local path
 pit install github:user/repo             # from GitHub
 pit install github:user/repo@v2.0       # specific tag or branch
-pit install github:user/repo --global   # install to user-level paths
-pit install --dry-run                    # preview without writing
+pit install github:user/repo --global   # install to ~/.claude/ and ~/.cursor/
 ```
 
 pit detects which AI tools are in your project and writes config in each one's format. Content is wrapped in idempotent markers, so multiple stacks coexist and re-installs replace cleanly.
@@ -99,7 +95,7 @@ Add `.promptpit/` to your AI tool's ignore list so it doesn't scan the raw bundl
 | Claude Code | CLAUDE.md, .claude/skills/, .claude/settings.json | Native SKILL.md | skill.md |
 | Cursor | .cursorrules, .cursor/rules/, .cursor/mcp.json | Auto-converted .mdc | mdc |
 
-Adding a new tool is one file plus one registry entry. See `src/adapters/`.
+Adding a new tool is one file plus one registry entry. See [CONTRIBUTING.md](CONTRIBUTING.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Security
 
@@ -115,10 +111,14 @@ Adding a new tool is one file plus one registry entry. See `src/adapters/`.
 git clone https://github.com/nirelbaz/promptpit.git
 cd promptpit
 npm install
-npm test          # 74 tests, vitest
+npm test          # 76 tests, vitest
 npm run build     # builds dist/cli.js via tsup
 npm run lint      # TypeScript strict mode check
 ```
+
+## Roadmap
+
+See [TODOS.md](TODOS.md) for planned features: more adapters, AGENTS.md support, update/uninstall commands, stack composition, and a registry.
 
 ## Related
 
