@@ -1,110 +1,130 @@
 # promptpit
 
-Portable AI agent stacks. Collect, install, and share across Claude Code, Cursor, and more.
+Every AI coding tool stores config differently. Claude Code uses CLAUDE.md, Cursor uses .cursorrules. Sharing your setup means copy-pasting into formats that only work for one tool.
 
-## The Problem
+pit fixes that. Two commands: `pit collect` bundles your configs, `pit install` writes them into each tool's native format.
 
-Every AI coding tool has its own config format. Real-world stacks like [gstack](https://github.com/garrytan/gstack) require manual `git clone`, editing CLAUDE.md by hand, and running setup scripts — and only work in one tool. There's no `npm install` for AI agent configurations.
-
-## The Solution
-
-```bash
-# Install someone's AI stack in one command
-npx promptpit install github:garrytan/gstack
+```sh
+npx promptpit install github:nirelbaz/promptpit-starter
 ```
 
-pit bundles skills, agent instructions, MCP server configs, and environment variables into a portable `.promptpit/` stack that works across AI tools.
+## Features
 
-## Install
+- `pit collect` bundles configs, `pit install` writes them to each tool's native format
+- SKILL.md files auto-convert to .mdc for Cursor
+- Install directly from any GitHub repo, even ones that don't use promptpit
+- Commit `.promptpit/` to your repo, teammates run `pit install`, everyone gets the same setup
+- Secrets are auto-stripped from MCP configs during collect
 
-```bash
+## Installation
+
+```sh
 npm install -g promptpit
 ```
 
-Or use directly with `npx promptpit <command>`.
+Or run directly:
 
-## Commands
-
-### `pit collect`
-
-Scans your project's AI tool configs and bundles them into a `.promptpit/` stack.
-
-```bash
-pit collect                    # collect from current directory
-pit collect ./my-project       # collect from specific directory
-pit collect --output ./bundle  # custom output path (default: .promptpit)
-pit collect --dry-run          # show what secrets would be stripped
+```sh
+npx promptpit <command>
 ```
 
-Output:
+## Usage
+
+Install someone's AI stack from GitHub:
+
+```sh
+npx promptpit install github:nirelbaz/promptpit-starter
+```
+
+This clones the repo, reads its AI tool configs, detects which tools you have locally (Claude Code, Cursor), and writes everything in each tool's format. Skills, agent instructions, MCP server configs, and env vars are all handled.
+
+If the repo doesn't have a `.promptpit/` bundle, pit auto-collects one from the raw configs it finds.
+
+## Collecting a stack
+
+Bundle your project's AI tool configs into a `.promptpit/` directory:
+
+```sh
+pit collect
+```
+
+This scans for Claude Code and Cursor configs, merges them, strips secrets from MCP configs, and writes:
 
 ```
 .promptpit/
 ├── stack.json          # Manifest (name, version, skills, compatibility)
 ├── agent.promptpit.md  # Agent instructions (from CLAUDE.md, .cursorrules)
 ├── skills/             # SKILL.md files
-├── mcp.json            # MCP server configs (secrets auto-stripped)
+├── mcp.json            # MCP server configs (secrets replaced with placeholders)
 └── .env.example        # Required environment variables
 ```
 
-### `pit install`
+Preview what would be stripped without writing anything:
 
-Installs a stack into your project for all detected AI tools.
+```sh
+pit collect --dry-run
+```
 
-```bash
+## Installing a stack
+
+Install from a local bundle, a GitHub repo, or a specific tag:
+
+```sh
 pit install                              # from .promptpit/ in current dir
-pit install .promptpit                    # from local bundle
-pit install github:user/repo             # from GitHub (auto-collects if no .promptpit/)
-pit install github:user/repo@v2.0        # specific tag/branch
-pit install github:user/repo --global    # install to ~/.claude/, ~/.cursor/ (all projects)
+pit install ./path/to/.promptpit         # from local path
+pit install github:user/repo             # from GitHub
+pit install github:user/repo@v2.0       # specific tag or branch
+pit install github:user/repo --global   # install to user-level paths
 pit install --dry-run                    # preview without writing
 ```
 
-### Team setup
+pit detects which AI tools are in your project and writes config in each one's format. Content is wrapped in idempotent markers, so multiple stacks coexist and re-installs replace cleanly.
+
+## Team setup
 
 Commit `.promptpit/` to your repo. Teammates install with:
 
-```bash
+```sh
 pit install
 ```
 
-Everyone gets the same AI config in their tool's native format. Like `.editorconfig`, but for AI coding tools.
+Everyone gets the same config in their tool's format.
 
-**Tip:** Add `.promptpit/` to your AI tool's ignore list so it doesn't scan the raw bundle files (they're already installed in the tool's native format). For Claude Code, add `.promptpit` to `ignorePatterns` in `.claude/settings.json`. For Cursor, add it to `.cursorignore`.
+Add `.promptpit/` to your AI tool's ignore list so it doesn't scan the raw bundle files. For Claude Code, add `.promptpit` to `ignorePatterns` in `.claude/settings.json`. For Cursor, add it to `.cursorignore`.
 
-## Supported Tools
+## Supported tools
 
-| Tool | Read | Write | Format |
-|------|------|-------|--------|
+| Tool | Read | Write | Skill format |
+|------|------|-------|--------------|
 | Claude Code | CLAUDE.md, .claude/skills/, .claude/settings.json | Native SKILL.md | skill.md |
 | Cursor | .cursorrules, .cursor/rules/, .cursor/mcp.json | Auto-converted .mdc | mdc |
 
-Adding a new tool requires one file + one registry entry. See `src/adapters/` for examples.
-
-## How It Works
-
-**Collect:** Detects which AI tools are configured in your project, reads their configs, merges them into a unified stack, strips secrets from MCP configs, and writes a `.promptpit/` bundle.
-
-**Install:** Reads a stack bundle, detects which AI tools are present in the target project, and writes config in each tool's native format. SKILL.md files are auto-converted to .mdc for Cursor. Content is wrapped in idempotent markers so multiple stacks coexist and re-installs replace cleanly.
+Adding a new tool is one file plus one registry entry. See `src/adapters/`.
 
 ## Security
 
-- **Secret stripping:** MCP config values matching known patterns (API keys, connection strings, tokens) are replaced with `${PLACEHOLDER}` during collect. `.env.example` is auto-generated.
-- **Safe YAML parsing:** All frontmatter is parsed with `js-yaml` JSON_SCHEMA to prevent `!!js/function` code execution from untrusted sources.
-- **Env name validation:** Dangerous env var names (`PATH`, `NODE_OPTIONS`, `LD_PRELOAD`) are blocked during install to prevent injection.
-- **MCP trust warnings:** Installing MCP servers shows a warning since they run as executables.
-- **Input sanitization:** GitHub owner/repo/ref are validated against a strict character allowlist.
+- MCP config values matching known secret patterns (API keys, tokens, connection strings) are replaced with `${PLACEHOLDER}` during collect. A `.env.example` is auto-generated.
+- All frontmatter is parsed with `js-yaml` JSON_SCHEMA to prevent code execution from untrusted stacks.
+- Dangerous env names (`PATH`, `NODE_OPTIONS`, `LD_PRELOAD`) are blocked during install.
+- Installing MCP servers shows a warning since they run as executables on your machine.
+- GitHub owner/repo/ref inputs are validated against a strict character allowlist.
 
 ## Development
 
-```bash
-git clone <repo-url>
+```sh
+git clone https://github.com/nirelbaz/promptpit.git
 cd promptpit
 npm install
-npm test          # 71 tests, vitest
+npm test          # 74 tests, vitest
 npm run build     # builds dist/cli.js via tsup
 npm run lint      # TypeScript strict mode check
 ```
+
+## Related
+
+- [gstack](https://github.com/garrytan/gstack) - AI coding skill stack for Claude Code (works as a promptpit source)
+- [promptpit-starter](https://github.com/nirelbaz/promptpit-starter) - starter kit with 7 skills for Claude Code and Cursor
+- [MCP](https://modelcontextprotocol.io/) - Model Context Protocol, the server config format pit reads and writes
 
 ## License
 
