@@ -7,7 +7,7 @@ PromptPit (`pit`) — a CLI tool that makes AI agent stacks portable across Clau
 ## Commands
 
 ```bash
-npm test          # run tests (vitest, 110 tests)
+npm test          # run tests (vitest, 111 tests)
 npm run build     # build dist/cli.js (tsup, ESM)
 npm run lint      # TypeScript strict mode check
 npm run dev       # watch mode build
