@@ -95,7 +95,7 @@ export const agentsMdAdapter: PlatformAdapter = {
   displayName: "AGENTS.md",
   paths: { project: projectPaths, user: userPaths },
   capabilities: {
-    skills: false,
+    skillLinkStrategy: "none",
     rules: false,
     skillFormat: "md",
     mcpStdio: false,

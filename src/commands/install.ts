@@ -1,5 +1,6 @@
 import path from "node:path";
 import { readStack } from "../core/stack.js";
+import { installCanonical } from "../core/skill-store.js";
 import { detectAdapters } from "../adapters/registry.js";
 import { validateEnvNames } from "../core/security.js";
 import { writeFileEnsureDir, removeDir, readFileOrNull, exists } from "../shared/utils.js";
@@ -102,11 +103,24 @@ export async function installStack(
       });
     }
 
+    // Write skills to canonical .agents/skills/ location
+    let canonicalSkillPaths: Map<string, string> | undefined;
+    if (bundle.skills.length > 0 && !opts.dryRun) {
+      const canonSpin = spinner("Writing canonical skills...");
+      canonicalSkillPaths = await installCanonical(target, bundle.skills, {
+        global: opts.global,
+      });
+      canonSpin.succeed(
+        `Canonical: ${canonicalSkillPaths.size} skills in .agents/skills/`,
+      );
+    }
+
     // Write to each detected adapter
     const writeOpts: WriteOptions = {
       dryRun: opts.dryRun,
       force: opts.force,
       global: opts.global,
+      canonicalSkillPaths,
     };
 
     for (const { adapter } of detected) {

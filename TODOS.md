@@ -2,11 +2,11 @@
 
 ## v0.2
 
-### Hybrid symlinks for skill installation
-Write skills to `.agents/skills/<name>/` as canonical location, then symlink to tools that read native SKILL.md (Claude Code, Codex, Gemini, Goose, Kiro). Copy with format translation to tools that need a different format (Cursor → .mdc, Windsurf → .md rules, Copilot → .instructions.md, Cline/Roo → plain .md). Windows fallback to copies if symlink creation fails. Matches the skills.sh convention (43 agents, 12K stars) and agent-skill-creator pattern.
-
 ### Read `.mcp.json` during collect
 `.mcp.json` at project root is the emerging project-level MCP standard (Claude Code popularized it, teams check it into git). Currently we only read MCP from adapter-specific paths (`.claude/settings.json`, `.cursor/mcp.json`). Should read `.mcp.json` directly as a first-class input during collect, and write it as an output during install alongside adapter-specific configs.
+
+### Watch command
+`pit watch` — lightweight daemon using `fs.watch` on `.agents/skills/` that auto-regenerates translated copies (Cursor `.mdc`, Windsurf `.md` rules) when canonical SKILL.md files change. Symlinked tools (Claude Code, Codex) already see changes for free. Turns pit from an install-time tool into a live sync bus. Depends on hybrid symlinks being implemented first.
 
 ### Status command
 `pit status` — show what's installed, what's in `.promptpit/`, what's drifted since install. The "git status" for AI agent stacks. Answers the first question teams will ask: "what's even installed right now?"
@@ -97,3 +97,6 @@ Measured: 0.36s. No action needed.
 
 ### ~~AGENTS.md support~~
 Added in v0.1.5. AGENTS.md adapter with fallback-only read during collect and always-write during install. Shared `writeWithMarkers` helper extracted for DRY.
+
+### ~~Hybrid symlinks for skill installation~~
+Added in v0.1.6. Skills written to `.agents/skills/` as canonical location, symlinked into Claude Code, copied+translated for Cursor. Windows fallback to copies. `skillLinkStrategy` capability replaces boolean `skills` flag.

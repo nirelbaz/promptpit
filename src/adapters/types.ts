@@ -24,7 +24,7 @@ export interface DetectionResult {
 // --- Capabilities ---
 
 export interface AdapterCapabilities {
-  skills: boolean;
+  skillLinkStrategy: "symlink" | "translate-copy" | "none";
   rules: boolean;
   skillFormat: "skill.md" | "mdc" | "md";
   mcpStdio: boolean;
@@ -49,6 +49,7 @@ export interface WriteOptions {
   dryRun?: boolean;
   force?: boolean;
   global?: boolean;
+  canonicalSkillPaths?: Map<string, string>;
 }
 
 // --- Write Result ---

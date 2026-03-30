@@ -1,5 +1,6 @@
-import { readFile, writeFile, mkdir, access, rm, lstat, unlink } from "node:fs/promises";
-import { dirname } from "node:path";
+import { readFile, writeFile, mkdir, access, rm, lstat, unlink, symlink, copyFile } from "node:fs/promises";
+import { dirname, relative } from "node:path";
+import process from "node:process";
 
 export async function readFileOrNull(path: string): Promise<string | null> {
   try {
@@ -26,14 +27,35 @@ export async function exists(path: string): Promise<boolean> {
   }
 }
 
-export async function removeSymlink(path: string): Promise<void> {
+export async function removeFileOrSymlink(p: string): Promise<void> {
   try {
-    const stat = await lstat(path);
-    if (stat.isSymbolicLink()) {
-      await unlink(path);
+    const stat = await lstat(p);
+    if (stat.isSymbolicLink() || stat.isFile()) {
+      await unlink(p);
+    } else if (stat.isDirectory()) {
+      await rm(p, { recursive: true, force: true });
     }
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+}
+
+export async function symlinkOrCopy(src: string, dest: string): Promise<void> {
+  await removeFileOrSymlink(dest);
+  await mkdir(dirname(dest), { recursive: true });
+
+  if (process.platform !== "win32") {
+    const rel = relative(dirname(dest), src);
+    await symlink(rel, dest);
+    return;
+  }
+
+  // Windows: try symlink, fall back to copy
+  try {
+    const rel = relative(dirname(dest), src);
+    await symlink(rel, dest);
   } catch {
-    // Path doesn't exist, nothing to remove
+    await copyFile(src, dest);
   }
 }
 

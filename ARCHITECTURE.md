@@ -11,7 +11,7 @@ collect:
   detect adapters → read each tool's configs → merge → strip secrets → write .promptpit/
 
 install:
-  read .promptpit/ (or clone from GitHub) → detect adapters → write to each tool's format
+  read .promptpit/ (or clone from GitHub) → write canonical .agents/skills/ → detect adapters → symlink or copy+translate to each tool's format
 ```
 
 ## Adapters
@@ -23,8 +23,9 @@ src/adapters/
 ├── types.ts          # PlatformAdapter interface, capabilities, config types
 ├── registry.ts       # Adapter list, detection, lookup
 ├── adapter-utils.ts  # Shared read/write helpers (readSkillsFromDir, writeWithMarkers, etc.)
-├── claude-code.ts    # Claude Code: CLAUDE.md, .claude/skills/, .claude/settings.json
-└── cursor.ts         # Cursor: .cursorrules, .cursor/rules/ (.mdc), .cursor/mcp.json
+├── claude-code.ts    # Claude Code: CLAUDE.md, .claude/skills/ (symlinked), .claude/settings.json
+├── cursor.ts         # Cursor: .cursorrules, .cursor/rules/ (.mdc, translated copies), .cursor/mcp.json
+└── agents-md.ts      # AGENTS.md: universal cross-tool output, fallback-only read during collect
 ```
 
 Adding a tool means one file plus one registry entry. The contract tests in `test/adapters/contract.test.ts` automatically validate any registered adapter against 7 checks.

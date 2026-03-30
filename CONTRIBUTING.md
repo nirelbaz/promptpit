@@ -41,7 +41,7 @@ src/
 ├── cli.ts              # Commander.js entry point
 ├── commands/           # collect.ts, install.ts
 ├── adapters/           # One file per AI tool + registry + shared utils
-├── core/               # stack.ts (bundle I/O), merger.ts, security.ts
+├── core/               # stack.ts (bundle I/O), skill-store.ts (canonical install), merger.ts, security.ts
 ├── sources/            # github.ts (clone + auto-collect)
 └── shared/             # schema.ts, markers.ts, utils.ts, io.ts
 

@@ -92,8 +92,11 @@ Add `.promptpit/` to your AI tool's ignore list so it doesn't scan the raw bundl
 
 | Tool | Read | Write | Skill format |
 |------|------|-------|--------------|
-| Claude Code | CLAUDE.md, .claude/skills/, .claude/settings.json | Native SKILL.md | skill.md |
+| Claude Code | CLAUDE.md, .claude/skills/, .claude/settings.json | Symlinked SKILL.md | skill.md |
 | Cursor | .cursorrules, .cursor/rules/, .cursor/mcp.json | Auto-converted .mdc | mdc |
+| AGENTS.md | AGENTS.md (fallback) | Always written | md |
+
+Skills are installed to `.agents/skills/` as the canonical location (matching the skills.sh ecosystem convention), then symlinked into tool-native paths. Tools that need different formats (like Cursor's .mdc) get translated copies. Windows falls back to copies when symlinks aren't available.
 
 Adding a new tool is one file plus one registry entry. See [CONTRIBUTING.md](CONTRIBUTING.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -111,14 +114,14 @@ Adding a new tool is one file plus one registry entry. See [CONTRIBUTING.md](CON
 git clone https://github.com/nirelbaz/promptpit.git
 cd promptpit
 npm install
-npm test          # 76 tests, vitest
+npm test          # 111 tests, vitest
 npm run build     # builds dist/cli.js via tsup
 npm run lint      # TypeScript strict mode check
 ```
 
 ## Roadmap
 
-See [TODOS.md](TODOS.md) for planned features: more adapters, AGENTS.md support, update/uninstall commands, stack composition, and a registry.
+See [TODOS.md](TODOS.md) for planned features: more adapters, update/uninstall commands, stack composition, and a registry.
 
 ## Related
 
