@@ -45,13 +45,24 @@ export async function collectStack(
     );
   }
 
+  // Fallback-only: exclude agents-md from read when other adapters are detected.
+  // This avoids content duplication when CLAUDE.md/cursorrules have similar content.
+  // Full deduplication is deferred — see TODOS.md "Recursive duplication."
+  const hasNonAgentsMd = detected.some((d) => d.adapter.id !== "agents-md");
+  const readSet = hasNonAgentsMd
+    ? detected.filter((d) => d.adapter.id !== "agents-md")
+    : detected;
+
   spin.succeed(
-    `Found ${detected.length} tool(s): ${detected.map((d) => d.adapter.displayName).join(", ")}`,
+    `Found ${detected.length} tool(s): ${detected.map((d) => d.adapter.displayName).join(", ")}` +
+      (readSet.length < detected.length
+        ? ` (reading from ${readSet.length})`
+        : ""),
   );
 
   const readSpin = spinner("Reading configurations...");
   const configs = await Promise.all(
-    detected.map((d) => d.adapter.read(root)),
+    readSet.map((d) => d.adapter.read(root)),
   );
   readSpin.succeed("Configurations read");
 
