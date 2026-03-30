@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.5 (2026-03-30)
+
+### Added
+
+- AGENTS.md support: `pit install` now always generates an AGENTS.md file, readable by 20+ AI tools (Codex, Copilot, Cursor, Windsurf, Zed, Cline, Roo Code, Amp, Devin, Aider, and more)
+- `pit collect` reads AGENTS.md as a fallback when no other tool configs are detected, so projects that only have AGENTS.md can be collected into portable stacks
+
+### Changed
+
+- Extracted shared `writeWithMarkers` helper, making it easier to add new adapters with consistent marker handling
+
 ## 0.1.4 (2026-03-28)
 
 - Added ignore tip for `.promptpit/` in team setup docs

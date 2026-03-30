@@ -15,6 +15,9 @@ const ADAPTER_FIXTURES: Record<string, (dir: string) => Promise<void>> = {
   cursor: async (dir) => {
     await writeFile(path.join(dir, ".cursorrules"), "Test rules");
   },
+  "agents-md": async (dir) => {
+    await writeFile(path.join(dir, "AGENTS.md"), "# Test agents");
+  },
 };
 
 describe.each(listAdapters().map((a) => [a.id, a] as const))(

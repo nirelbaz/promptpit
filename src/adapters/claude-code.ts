@@ -9,12 +9,7 @@ import type {
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists, removeSymlink } from "../shared/utils.js";
-import { readSkillsFromDir, readMcpFromSettings } from "./adapter-utils.js";
-import {
-  hasMarkers,
-  insertMarkers,
-  replaceMarkerContent,
-} from "../shared/markers.js";
+import { readSkillsFromDir, readMcpFromSettings, writeWithMarkers } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -85,31 +80,15 @@ async function write(
   try {
     // Write agent instructions to CLAUDE.md
     if (stack.agentInstructions) {
-      const existing = (await readFileOrNull(p.config)) ?? "";
-
-      let updated: string;
-      if (hasMarkers(existing, stackName)) {
-        updated = replaceMarkerContent(
-          existing,
-          stack.agentInstructions,
-          stackName,
-          version,
-          "claude-code",
-        );
-      } else {
-        updated = insertMarkers(
-          existing,
-          stack.agentInstructions,
-          stackName,
-          version,
-          "claude-code",
-        );
-      }
-
-      if (!opts.dryRun) {
-        await writeFileEnsureDir(p.config, updated);
-        filesWritten.push(p.config);
-      }
+      const written = await writeWithMarkers(
+        p.config,
+        stack.agentInstructions,
+        stackName,
+        version,
+        "claude-code",
+        opts.dryRun,
+      );
+      if (written) filesWritten.push(written);
     }
 
     // Copy skills

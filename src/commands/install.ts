@@ -93,6 +93,15 @@ export async function installStack(
       );
     }
 
+    // Always include agents-md for writing — AGENTS.md is the universal cross-tool output
+    if (!detected.some((d) => d.adapter.id === "agents-md")) {
+      const { agentsMdAdapter } = await import("../adapters/agents-md.js");
+      detected.push({
+        adapter: agentsMdAdapter,
+        detection: { detected: true, configPaths: [] },
+      });
+    }
+
     // Write to each detected adapter
     const writeOpts: WriteOptions = {
       dryRun: opts.dryRun,

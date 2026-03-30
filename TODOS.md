@@ -2,9 +2,6 @@
 
 ## v0.2
 
-### AGENTS.md support
-Add AGENTS.md read/write to collect and install. AGENTS.md is a cross-tool standard (20+ tools: Codex, Copilot, Cursor, Windsurf, Zed, Cline, Roo Code, Amp, Devin, Aider, etc.) — the single highest-reach output PromptPit can generate. During collect, read existing AGENTS.md as an instruction source. During install, generate AGENTS.md from stack instructions (not just copy — generate as a translated output like we do for .cursorrules). Use idempotent markers so multiple stacks coexist. Decision needed: merge with agent.promptpit.md or keep separate.
-
 ### Hybrid symlinks for skill installation
 Write skills to `.agents/skills/<name>/` as canonical location, then symlink to tools that read native SKILL.md (Claude Code, Codex, Gemini, Goose, Kiro). Copy with format translation to tools that need a different format (Cursor → .mdc, Windsurf → .md rules, Copilot → .instructions.md, Cline/Roo → plain .md). Windows fallback to copies if symlink creation fails. Matches the skills.sh convention (43 agents, 12K stars) and agent-skill-creator pattern.
 
@@ -21,6 +18,8 @@ When `pit collect` reads CLAUDE.md, it captures everything including content pre
 2. **Project content duplicates on re-install** — the project's native CLAUDE.md content gets collected into the bundle. When the bundle is installed back (e.g. team re-sync from shared `.promptpit/`), that content appears twice: once as the file's native content, once inside markers.
 
 **Core challenge:** The file has no concept of "what's project-native vs what was installed" beyond the marker blocks. Stripping markers on collect fixes problem 1 but not problem 2. Need a design that cleanly separates project content from stack content in both collect and install flows.
+
+**Current mitigation:** The agents-md adapter uses fallback-only read during collect — AGENTS.md is only read when no other adapters (claude-code, cursor) are detected. This prevents the most common duplication case (CLAUDE.md + AGENTS.md with similar content) but doesn't solve the general problem. A full deduplication solution (content hashing, similarity detection across adapter outputs) is still needed.
 
 ## v0.2.x
 
@@ -95,3 +94,6 @@ Auto-collect runs by default when GitHub repo has no .promptpit/. MCP trust prom
 
 ### ~~Measure npx cold-start time~~
 Measured: 0.36s. No action needed.
+
+### ~~AGENTS.md support~~
+Added in v0.1.5. AGENTS.md adapter with fallback-only read during collect and always-write during install. Shared `writeWithMarkers` helper extracted for DRY.
