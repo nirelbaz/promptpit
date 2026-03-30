@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { installStack } from "../../src/commands/install.js";
 import path from "node:path";
-import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile, lstat, readlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 const VALID_STACK = path.resolve("test/__fixtures__/stacks/valid-stack");
@@ -101,5 +101,83 @@ describe("installStack", () => {
       claudeMd.match(/promptpit:start:test-stack/g) || []
     ).length;
     expect(startCount).toBe(1);
+  });
+
+  it("writes canonical skills to .agents/skills/", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    await installStack(VALID_STACK, target, {});
+
+    const canonical = await readFile(
+      path.join(target, ".agents", "skills", "browse", "SKILL.md"),
+      "utf-8",
+    );
+    expect(canonical).toContain("browse");
+  });
+
+  it("creates symlinks from .claude/skills/ to canonical location", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    await installStack(VALID_STACK, target, {});
+
+    const skillPath = path.join(target, ".claude", "skills", "browse", "SKILL.md");
+    const stat = await lstat(skillPath);
+    expect(stat.isSymbolicLink()).toBe(true);
+
+    // Symlink should be relative
+    const linkTarget = await readlink(skillPath);
+    expect(path.isAbsolute(linkTarget)).toBe(false);
+
+    // Content should be readable through the symlink
+    const content = await readFile(skillPath, "utf-8");
+    expect(content).toContain("browse");
+  });
+
+  it("re-install updates both canonical and symlinks", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    await installStack(VALID_STACK, target, {});
+    await installStack(VALID_STACK, target, {});
+
+    // Canonical should still exist
+    const canonical = await readFile(
+      path.join(target, ".agents", "skills", "browse", "SKILL.md"),
+      "utf-8",
+    );
+    expect(canonical).toContain("browse");
+
+    // Symlink should still work
+    const skillPath = path.join(target, ".claude", "skills", "browse", "SKILL.md");
+    const stat = await lstat(skillPath);
+    expect(stat.isSymbolicLink()).toBe(true);
+    const content = await readFile(skillPath, "utf-8");
+    expect(content).toContain("browse");
+  });
+
+  it("upgrade: replaces existing regular file with symlink", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    // Simulate old copy-based install by writing a regular file
+    const skillDir = path.join(target, ".claude", "skills", "browse");
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, "SKILL.md"), "old copy");
+
+    // Run new install (should replace file with symlink)
+    await installStack(VALID_STACK, target, {});
+
+    const skillPath = path.join(skillDir, "SKILL.md");
+    const stat = await lstat(skillPath);
+    expect(stat.isSymbolicLink()).toBe(true);
+    const content = await readFile(skillPath, "utf-8");
+    expect(content).toContain("browse");
   });
 });

@@ -1,6 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { claudeCodeAdapter } from "../../src/adapters/claude-code.js";
 import path from "node:path";
+import { mkdtemp, rm, readFile, writeFile, mkdir, lstat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { readStack } from "../../src/core/stack.js";
 
 const FIXTURE_DIR = path.resolve("test/__fixtures__/claude-project");
 const EMPTY_DIR = path.resolve("test/__fixtures__/bare-minimum");
@@ -57,6 +60,61 @@ describe("claudeCodeAdapter", () => {
       const paths = claudeCodeAdapter.paths.user();
       expect(paths.config).toContain(".claude");
       expect(paths.config).toContain("CLAUDE.md");
+    });
+  });
+
+  describe("write with canonicalSkillPaths", () => {
+    const tmpDirs: string[] = [];
+
+    afterEach(async () => {
+      for (const dir of tmpDirs) {
+        await rm(dir, { recursive: true, force: true });
+      }
+      tmpDirs.length = 0;
+    });
+
+    it("creates symlinks when canonicalSkillPaths is provided", async () => {
+      const target = await mkdtemp(path.join(tmpdir(), "pit-cc-sym-"));
+      tmpDirs.push(target);
+      await writeFile(path.join(target, "CLAUDE.md"), "");
+
+      // Create canonical skill
+      const canonDir = path.join(target, ".agents", "skills", "browse");
+      await mkdir(canonDir, { recursive: true });
+      const canonPath = path.join(canonDir, "SKILL.md");
+      await writeFile(canonPath, "---\nname: browse\ndescription: test\n---\n# browse\n");
+
+      const bundle = await readStack(
+        path.resolve("test/__fixtures__/stacks/valid-stack"),
+      );
+
+      await claudeCodeAdapter.write(target, bundle, {
+        canonicalSkillPaths: new Map([["browse", canonPath]]),
+      });
+
+      const skillPath = path.join(target, ".claude", "skills", "browse", "SKILL.md");
+      const stat = await lstat(skillPath);
+      expect(stat.isSymbolicLink()).toBe(true);
+    });
+
+    it("falls back to direct write when canonicalSkillPaths is absent", async () => {
+      const target = await mkdtemp(path.join(tmpdir(), "pit-cc-fb-"));
+      tmpDirs.push(target);
+      await writeFile(path.join(target, "CLAUDE.md"), "");
+
+      const bundle = await readStack(
+        path.resolve("test/__fixtures__/stacks/valid-stack"),
+      );
+
+      await claudeCodeAdapter.write(target, bundle, {});
+
+      const skillPath = path.join(target, ".claude", "skills", "browse", "SKILL.md");
+      const stat = await lstat(skillPath);
+      // Without canonicalSkillPaths, should be a regular file, not a symlink
+      expect(stat.isSymbolicLink()).toBe(false);
+      expect(stat.isFile()).toBe(true);
+      const content = await readFile(skillPath, "utf-8");
+      expect(content).toContain("browse");
     });
   });
 });
