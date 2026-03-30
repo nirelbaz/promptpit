@@ -22,6 +22,8 @@ When `pit collect` reads CLAUDE.md, it captures everything including content pre
 
 **Core challenge:** The file has no concept of "what's project-native vs what was installed" beyond the marker blocks. Stripping markers on collect fixes problem 1 but not problem 2. Need a design that cleanly separates project content from stack content in both collect and install flows.
 
+**Current mitigation:** The agents-md adapter uses fallback-only read during collect — AGENTS.md is only read when no other adapters (claude-code, cursor) are detected. This prevents the most common duplication case (CLAUDE.md + AGENTS.md with similar content) but doesn't solve the general problem. A full deduplication solution (content hashing, similarity detection across adapter outputs) is still needed.
+
 ## v0.2.x
 
 ### Codex CLI adapter
