@@ -2,9 +2,6 @@
 
 ## v0.2
 
-### AGENTS.md support
-Add AGENTS.md read/write to collect and install. AGENTS.md is a cross-tool standard (20+ tools: Codex, Copilot, Cursor, Windsurf, Zed, Cline, Roo Code, Amp, Devin, Aider, etc.) — the single highest-reach output PromptPit can generate. During collect, read existing AGENTS.md as an instruction source. During install, generate AGENTS.md from stack instructions (not just copy — generate as a translated output like we do for .cursorrules). Use idempotent markers so multiple stacks coexist. Decision needed: merge with agent.promptpit.md or keep separate.
-
 ### Hybrid symlinks for skill installation
 Write skills to `.agents/skills/<name>/` as canonical location, then symlink to tools that read native SKILL.md (Claude Code, Codex, Gemini, Goose, Kiro). Copy with format translation to tools that need a different format (Cursor → .mdc, Windsurf → .md rules, Copilot → .instructions.md, Cline/Roo → plain .md). Windows fallback to copies if symlink creation fails. Matches the skills.sh convention (43 agents, 12K stars) and agent-skill-creator pattern.
 
@@ -97,3 +94,6 @@ Auto-collect runs by default when GitHub repo has no .promptpit/. MCP trust prom
 
 ### ~~Measure npx cold-start time~~
 Measured: 0.36s. No action needed.
+
+### ~~AGENTS.md support~~
+Added in v0.1.5. AGENTS.md adapter with fallback-only read during collect and always-write during install. Shared `writeWithMarkers` helper extracted for DRY.
