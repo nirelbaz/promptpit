@@ -42,6 +42,15 @@ src/
 
 Tests use vitest with real filesystem (not memfs) for E2E. Test fixtures in `test/__fixtures__/`. Contract tests in `test/adapters/contract.test.ts` are parameterized across all adapters (7 checks each).
 
+## Slash Commands
+
+```bash
+/version [X.Y.Z]   # bump version in package.json + add CHANGELOG entry
+/release            # tag and publish from main (runs all checks first)
+```
+
+`/version` on your feature branch before opening a PR. `/release` on main after merging.
+
 ## Before Pushing
 
 Always run before committing or pushing:
