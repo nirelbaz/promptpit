@@ -54,6 +54,13 @@ test/
 └── e2e/                # Full round-trip tests
 ```
 
+## Slash commands (Claude Code)
+
+If you use Claude Code, the repo includes two slash commands in `.claude/commands/`:
+
+- `/version [X.Y.Z]` — bump version in `package.json` and add a CHANGELOG entry. Run on your feature branch before opening a PR.
+- `/release` — tag the current version on main and push the tag. Run on main after merging a version bump PR.
+
 ## Code style
 
 - Explicit over clever
