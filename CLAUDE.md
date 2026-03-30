@@ -7,7 +7,7 @@ PromptPit (`pit`) — a CLI tool that makes AI agent stacks portable across Clau
 ## Commands
 
 ```bash
-npm test          # run tests (vitest, 76 tests)
+npm test          # run tests (vitest, 110 tests)
 npm run build     # build dist/cli.js (tsup, ESM)
 npm run lint      # TypeScript strict mode check
 npm run dev       # watch mode build
@@ -22,7 +22,7 @@ src/
 ├── cli.ts              # Commander.js entry point
 ├── commands/           # collect.ts, install.ts
 ├── adapters/           # claude-code.ts, cursor.ts, registry.ts, types.ts, adapter-utils.ts
-├── core/               # stack.ts, merger.ts, security.ts
+├── core/               # stack.ts, skill-store.ts, merger.ts, security.ts
 ├── sources/            # github.ts (clone + auto-collect)
 └── shared/             # schema.ts (Zod + types), markers.ts, utils.ts, io.ts
 ```
@@ -37,6 +37,8 @@ src/
 - Idempotent markers include adapter ID: `<!-- promptpit:start:name:version:adapterId -->`
 - `.env` files are appended to, never overwritten
 - No `simple-git` dependency — uses `child_process.execFileSync` directly
+- Skills installed to `.agents/skills/` as canonical location, symlinked into tool-native paths (Claude Code), copied+translated for tools needing different formats (Cursor .mdc)
+- `AdapterCapabilities.skillLinkStrategy` declares each adapter's skill install strategy: `"symlink"`, `"translate-copy"`, or `"none"`
 
 ## Testing
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.6 (2026-03-30)
+
+### Added
+
+- Skills are now installed to `.agents/skills/` as the canonical location, matching the skills.sh ecosystem convention used by 16+ AI tools
+- Claude Code skill paths (`.claude/skills/`) are now symlinks to the canonical location instead of copies, so edits to `.agents/skills/` are instantly reflected
+- Windows automatically falls back to file copies when symlinks aren't available
+- New `pit watch` TODO for future live sync of translated skill copies
+
+### Changed
+
+- Each adapter now declares a `skillLinkStrategy` (`"symlink"`, `"translate-copy"`, or `"none"`) instead of a boolean `skills` flag, making it easier to add new adapters
+- Cursor continues to get translated `.mdc` copies (read from bundle, not disk), while native SKILL.md tools get zero-copy symlinks
+
 ## 0.1.5 (2026-03-30)
 
 ### Added
