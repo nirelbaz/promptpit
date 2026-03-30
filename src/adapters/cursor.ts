@@ -160,7 +160,7 @@ export const cursorAdapter: PlatformAdapter = {
   displayName: "Cursor",
   paths: { project: projectPaths, user: userPaths },
   capabilities: {
-    skills: false,
+    skillLinkStrategy: "translate-copy",
     rules: true,
     skillFormat: "mdc",
     mcpStdio: true,

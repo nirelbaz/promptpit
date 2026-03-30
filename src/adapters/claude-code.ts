@@ -8,7 +8,7 @@ import type {
   WriteOptions,
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
-import { readFileOrNull, writeFileEnsureDir, exists, removeSymlink } from "../shared/utils.js";
+import { readFileOrNull, writeFileEnsureDir, exists, removeFileOrSymlink, symlinkOrCopy } from "../shared/utils.js";
 import { readSkillsFromDir, readMcpFromSettings, writeWithMarkers } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
@@ -91,14 +91,18 @@ async function write(
       if (written) filesWritten.push(written);
     }
 
-    // Copy skills
+    // Install skills (symlink from canonical location, or direct write as fallback)
     for (const skill of stack.skills) {
       const skillDir = path.join(p.skills, skill.name);
       const dest = path.join(skillDir, "SKILL.md");
       if (!opts.dryRun) {
-        // Remove existing symlink (e.g., gstack installs skills as symlinks)
-        await removeSymlink(skillDir);
-        await writeFileEnsureDir(dest, skill.content);
+        const canonicalPath = opts.canonicalSkillPaths?.get(skill.name);
+        if (canonicalPath) {
+          await symlinkOrCopy(canonicalPath, dest);
+        } else {
+          await removeFileOrSymlink(skillDir);
+          await writeFileEnsureDir(dest, skill.content);
+        }
         filesWritten.push(dest);
       }
     }
@@ -146,7 +150,7 @@ export const claudeCodeAdapter: PlatformAdapter = {
   displayName: "Claude Code",
   paths: { project: projectPaths, user: userPaths },
   capabilities: {
-    skills: true,
+    skillLinkStrategy: "symlink",
     rules: false,
     skillFormat: "skill.md",
     mcpStdio: true,
