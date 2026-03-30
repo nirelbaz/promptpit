@@ -2,7 +2,7 @@
 
 ## Overview
 
-promptpit has two commands: `pit collect` (bundle configs) and `pit install` (write them into each tool's format). The core design principle is that promptpit knows nothing about specific AI tools — adapters do.
+promptpit has two commands: `pit collect` (bundle configs) and `pit install` (write them into each tool's format). The core design principle is that promptpit knows nothing about specific AI tools - adapters do.
 
 ## Data flow
 
@@ -16,7 +16,7 @@ install:
 
 ## Adapters
 
-Each AI tool is a `PlatformAdapter` — a plain object with `detect`, `read`, and `write` functions. No base class. Shared logic lives in `adapter-utils.ts` as composable functions.
+Each AI tool is a `PlatformAdapter` - a plain object with `detect`, `read`, and `write` functions. No base class. Shared logic lives in `adapter-utils.ts` as composable functions.
 
 ```
 src/adapters/
@@ -34,7 +34,7 @@ Adding a tool means one file plus one registry entry. The contract tests in `tes
 The original design used a `BaseAdapter` class. It was replaced with plain functions because:
 - Adapters vary in which operations they need (Cursor converts skill formats, Claude Code doesn't)
 - Shared logic is better expressed as utility functions you call than methods you override
-- Testing is simpler — no class hierarchy to mock
+- Testing is simpler - no class hierarchy to mock
 
 ## Stack bundle format
 
@@ -70,11 +70,11 @@ Marker logic lives in `src/shared/markers.ts`.
 
 Three layers of defense for installing untrusted stacks:
 
-1. **Secret stripping** (`src/core/security.ts`) — MCP config values matching known secret patterns (API keys, tokens, connection strings) are replaced with `${PLACEHOLDER}` during collect. A `.env.example` is generated.
+1. **Secret stripping** (`src/core/security.ts`) - MCP config values matching known secret patterns (API keys, tokens, connection strings) are replaced with `${PLACEHOLDER}` during collect. A `.env.example` is generated.
 
-2. **Safe parsing** — All YAML frontmatter uses `js-yaml` with `JSON_SCHEMA` (no code execution). Stack manifests are Zod-validated.
+2. **Safe parsing** - All YAML frontmatter uses `js-yaml` with `JSON_SCHEMA` (no code execution). Stack manifests are Zod-validated.
 
-3. **Input validation** — GitHub owner/repo/ref inputs are validated against a character allowlist. Dangerous env names (`PATH`, `NODE_OPTIONS`, `LD_PRELOAD`) are blocked. Git operations use `execFileSync` (not `execSync`) to prevent shell injection.
+3. **Input validation** - GitHub owner/repo/ref inputs are validated against a character allowlist. Dangerous env names (`PATH`, `NODE_OPTIONS`, `LD_PRELOAD`) are blocked. Git operations use `execFileSync` (not `execSync`) to prevent shell injection.
 
 MCP servers get a warning during install since they run as executables on the user's machine.
 
@@ -83,7 +83,7 @@ MCP servers get a warning during install since they run as executables on the us
 `src/sources/github.ts` handles `pit install github:user/repo[@ref]`:
 
 1. Clone the repo to a temp directory
-2. Look for `.promptpit/` — if found, use it directly
+2. Look for `.promptpit/` - if found, use it directly
 3. If no `.promptpit/`, run `pit collect` on the repo (auto-collect fallback)
 4. Install from the resulting bundle
 

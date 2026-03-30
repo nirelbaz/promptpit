@@ -5,6 +5,8 @@ dist/
 .env.local
 .DS_Store
 .claude/
+.gstack/
+.research/
 HANDOFF.md
 docs/superpowers/
 launch/

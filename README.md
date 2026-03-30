@@ -5,7 +5,7 @@
 
 Every AI coding tool stores config differently. Claude Code uses CLAUDE.md, Cursor uses .cursorrules. Sharing your setup means copy-pasting into formats that only work for one tool.
 
-pit fixes that. Two commands: `pit collect` bundles your configs, `pit install` writes them into each tool's native format. Point it at any GitHub repo — even ones that don't use promptpit — and it auto-detects what's there.
+pit fixes that. Two commands: `pit collect` bundles your configs, `pit install` writes them into each tool's native format. Point it at any GitHub repo - even ones that don't use promptpit - and it auto-detects what's there.
 
 ```sh
 npx promptpit install github:nirelbaz/promptpit-starter
