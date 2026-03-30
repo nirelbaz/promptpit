@@ -35,8 +35,8 @@ export async function removeFileOrSymlink(p: string): Promise<void> {
     } else if (stat.isDirectory()) {
       await rm(p, { recursive: true, force: true });
     }
-  } catch {
-    // Path doesn't exist, nothing to remove
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
 }
 

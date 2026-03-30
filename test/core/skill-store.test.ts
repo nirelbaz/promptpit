@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { installCanonical } from "../../src/core/skill-store.js";
 import path from "node:path";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import type { SkillEntry } from "../../src/shared/schema.js";
 
 const makeSkill = (name: string, content?: string): SkillEntry => ({
@@ -64,5 +64,28 @@ describe("installCanonical", () => {
     expect(pathMap.size).toBe(2);
     expect(pathMap.has("browse")).toBe(true);
     expect(pathMap.has("review")).toBe(true);
+  });
+
+  it("writes to ~/.agents/skills/ for global installs", async () => {
+    // Global install writes to homedir, not root. We can't mock homedir easily
+    // in ESM, so we verify the actual path uses homedir and the file is written.
+    const pathMap = await installCanonical("/ignored", [makeSkill("browse")], {
+      global: true,
+    });
+
+    expect(pathMap.size).toBe(1);
+    const canonPath = pathMap.get("browse")!;
+    // Path should be under homedir, not under /ignored
+    expect(canonPath).toContain(path.join(homedir(), ".agents", "skills", "browse"));
+    expect(canonPath).not.toContain("/ignored");
+
+    const content = await readFile(canonPath, "utf-8");
+    expect(content).toContain("browse");
+
+    // Cleanup: remove the file we wrote to the real homedir
+    await rm(path.join(homedir(), ".agents", "skills", "browse"), {
+      recursive: true,
+      force: true,
+    });
   });
 });
