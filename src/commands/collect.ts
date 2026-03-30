@@ -41,7 +41,7 @@ export async function collectStack(
     spin.fail("No AI tool configuration found");
     throw new Error(
       "No AI tool configuration found in this project. " +
-        "Looked for: CLAUDE.md, .claude/, .cursorrules, .cursor/",
+        "Looked for: CLAUDE.md, .claude/, .cursorrules, .cursor/, AGENTS.md",
     );
   }
 
