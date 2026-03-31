@@ -43,9 +43,7 @@ async function read(root: string): Promise<PlatformConfig> {
   const p = projectPaths(root);
 
   const agentInstructions = (await readFileOrNull(p.config)) ?? "";
-  let skills = (await exists(p.skills))
-    ? await readSkillsFromDir(p.skills)
-    : [];
+  let skills = await readSkillsFromDir(p.skills);
 
   // Fallback: scan repo root for */SKILL.md (handles repos like gstack
   // where the repo itself is a skills directory, not a project with .claude/skills/)

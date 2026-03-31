@@ -137,15 +137,15 @@ export async function installStack(
     // Write .env file with placeholders (don't overwrite existing)
     if (Object.keys(bundle.envExample).length > 0 && !opts.dryRun) {
       const envPath = path.join(target, ".env");
-      if (await exists(envPath)) {
-        const existing = await readFileOrNull(envPath);
-        const existingLines = existing?.split("\n") ?? [];
+      const existing = await readFileOrNull(envPath);
+      if (existing != null) {
+        const existingKeys = new Set(
+          existing.split("\n")
+            .map((line) => line.split("=")[0]?.trim())
+            .filter(Boolean),
+        );
         const missingKeys = Object.keys(bundle.envExample).filter(
-          (key) =>
-            !existingLines.some(
-              (line) =>
-                line.startsWith(`${key}=`) || line.startsWith(`${key} =`),
-            ),
+          (key) => !existingKeys.has(key),
         );
         if (missingKeys.length > 0) {
           const additions = missingKeys
