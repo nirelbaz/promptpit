@@ -42,20 +42,21 @@ export function stripSecrets(mcpConfig: McpConfig): StripResult {
   const envExample: Record<string, string> = {};
 
   for (const [serverName, server] of Object.entries(mcpConfig)) {
-    stripped[serverName] = { ...server };
-
-    if (server.env) {
-      const newEnv: Record<string, string> = {};
-      for (const [key, value] of Object.entries(server.env)) {
-        if (looksLikeSecret(value)) {
-          newEnv[key] = `\${${key}}`;
-          envExample[key] = `# Secret detected in MCP server "${serverName}"`;
-        } else {
-          newEnv[key] = value;
-        }
-      }
-      stripped[serverName] = { ...server, env: newEnv };
+    if (!server.env) {
+      stripped[serverName] = { ...server };
+      continue;
     }
+
+    const newEnv: Record<string, string> = {};
+    for (const [key, value] of Object.entries(server.env)) {
+      if (looksLikeSecret(value)) {
+        newEnv[key] = `\${${key}}`;
+        envExample[key] = `# Secret detected in MCP server "${serverName}"`;
+      } else {
+        newEnv[key] = value;
+      }
+    }
+    stripped[serverName] = { ...server, env: newEnv };
   }
 
   return { stripped, envExample };

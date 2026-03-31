@@ -7,7 +7,7 @@ import {
   type StackBundle,
   type McpConfig,
 } from "../shared/schema.js";
-import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
+import { readFileOrNull, writeFileEnsureDir } from "../shared/utils.js";
 import { readSkillsFromDir } from "../adapters/adapter-utils.js";
 import { log } from "../shared/io.js";
 
@@ -42,9 +42,7 @@ export async function readStack(stackDir: string): Promise<StackBundle> {
   }
 
   const skillsDir = path.join(stackDir, "skills");
-  const skills = (await exists(skillsDir))
-    ? await readSkillsFromDir(skillsDir)
-    : [];
+  const skills = await readSkillsFromDir(skillsDir);
 
   const mcpPath = path.join(stackDir, "mcp.json");
   const mcpRaw = await readFileOrNull(mcpPath);

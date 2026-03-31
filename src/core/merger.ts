@@ -20,9 +20,9 @@ export function mergeConfigs(
     const c = configs[0]!;
     return {
       agentInstructions: c.agentInstructions,
-      skills: [...c.skills],
-      mcpServers: { ...c.mcpServers },
-      rules: [...c.rules],
+      skills: c.skills,
+      mcpServers: c.mcpServers,
+      rules: c.rules,
       warnings: [],
     };
   }
