@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.5 (2026-04-01)
+
+### Added
+
+- Codex CLI adapter. `pit install` now detects Codex CLI projects and writes instructions to AGENTS.md, symlinks skills to `.codex/skills/`, and merges MCP servers into `.codex/config.toml` (TOML format). Codex joins Claude Code, Cursor, and Copilot as a Tier 1 adapter
+- TOML config support via `smol-toml`. Reads existing `config.toml` settings (model, approval policy, etc.) and preserves them when merging MCP servers. Codex-specific fields like `enabled_tools` and `startup_timeout_sec` are stripped during collect so stacks stay portable
+
 ## 0.2.4 (2026-04-01)
 
 ### Added

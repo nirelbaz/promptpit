@@ -27,7 +27,7 @@ This is the most likely contribution. Each AI tool (Claude Code, Cursor, etc.) i
 
 ### Adapter tiers
 
-- **Tier 1 (creator-maintained):** Claude Code, Cursor (shipped), Codex, Copilot (planned). These get full test coverage and are maintained by the project owner.
+- **Tier 1 (creator-maintained):** Claude Code, Cursor, Codex (shipped), Copilot (planned). These get full test coverage and are maintained by the project owner.
 - **Tier 2 (community-contributed):** Windsurf, Gemini CLI, and others. Community PRs welcome. Tier 2 adapters need contract tests passing but ongoing maintenance is shared.
 
 ### How to add one

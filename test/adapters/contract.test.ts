@@ -15,6 +15,9 @@ const ADAPTER_FIXTURES: Record<string, (dir: string) => Promise<void>> = {
   cursor: async (dir) => {
     await writeFile(path.join(dir, ".cursorrules"), "Test rules");
   },
+  codex: async (dir) => {
+    await writeFile(path.join(dir, "AGENTS.md"), "# Codex instructions");
+  },
   standards: async (dir) => {
     await writeFile(path.join(dir, "AGENTS.md"), "# Test agents");
   },

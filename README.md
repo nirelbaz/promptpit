@@ -77,6 +77,7 @@ Add `.promptpit/` to your AI tool's ignore list so it doesn't scan the raw bundl
 |------|------|-------|--------------|
 | Claude Code | CLAUDE.md, .claude/skills/, .claude/settings.json | Symlinked SKILL.md | skill.md |
 | Cursor | .cursorrules, .cursor/rules/, .cursor/mcp.json | Auto-converted .mdc | mdc |
+| Codex CLI | AGENTS.md, .codex/skills/, .codex/config.toml | Symlinked SKILL.md | skill.md |
 
 pit also writes AGENTS.md (cross-tool standard, read by 60+ tools) and .mcp.json (project-level MCP config) on every install.
 
@@ -107,7 +108,7 @@ npm run lint      # TypeScript strict mode check
 
 See [TODOS.md](TODOS.md) for the full roadmap. The big milestones:
 
-- **v0.3 (Team Platform):** Codex and Copilot adapters, `pit check` for CI, polished drift detection
+- **v0.3 (Team Platform):** Copilot adapter, `pit check` for CI, polished drift detection
 - **v0.5 (Stack Composer):** Stack composition via `extends` in stack.json, `pit diff`, `pit update`
 - **v1.0 (Ecosystem Bridge):** Multi-source install (skills.sh, SkillsMP, cursor.directory), `pit publish`, `pit search`
 
