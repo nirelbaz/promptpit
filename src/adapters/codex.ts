@@ -15,7 +15,7 @@ import {
   removeFileOrSymlink,
   symlinkOrCopy,
 } from "../shared/utils.js";
-import { readSkillsFromDir, writeWithMarkers } from "./adapter-utils.js";
+import { readSkillsFromDir, writeWithMarkers, rethrowPermissionError } from "./adapter-utils.js";
 import { readMcpFromToml, writeMcpToToml } from "./toml-utils.js";
 
 function projectPaths(root: string) {
@@ -120,17 +120,7 @@ async function write(
       filesWritten.push(p.mcp);
     }
   } catch (err: unknown) {
-    if (err instanceof Error && "code" in err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === "EACCES" || code === "EPERM") {
-        const target = opts.global ? "user-level" : "project-level";
-        throw new Error(
-          `Cannot write to ${target} Codex CLI paths. Check file permissions.\n` +
-            `Attempted path: ${(err as NodeJS.ErrnoException).path ?? "unknown"}`,
-        );
-      }
-    }
-    throw err;
+    rethrowPermissionError(err, !!opts.global, "Codex CLI paths");
   }
 
   return { filesWritten, filesSkipped: [], warnings };
