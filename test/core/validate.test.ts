@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { validateStack } from "../../src/core/validate.js";
 import path from "node:path";
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 const VALID_STACK = path.resolve("test/__fixtures__/stacks/valid-stack");
@@ -52,5 +52,21 @@ describe("validateStack", () => {
       (d) => d.file === "stack.json" && d.level === "error",
     );
     expect(stackErrors.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("returns errors for invalid mcp.json and skill frontmatter", async () => {
+    const result = await validateStack(INVALID_STACK);
+    expect(result.diagnostics.some((d) => d.file === "mcp.json" && d.level === "error")).toBe(true);
+    expect(result.diagnostics.some((d) => d.file.startsWith("skills/") && d.level === "error")).toBe(true);
+  });
+
+  it("returns warnings for dangerous env names", async () => {
+    const result = await validateStack(INVALID_STACK);
+    const envWarnings = result.diagnostics.filter(
+      (d) => d.file === ".env.example" && d.level === "warning",
+    );
+    expect(envWarnings.length).toBeGreaterThanOrEqual(1);
+    expect(envWarnings[0]!.message).toContain("PATH");
+    expect(result.warnings).toBeGreaterThanOrEqual(1);
   });
 });
