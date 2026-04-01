@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.8 (2026-04-01)
+
+### Added
+
+- `pit collect --dry-run` and `pit install --dry-run` now show exactly what would happen before writing anything. You get a file-by-file preview: which files would be created or modified, per-adapter breakdowns (Claude Code, Cursor, Copilot, Codex, Standards), and details like "update marker block", "add 2 MCP servers", or "symlink"
+- `--verbose` / `-v` flag on both commands. When combined with `--dry-run`, shows unified diffs for files that would be modified. See the exact lines that would change in your CLAUDE.md, .cursorrules, or settings.json before committing to the install
+
+### Changed
+
+- `writeWithMarkers` and `mergeMcpIntoJson` now return rich result objects instead of bare file paths, enabling dry-run introspection without extra file reads
+- Three shared helpers (`markersDryRunEntry`, `mcpDryRunEntry`, `skillDryRunEntry`) eliminate dry-run entry construction duplication across all adapters
+- `canonicalSkillBase()` extracted from `skill-store.ts` as single source of truth for canonical skill directory paths
+- MCP overwrite warnings suppressed during dry-run (no point warning about overwrites that aren't happening)
+
 ## 0.2.7 (2026-04-01)
 
 ### Added

@@ -34,8 +34,8 @@ Merged agents-md + mcp-standard into a single `standards` adapter that owns AGEN
 ### ~~`pit check`~~
 **Completed:** v0.2.6 (2026-04-01). Two-phase CI check: freshness (stack.json vs installed.json) and drift (installed.json vs disk). Supports `--json`. GitHub Actions example deferred to README update.
 
-### Dry-run output
-`--dry-run` flags exist but output is half-baked. Collect only shows secret stripping, install skips writes but doesn't report what would change. Need proper preview output: list files that would be created/modified, show diffs for config merges, summarize skills/MCP that would be added.
+### ~~Dry-run output~~
+**Completed:** v0.2.8 (2026-04-01). `--dry-run` on both collect and install now shows file-by-file preview (create/modify per adapter, with details). `-v`/`--verbose` adds unified diffs for modified files.
 
 ## Phase 2 — Stack Composer (v0.3 -> v0.5)
 
