@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 (2026-04-01)
+
+### Changed
+
+- `pit validate` now finds agnix when installed globally (e.g., `npm i -g agnix`), not just as a local dev dependency. Local installs are still preferred when present.
+
 ## 0.3.0 (2026-04-01) — Phase 1: Team Platform
 
 The "new dev joins, runs one command, every AI tool is configured" release. Five adapters, seven commands, and drift detection that actually works across all of them.
