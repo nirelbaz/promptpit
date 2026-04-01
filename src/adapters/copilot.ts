@@ -13,7 +13,7 @@ import type {
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
-import { readMcpFromSettings, writeWithMarkers, rethrowPermissionError, markersDryRunEntry } from "./adapter-utils.js";
+import { readMcpFromSettings, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, skillDryRunEntry } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -144,12 +144,7 @@ async function write(
       const instructionContent = skillToInstructionsMd(skill.content);
       const dest = path.join(p.skills, `${skill.name}.instructions.md`);
       if (opts.dryRun) {
-        const skillExists = await exists(dest);
-        dryRunEntries.push({
-          file: dest,
-          action: skillExists ? "modify" : "create",
-          detail: "translate to .instructions.md",
-        });
+        dryRunEntries.push(skillDryRunEntry(dest, await exists(dest), "translate to .instructions.md"));
       } else {
         await writeFileEnsureDir(dest, instructionContent);
         filesWritten.push(dest);
@@ -173,18 +168,13 @@ async function write(
         ...translateMcpServers(stack.mcpServers as Record<string, Record<string, unknown>>),
       };
       const newContent = JSON.stringify(config, null, 2);
+      const mcpCount = Object.keys(stack.mcpServers).length;
 
       if (opts.dryRun) {
-        const serverCount = Object.keys(stack.mcpServers).length;
-        dryRunEntries.push({
-          file: p.mcp,
-          action: mcpExisted ? "modify" : "create",
-          detail: `add ${serverCount} MCP server${serverCount !== 1 ? "s" : ""}`,
-          ...(opts.verbose && mcpExisted && existingRaw && {
-            oldContent: existingRaw,
-            newContent,
-          }),
-        });
+        dryRunEntries.push(mcpDryRunEntry(p.mcp, mcpCount, {
+          written: null, existed: mcpExisted,
+          oldContent: existingRaw ?? undefined, newContent,
+        }, opts.verbose));
       } else {
         await writeFileEnsureDir(p.mcp, newContent);
         filesWritten.push(p.mcp);

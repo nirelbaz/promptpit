@@ -13,7 +13,7 @@ import type {
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
-import { readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry } from "./adapter-utils.js";
+import { readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, skillDryRunEntry } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -120,12 +120,7 @@ async function write(
       const mdcContent = skillToMdc(skill.content, skill.name);
       const dest = path.join(p.rules!, `${skill.name}.mdc`);
       if (opts.dryRun) {
-        const skillExists = await exists(dest);
-        dryRunEntries.push({
-          file: dest,
-          action: skillExists ? "modify" : "create",
-          detail: "translate to .mdc",
-        });
+        dryRunEntries.push(skillDryRunEntry(dest, await exists(dest), "translate to .mdc"));
       } else {
         await writeFileEnsureDir(dest, mdcContent);
         filesWritten.push(dest);
@@ -134,8 +129,9 @@ async function write(
 
     const mcpResult = await mergeMcpIntoJson(p.mcp, stack.mcpServers, warnings, opts.dryRun);
     if (mcpResult.written) filesWritten.push(mcpResult.written);
-    if (opts.dryRun && Object.keys(stack.mcpServers).length > 0) {
-      dryRunEntries.push(mcpDryRunEntry(p.mcp, Object.keys(stack.mcpServers).length, mcpResult, opts.verbose));
+    const mcpCount = Object.keys(stack.mcpServers).length;
+    if (opts.dryRun && mcpCount > 0) {
+      dryRunEntries.push(mcpDryRunEntry(p.mcp, mcpCount, mcpResult, opts.verbose));
     }
   } catch (err: unknown) {
     rethrowPermissionError(err, !!opts.global, "Cursor paths");

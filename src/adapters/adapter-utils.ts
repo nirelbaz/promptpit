@@ -159,7 +159,18 @@ export async function writeWithMarkers(
   return { written: filePath, content: updated, oldContent: existing, existed };
 }
 
-// Build a DryRunEntry from a writeWithMarkers result
+export function skillDryRunEntry(
+  dest: string,
+  skillExists: boolean,
+  detail?: string,
+): DryRunEntry {
+  return {
+    file: dest,
+    action: skillExists ? "modify" : "create",
+    detail,
+  };
+}
+
 export function markersDryRunEntry(
   filePath: string,
   result: WriteWithMarkersResult,
@@ -176,7 +187,6 @@ export function markersDryRunEntry(
   };
 }
 
-// Build a DryRunEntry from a mergeMcpIntoJson result
 export function mcpDryRunEntry(
   filePath: string,
   serverCount: number,

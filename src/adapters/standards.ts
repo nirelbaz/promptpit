@@ -87,8 +87,9 @@ async function write(
     if (!opts.global) {
       const mcpResult = await mergeMcpIntoJson(p.mcp, stack.mcpServers, warnings, opts.dryRun);
       if (mcpResult.written) filesWritten.push(mcpResult.written);
-      if (opts.dryRun && Object.keys(stack.mcpServers).length > 0) {
-        dryRunEntries.push(mcpDryRunEntry(p.mcp, Object.keys(stack.mcpServers).length, mcpResult, opts.verbose));
+      const mcpCount = Object.keys(stack.mcpServers).length;
+      if (opts.dryRun && mcpCount > 0) {
+        dryRunEntries.push(mcpDryRunEntry(p.mcp, mcpCount, mcpResult, opts.verbose));
       }
     }
   } catch (err: unknown) {

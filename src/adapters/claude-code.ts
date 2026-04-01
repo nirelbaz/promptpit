@@ -10,7 +10,7 @@ import type {
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists, removeFileOrSymlink, symlinkOrCopy } from "../shared/utils.js";
-import { readSkillsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry } from "./adapter-utils.js";
+import { readSkillsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, skillDryRunEntry } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -99,12 +99,7 @@ async function write(
       const skillDir = path.join(p.skills, skill.name);
       const dest = path.join(skillDir, "SKILL.md");
       if (opts.dryRun) {
-        const skillExists = await exists(dest);
-        dryRunEntries.push({
-          file: dest,
-          action: skillExists ? "modify" : "create",
-          detail: opts.canonicalSkillPaths?.get(skill.name) ? "symlink" : undefined,
-        });
+        dryRunEntries.push(skillDryRunEntry(dest, await exists(dest), "symlink"));
       } else {
         const canonicalPath = opts.canonicalSkillPaths?.get(skill.name);
         if (canonicalPath) {
@@ -120,8 +115,9 @@ async function write(
     // Write MCP config
     const mcpResult = await mergeMcpIntoJson(p.mcp, stack.mcpServers, warnings, opts.dryRun);
     if (mcpResult.written) filesWritten.push(mcpResult.written);
-    if (opts.dryRun && Object.keys(stack.mcpServers).length > 0) {
-      dryRunEntries.push(mcpDryRunEntry(p.mcp, Object.keys(stack.mcpServers).length, mcpResult, opts.verbose));
+    const mcpCount = Object.keys(stack.mcpServers).length;
+    if (opts.dryRun && mcpCount > 0) {
+      dryRunEntries.push(mcpDryRunEntry(p.mcp, mcpCount, mcpResult, opts.verbose));
     }
   } catch (err: unknown) {
     rethrowPermissionError(err, !!opts.global, "Claude Code paths");
