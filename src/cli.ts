@@ -16,7 +16,7 @@ program
   .description(
     "Portable AI agent stacks — collect, install, and share across Claude Code, Cursor, and more",
   )
-  .version("0.2.9");
+  .version("0.3.0");
 
 program
   .command("init")
