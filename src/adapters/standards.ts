@@ -9,13 +9,15 @@ import type {
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, exists } from "../shared/utils.js";
-import { writeWithMarkers } from "./adapter-utils.js";
+import { writeWithMarkers, readMcpFromSettings, mergeMcpIntoJson, rethrowPermissionError } from "./adapter-utils.js";
+
+const MCP_FILE = ".mcp.json";
 
 function projectPaths(root: string) {
   return {
     config: path.join(root, "AGENTS.md"),
     skills: path.join(root, ".agents", "skills"),
-    mcp: path.join(root, ".agents", "mcp.json"),
+    mcp: path.join(root, MCP_FILE),
   };
 }
 
@@ -33,6 +35,7 @@ async function detect(root: string): Promise<DetectionResult> {
   const found: string[] = [];
 
   if (await exists(p.config)) found.push(p.config);
+  if (await exists(p.mcp)) found.push(p.mcp);
 
   return { detected: found.length > 0, configPaths: found };
 }
@@ -41,12 +44,13 @@ async function read(root: string): Promise<PlatformConfig> {
   const p = projectPaths(root);
 
   const agentInstructions = (await readFileOrNull(p.config)) ?? "";
+  const mcpServers = await readMcpFromSettings(p.mcp);
 
   return {
-    adapterId: "agents-md",
+    adapterId: "standards",
     agentInstructions,
     skills: [],
-    mcpServers: {},
+    mcpServers,
     rules: [],
   };
 }
@@ -69,36 +73,37 @@ async function write(
         stack.agentInstructions,
         stackName,
         version,
-        "agents-md",
+        "standards",
+        opts.dryRun,
+      );
+      if (written) filesWritten.push(written);
+    }
+
+    if (!opts.global) {
+      const written = await mergeMcpIntoJson(
+        p.mcp,
+        stack.mcpServers,
+        warnings,
         opts.dryRun,
       );
       if (written) filesWritten.push(written);
     }
   } catch (err: unknown) {
-    if (err instanceof Error && "code" in err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === "EACCES" || code === "EPERM") {
-        const target = opts.global ? "user-level" : "project-level";
-        throw new Error(
-          `Cannot write to ${target} AGENTS.md. Check file permissions.`,
-        );
-      }
-    }
-    throw err;
+    rethrowPermissionError(err, !!opts.global, "standards config");
   }
 
   return { filesWritten, filesSkipped: [], warnings };
 }
 
-export const agentsMdAdapter: PlatformAdapter = {
-  id: "agents-md",
-  displayName: "AGENTS.md",
+export const standardsAdapter: PlatformAdapter = {
+  id: "standards",
+  displayName: "Standards",
   paths: { project: projectPaths, user: userPaths },
   capabilities: {
     skillLinkStrategy: "none",
     rules: false,
     skillFormat: "md",
-    mcpStdio: false,
+    mcpStdio: true,
     mcpRemote: false,
     agentsmd: true,
     hooks: false,

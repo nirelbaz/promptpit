@@ -22,8 +22,8 @@ Agent Skills spec (agentskills.io) = directory with SKILL.md (YAML frontmatter: 
 
 Goal: give teams a reason to adopt PromptPit. "New dev joins, runs one command, every AI tool is configured."
 
-### Unify standards adapters
-Refactor agents-md + mcp-standard adapters into a unified "standards" adapter that owns all cross-tool conventions (.mcp.json, AGENTS.md, .agents/skills/). Currently split across two adapters because the outside voice on the v0.2 eng review correctly noted that absorbing agents-md during a feature release is risky churn. Ship as a separate refactor PR after v0.2 lands. The adapter contract (detect/read/write) fits cross-tool standards well, but the refactor should be its own atomic change with no feature work mixed in.
+### ~~Unify standards adapters~~
+Merged agents-md + mcp-standard into a single `standards` adapter that owns AGENTS.md, .mcp.json, and .agents/skills/.
 
 ### Codex CLI adapter (Tier 1)
 Instructions to AGENTS.md (shared with AGENTS.md support), skills to `.codex/skills/` (native SKILL.md, symlinked from `.agents/skills/`), MCP to `config.toml` (needs TOML writer, consider `@iarna/toml` or `smol-toml`). Detection: `~/.codex` directory exists. Also supports `.agents/skills/` as universal alias. Confirm paths against current Codex CLI docs before shipping.

@@ -6,11 +6,11 @@ import { installStack } from "../../src/commands/install.js";
 
 const VALID_STACK = path.resolve("test/__fixtures__/stacks/valid-stack");
 
-describe("install: agents-md always-write logic", () => {
+describe("install: standards always-write logic", () => {
   let tmpDir: string;
 
   beforeEach(async () => {
-    tmpDir = await mkdtemp(path.join(tmpdir(), "pit-install-agents-"));
+    tmpDir = await mkdtemp(path.join(tmpdir(), "pit-install-standards-"));
   });
 
   afterEach(async () => {
@@ -41,8 +41,8 @@ describe("install: agents-md always-write logic", () => {
     expect(agentsMd).toContain("promptpit:start:test-stack");
   });
 
-  it("does not duplicate agents-md when AGENTS.md already detected", async () => {
-    // Both CLAUDE.md and AGENTS.md exist — agents-md is detected AND injected
+  it("does not duplicate standards when AGENTS.md already detected", async () => {
+    // Both CLAUDE.md and AGENTS.md exist — standards is detected AND injected
     await writeFile(path.join(tmpDir, "CLAUDE.md"), "# Claude");
     await writeFile(path.join(tmpDir, "AGENTS.md"), "# Agents");
 

@@ -46,24 +46,27 @@ export async function collectStack(
     );
   }
 
-  // Exclude mcp-standard from read when other MCP-providing adapters are present
-  // (avoids double-reading MCP servers from both .mcp.json and .claude/settings.json).
-  // If mcp-standard is the only detected adapter with MCP, keep it in the read set.
-  const hasOtherMcpAdapter = detected.some(
-    (d) => d.adapter.id !== "mcp-standard" && d.adapter.capabilities.mcpStdio,
-  );
-  const readSet = hasOtherMcpAdapter
-    ? detected.filter((d) => d.adapter.id !== "mcp-standard")
-    : detected;
-
   spin.succeed(
     `Found ${detected.length} tool(s): ${detected.map((d) => d.adapter.displayName).join(", ")}`,
   );
 
   const readSpin = spinner("Reading configurations...");
   const configs = await Promise.all(
-    readSet.map((d) => d.adapter.read(root)),
+    detected.map((d) => d.adapter.read(root)),
   );
+
+  // Clear MCP from standards adapter when other MCP-providing adapters are present
+  // (avoids double-reading MCP servers from both .mcp.json and tool-native settings).
+  const hasOtherMcpAdapter = detected.some(
+    (d) => d.adapter.id !== "standards" && d.adapter.capabilities.mcpStdio,
+  );
+  if (hasOtherMcpAdapter) {
+    for (const config of configs) {
+      if (config.adapterId === "standards") {
+        config.mcpServers = {};
+      }
+    }
+  }
 
   // Always strip installed marker blocks from instructions to prevent recursive duplication.
   // This is unconditional — even if the manifest was deleted, markers in files should be stripped.
