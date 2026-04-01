@@ -3,6 +3,7 @@ import { detectAdapters } from "../adapters/registry.js";
 import { mergeConfigs } from "../core/merger.js";
 import { stripSecrets } from "../core/security.js";
 import { writeStack } from "../core/stack.js";
+import { stripAllMarkerBlocks } from "../shared/markers.js";
 import { readFileOrNull } from "../shared/utils.js";
 import type { StackBundle } from "../shared/schema.js";
 import { log, spinner } from "../shared/io.js";
@@ -41,29 +42,37 @@ export async function collectStack(
     spin.fail("No AI tool configuration found");
     throw new Error(
       "No AI tool configuration found in this project. " +
-        "Looked for: CLAUDE.md, .claude/, .cursorrules, .cursor/, AGENTS.md",
+        "Looked for: CLAUDE.md, .claude/, .cursorrules, .cursor/, AGENTS.md, .mcp.json",
     );
   }
 
-  // Fallback-only: exclude agents-md from read when other adapters are detected.
-  // This avoids content duplication when CLAUDE.md/cursorrules have similar content.
-  // Full deduplication is deferred — see TODOS.md "Recursive duplication."
-  const hasNonAgentsMd = detected.some((d) => d.adapter.id !== "agents-md");
-  const readSet = hasNonAgentsMd
-    ? detected.filter((d) => d.adapter.id !== "agents-md")
+  // Exclude mcp-standard from read when other MCP-providing adapters are present
+  // (avoids double-reading MCP servers from both .mcp.json and .claude/settings.json).
+  // If mcp-standard is the only detected adapter with MCP, keep it in the read set.
+  const hasOtherMcpAdapter = detected.some(
+    (d) => d.adapter.id !== "mcp-standard" && d.adapter.capabilities.mcpStdio,
+  );
+  const readSet = hasOtherMcpAdapter
+    ? detected.filter((d) => d.adapter.id !== "mcp-standard")
     : detected;
 
   spin.succeed(
-    `Found ${detected.length} tool(s): ${detected.map((d) => d.adapter.displayName).join(", ")}` +
-      (readSet.length < detected.length
-        ? ` (reading from ${readSet.length})`
-        : ""),
+    `Found ${detected.length} tool(s): ${detected.map((d) => d.adapter.displayName).join(", ")}`,
   );
 
   const readSpin = spinner("Reading configurations...");
   const configs = await Promise.all(
     readSet.map((d) => d.adapter.read(root)),
   );
+
+  // Always strip installed marker blocks from instructions to prevent recursive duplication.
+  // This is unconditional — even if the manifest was deleted, markers in files should be stripped.
+  for (const config of configs) {
+    if (config.agentInstructions) {
+      config.agentInstructions = stripAllMarkerBlocks(config.agentInstructions);
+    }
+  }
+
   readSpin.succeed("Configurations read");
 
   const mergeResult = mergeConfigs(configs);

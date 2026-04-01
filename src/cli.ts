@@ -1,6 +1,8 @@
 import { Command } from "commander";
 import { collectStack } from "./commands/collect.js";
 import { installStack } from "./commands/install.js";
+import { statusCommand } from "./commands/status.js";
+import { watchCommand } from "./commands/watch.js";
 import path from "node:path";
 import { log } from "./shared/io.js";
 
@@ -63,5 +65,39 @@ program
       }
     },
   );
+
+program
+  .command("status")
+  .description("Show what stacks are installed and what's drifted")
+  .argument("[dir]", "Project directory to check", ".")
+  .option("--json", "Output as JSON (porcelain mode)")
+  .option("--short", "One-line summary per stack")
+  .action(async (dir: string, opts: { json?: boolean; short?: boolean }) => {
+    try {
+      const root = path.resolve(dir);
+      await statusCommand(root, opts);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        log.error(err.message);
+      }
+      process.exit(1);
+    }
+  });
+
+program
+  .command("watch")
+  .description("Watch .agents/skills/ and re-translate on change")
+  .argument("[dir]", "Project directory to watch", ".")
+  .action(async (dir: string) => {
+    try {
+      const root = path.resolve(dir);
+      await watchCommand(root);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        log.error(err.message);
+      }
+      process.exit(1);
+    }
+  });
 
 program.parse();
