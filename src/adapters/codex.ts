@@ -37,17 +37,17 @@ function userPaths() {
 
 async function detect(root: string): Promise<DetectionResult> {
   const p = projectPaths(root);
-  const found: string[] = [];
-
-  if (await exists(p.config)) found.push(p.config);
-  if (await exists(p.skills)) found.push(p.skills);
-  if (await exists(p.mcp)) found.push(p.mcp);
-
-  // Also detect .codex/ directory itself
   const codexDir = path.join(root, ".codex");
-  if (found.length === 0 && (await exists(codexDir))) {
-    found.push(codexDir);
-  }
+
+  const [configExists, skillsExists, mcpExists, codexDirExists] =
+    await Promise.all([exists(p.config), exists(p.skills), exists(p.mcp), exists(codexDir)]);
+
+  const found: string[] = [];
+  if (configExists) found.push(p.config);
+  if (skillsExists) found.push(p.skills);
+  if (mcpExists) found.push(p.mcp);
+  // Freshly-initialized Codex repos may only have .codex/ with no config files yet
+  if (found.length === 0 && codexDirExists) found.push(codexDir);
 
   return { detected: found.length > 0, configPaths: found };
 }
@@ -55,11 +55,11 @@ async function detect(root: string): Promise<DetectionResult> {
 async function read(root: string): Promise<PlatformConfig> {
   const p = projectPaths(root);
 
-  const agentInstructions = (await readFileOrNull(p.config)) ?? "";
-  const skills = await readSkillsFromDir(p.skills);
-
-  // Read MCP from TOML config
-  const tomlContent = (await readFileOrNull(p.mcp)) ?? "";
+  const [agentInstructions, skills, tomlContent] = await Promise.all([
+    readFileOrNull(p.config).then((r) => r ?? ""),
+    readSkillsFromDir(p.skills),
+    readFileOrNull(p.mcp).then((r) => r ?? ""),
+  ]);
   const mcpServers = readMcpFromToml(tomlContent);
 
   return {
@@ -83,7 +83,6 @@ async function write(
   const version = stack.manifest.version;
 
   try {
-    // Write agent instructions to AGENTS.md
     if (stack.agentInstructions) {
       const written = await writeWithMarkers(
         p.config,
@@ -96,7 +95,6 @@ async function write(
       if (written) filesWritten.push(written);
     }
 
-    // Install skills (symlink from canonical location, or direct write as fallback)
     for (const skill of stack.skills) {
       const skillDir = path.join(p.skills, skill.name);
       const dest = path.join(skillDir, "SKILL.md");
@@ -112,7 +110,6 @@ async function write(
       }
     }
 
-    // Write MCP config to config.toml
     if (Object.keys(stack.mcpServers).length > 0 && !opts.dryRun) {
       const existingToml = (await readFileOrNull(p.mcp)) ?? "";
       const updated = writeMcpToToml(existingToml, stack.mcpServers);

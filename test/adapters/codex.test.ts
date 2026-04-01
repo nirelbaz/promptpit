@@ -132,6 +132,11 @@ describe("Codex CLI adapter", () => {
       const bundle = await readStack(VALID_STACK);
       const result = await codexAdapter.write(tmpDir, bundle, { dryRun: true });
       expect(result.filesWritten).toEqual([]);
+      // Verify no files were created on disk
+      const agentsMd = await readFile(path.join(tmpDir, "AGENTS.md"), "utf-8").catch(() => null);
+      const configToml = await readFile(path.join(tmpDir, ".codex", "config.toml"), "utf-8").catch(() => null);
+      expect(agentsMd).toBeNull();
+      expect(configToml).toBeNull();
     });
   });
 
