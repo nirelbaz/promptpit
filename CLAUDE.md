@@ -2,12 +2,12 @@
 
 ## Project
 
-PromptPit (`pit`) — a CLI tool that makes AI agent stacks portable across Claude Code, Cursor, and other AI coding tools. Two commands: `pit collect` (bundle configs) and `pit install` (install stacks).
+PromptPit (`pit`) — a CLI tool that makes AI agent stacks portable across Claude Code, Cursor, and other AI coding tools. Four commands: `pit collect` (bundle configs), `pit install` (install stacks), `pit status` (show what's installed and drifted), and `pit watch` (live-sync skill changes).
 
 ## Commands
 
 ```bash
-npm test          # run tests (vitest, 111 tests)
+npm test          # run tests (vitest, 163 tests)
 npm run build     # build dist/cli.js (tsup, ESM)
 npm run lint      # TypeScript strict mode check
 npm run dev       # watch mode build
@@ -20,9 +20,9 @@ Adapter pattern with composition. Each AI tool is a plain object implementing `P
 ```
 src/
 ├── cli.ts              # Commander.js entry point
-├── commands/           # collect.ts, install.ts
-├── adapters/           # claude-code.ts, cursor.ts, registry.ts, types.ts, adapter-utils.ts
-├── core/               # stack.ts, skill-store.ts, merger.ts, security.ts
+├── commands/           # collect.ts, install.ts, status.ts, watch.ts
+├── adapters/           # claude-code.ts, cursor.ts, agents-md.ts, mcp-standard.ts, registry.ts, types.ts, adapter-utils.ts
+├── core/               # stack.ts, skill-store.ts, manifest.ts, merger.ts, security.ts
 ├── sources/            # github.ts (clone + auto-collect)
 └── shared/             # schema.ts (Zod + types), markers.ts, utils.ts, io.ts
 ```

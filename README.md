@@ -5,7 +5,7 @@
 
 Every AI coding tool stores config differently. Claude Code uses CLAUDE.md, Cursor uses .cursorrules. Sharing your setup means copy-pasting into formats that only work for one tool.
 
-pit fixes that. Two commands: `pit collect` bundles your configs, `pit install` writes them into each tool's native format. Point it at any GitHub repo - even ones that don't use promptpit - and it auto-detects what's there.
+pit fixes that. `pit collect` bundles your configs, `pit install` writes them into each tool's native format, `pit status` shows what's installed and what's drifted, and `pit watch` keeps translated copies in sync when skills change. Point it at any GitHub repo, even ones that don't use promptpit, and it auto-detects what's there.
 
 ```sh
 npx promptpit install github:nirelbaz/promptpit-starter
@@ -17,6 +17,10 @@ npx promptpit install github:nirelbaz/promptpit-starter
 - SKILL.md files auto-convert to .mdc for Cursor
 - Commit `.promptpit/` to your repo, teammates run `pit install`, everyone gets the same setup
 - Secrets are auto-stripped from MCP configs during collect
+- `pit status` shows what's installed, what's synced, what's drifted
+- `pit watch` auto-re-translates skills when they change
+- `.mcp.json` project-level MCP configs read and written automatically
+- Install manifest tracks everything with content hashes for drift detection
 - Supports Claude Code and Cursor today, new tools are one adapter file to add
 
 ## Installation
@@ -95,6 +99,7 @@ Add `.promptpit/` to your AI tool's ignore list so it doesn't scan the raw bundl
 | Claude Code | CLAUDE.md, .claude/skills/, .claude/settings.json | Symlinked SKILL.md | skill.md |
 | Cursor | .cursorrules, .cursor/rules/, .cursor/mcp.json | Auto-converted .mdc | mdc |
 | AGENTS.md | AGENTS.md (fallback) | Always written | md |
+| .mcp.json | .mcp.json (project-level MCP) | Always written | json |
 
 Skills are installed to `.agents/skills/` as the canonical location (matching the skills.sh ecosystem convention), then symlinked into tool-native paths. Tools that need different formats (like Cursor's .mdc) get translated copies. Windows falls back to copies when symlinks aren't available.
 
@@ -114,7 +119,7 @@ Adding a new tool is one file plus one registry entry. See [CONTRIBUTING.md](CON
 git clone https://github.com/nirelbaz/promptpit.git
 cd promptpit
 npm install
-npm test          # 111 tests, vitest
+npm test          # 163 tests, vitest
 npm run build     # builds dist/cli.js via tsup
 npm run lint      # TypeScript strict mode check
 ```
