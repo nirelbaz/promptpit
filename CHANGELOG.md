@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.3.1 (2026-04-01)
+## 0.3.2 (2026-04-01)
+
+### Changed
+
+- `pit validate` now finds agnix when installed globally (e.g., `npm i -g agnix`), not just as a local dev dependency. Local installs are still preferred when present.
 
 ### Fixed
 
