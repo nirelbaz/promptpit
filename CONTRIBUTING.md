@@ -25,6 +25,13 @@ All must pass.
 
 This is the most likely contribution. Each AI tool (Claude Code, Cursor, etc.) is a plain object implementing `PlatformAdapter`. No base class, just functions from `adapter-utils.ts`.
 
+### Adapter tiers
+
+- **Tier 1 (creator-maintained):** Claude Code, Cursor (shipped), Codex, Copilot (planned). These get full test coverage and are maintained by the project owner.
+- **Tier 2 (community-contributed):** Windsurf, Gemini CLI, and others. Community PRs welcome. Tier 2 adapters need contract tests passing but ongoing maintenance is shared.
+
+### How to add one
+
 1. Create `src/adapters/{tool}.ts` — see `cursor.ts` for a good reference (it has custom skill format conversion)
 2. Register it in `src/adapters/registry.ts`
 3. Add a fixture setup in `ADAPTER_FIXTURES` in `test/adapters/contract.test.ts` — the 7 contract tests will run automatically against your adapter

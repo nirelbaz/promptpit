@@ -2,7 +2,7 @@
 
 ## Overview
 
-promptpit has four commands: `pit collect` (bundle configs), `pit install` (write them into each tool's format), `pit status` (show what's installed and drifted), and `pit watch` (live-sync skill changes). The core design principle is that promptpit knows nothing about specific AI tools, adapters do.
+promptpit is the composition layer for AI agent configuration. It bundles instructions, skills ([Agent Skills](https://agentskills.io) spec), MCP servers, and env vars into one distributable stack, then installs it across multiple AI coding tools. Four commands: `pit collect` (bundle configs), `pit install` (write them into each tool's format), `pit status` (show what's installed and drifted), and `pit watch` (live-sync skill changes). The core design principle is that promptpit knows nothing about specific AI tools, adapters do.
 
 ## Data flow
 

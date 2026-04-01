@@ -2,7 +2,7 @@
 
 ## Project
 
-PromptPit (`pit`) — a CLI tool that makes AI agent stacks portable across Claude Code, Cursor, and other AI coding tools. Four commands: `pit collect` (bundle configs), `pit install` (install stacks), `pit status` (show what's installed and drifted), and `pit watch` (live-sync skill changes).
+PromptPit (`pit`) — the composition layer for AI agent configuration. Bundles instructions, skills (Agent Skills spec), MCP servers, and env vars into one distributable stack that installs across Claude Code, Cursor, and other AI coding tools. Four commands: `pit collect` (bundle configs), `pit install` (install stacks), `pit status` (show what's installed and drifted), and `pit watch` (live-sync skill changes). Translation is the entry point, stack management is the product.
 
 ## Commands
 
