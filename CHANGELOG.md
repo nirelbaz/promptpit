@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3 (2026-04-01)
+
+### Fixed
+
+- `pit validate` now correctly invokes agnix with `--format json` as a global flag (before the `validate` subcommand), matching agnix's actual CLI interface.
+
 ## 0.3.2 (2026-04-01)
 
 ### Changed
