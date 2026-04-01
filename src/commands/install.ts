@@ -105,6 +105,18 @@ export async function installStack(
       });
     }
 
+    // Always include mcp-standard for writing when stack has MCP servers
+    if (
+      Object.keys(bundle.mcpServers).length > 0 &&
+      !detected.some((d) => d.adapter.id === "mcp-standard")
+    ) {
+      const { mcpStandardAdapter } = await import("../adapters/mcp-standard.js");
+      detected.push({
+        adapter: mcpStandardAdapter,
+        detection: { detected: true, configPaths: [] },
+      });
+    }
+
     // Write skills to canonical .agents/skills/ location
     let canonicalSkillPaths: Map<string, string> | undefined;
     if (bundle.skills.length > 0 && !opts.dryRun) {
