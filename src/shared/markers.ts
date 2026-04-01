@@ -74,6 +74,50 @@ export function insertMarkers(
   return `${content}\n\n${block}`;
 }
 
+// Remove an entire marker block (markers + content) for a given stack
+export function stripMarkerBlock(content: string, stackName: string): string {
+  if (!hasMarkers(content, stackName)) return content;
+
+  const startMatch = content.match(markerStartRegex(stackName));
+  const endMatch = content.match(markerEndRegex(stackName));
+  if (
+    !startMatch ||
+    !endMatch ||
+    startMatch.index === undefined ||
+    endMatch.index === undefined
+  ) {
+    return content;
+  }
+
+  const before = content.slice(0, startMatch.index);
+  const after = content.slice(endMatch.index + endMatch[0].length);
+
+  // Clean up extra blank lines left by removal
+  return (before.trimEnd() + "\n" + after.trimStart()).trim();
+}
+
+// Remove ALL promptpit marker blocks from content (any stack name)
+export function stripAllMarkerBlocks(content: string): string {
+  // Capture stack name between "start:" and the next ":" (version field)
+  // Stack names may contain regex-special chars that were escaped during creation,
+  // but in the raw HTML comment they appear unescaped, so [^:]+ is correct here
+  const allStartRegex = new RegExp(
+    `<!-- ${MARKER_PREFIX}:start:([^:]+):[^>]+ -->`,
+    "g",
+  );
+  const stackNames = new Set<string>();
+  let match: RegExpExecArray | null;
+  while ((match = allStartRegex.exec(content)) !== null) {
+    if (match[1]) stackNames.add(match[1]);
+  }
+
+  let result = content;
+  for (const name of stackNames) {
+    result = stripMarkerBlock(result, name);
+  }
+  return result;
+}
+
 export function replaceMarkerContent(
   content: string,
   newContent: string,

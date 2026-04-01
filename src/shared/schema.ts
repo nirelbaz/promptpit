@@ -92,3 +92,34 @@ const DANGEROUS_ENV_NAMES = new Set([
 export function isDangerousEnvName(name: string): boolean {
   return DANGEROUS_ENV_NAMES.has(name.toUpperCase());
 }
+
+// --- Install Manifest (.promptpit/installed.json) ---
+
+const artifactHashSchema = z.object({
+  hash: z.string(),
+});
+
+const adapterInstallSchema = z.object({
+  instructions: artifactHashSchema.optional(),
+  skills: z.record(artifactHashSchema).optional(),
+  mcp: z.record(artifactHashSchema).optional(),
+});
+
+export type AdapterInstallRecord = z.infer<typeof adapterInstallSchema>;
+
+const installEntrySchema = z.object({
+  stack: z.string().min(1),
+  stackVersion: z.string(),
+  source: z.string().optional(),
+  installedAt: z.string(),
+  adapters: z.record(adapterInstallSchema),
+});
+
+export type InstallEntry = z.infer<typeof installEntrySchema>;
+
+export const installManifestSchema = z.object({
+  version: z.literal(1),
+  installs: z.array(installEntrySchema),
+});
+
+export type InstallManifest = z.infer<typeof installManifestSchema>;

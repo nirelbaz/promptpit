@@ -1,5 +1,6 @@
 import type { PlatformConfig } from "../adapters/types.js";
 import type { SkillEntry, McpConfig } from "../shared/schema.js";
+import { computeHash, normalizeForHash } from "./manifest.js";
 
 export interface MergedStack {
   agentInstructions: string;
@@ -29,9 +30,21 @@ export function mergeConfigs(
 
   const warnings: string[] = [];
 
-  const instructions = configs
-    .filter((c) => c.agentInstructions.trim())
-    .map((c) => `## From ${c.adapterId}\n\n${c.agentInstructions}`)
+  // Dedup instructions by content hash — prevents identical content from
+  // multiple adapters (e.g., CLAUDE.md and AGENTS.md) being collected twice
+  const seenInstructionHashes = new Set<string>();
+  const uniqueInstructions: { adapterId: string; content: string }[] = [];
+  for (const c of configs) {
+    const trimmed = c.agentInstructions.trim();
+    if (!trimmed) continue;
+    const hash = computeHash(normalizeForHash(trimmed));
+    if (!seenInstructionHashes.has(hash)) {
+      seenInstructionHashes.add(hash);
+      uniqueInstructions.push({ adapterId: c.adapterId, content: c.agentInstructions });
+    }
+  }
+  const instructions = uniqueInstructions
+    .map((u) => `## From ${u.adapterId}\n\n${u.content}`)
     .join("\n\n");
 
   const seenSkills = new Map<string, SkillEntry>();
