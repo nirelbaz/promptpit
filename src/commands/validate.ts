@@ -6,8 +6,7 @@ export interface ValidateOptions {
   json?: boolean;
 }
 
-// Error subclass to carry exit code without printing extra noise
-class ExitError extends Error {
+export class ExitError extends Error {
   constructor() {
     super("Validation failed");
     this.name = "ExitError";
@@ -22,11 +21,7 @@ function statusIcon(level: "pass" | "error" | "warning"): string {
   }
 }
 
-function fileStatus(
-  file: string,
-  diagnostics: Diagnostic[],
-  extra?: string,
-): void {
+function fileStatus(file: string, diagnostics: Diagnostic[]): void {
   const fileDiags = diagnostics.filter((d) => d.file === file);
   const hasError = fileDiags.some((d) => d.level === "error");
   const hasWarning = fileDiags.some((d) => d.level === "warning");
@@ -41,8 +36,7 @@ function fileStatus(
     const msgs = fileDiags.map((d) => d.message).join("; ");
     console.log(`  ${statusIcon("warning")} ${file} ${chalk.yellow("— " + msgs)}`);
   } else {
-    const suffix = extra ? ` ${chalk.dim(`(${extra})`)}` : "";
-    console.log(`  ${statusIcon("pass")} ${file}${suffix}`);
+    console.log(`  ${statusIcon("pass")} ${file}`);
   }
 }
 
@@ -51,28 +45,17 @@ function formatHuman(result: ValidateResult, stackDir: string): void {
   console.log(`Validating ${stackDir} ...`);
   console.log();
 
-  // Collect unique files in display order
-  const displayFiles = ["stack.json", "agent.promptpit.md"];
-  const skillFiles = result.diagnostics
-    .filter((d) => d.file.startsWith("skills/"))
-    .map((d) => d.file);
-  const uniqueSkills = [...new Set(skillFiles)];
-  displayFiles.push(...uniqueSkills.sort());
-  displayFiles.push("mcp.json", ".env.example");
-
-  // Only show files that had diagnostics or are stack.json (always shown)
   const filesWithDiags = new Set(result.diagnostics.map((d) => d.file));
+  const displayFiles = [
+    "stack.json",
+    "agent.promptpit.md",
+    ...[...filesWithDiags].filter((f) => f.startsWith("skills/")).sort(),
+    "mcp.json",
+    ".env.example",
+  ];
 
   for (const file of displayFiles) {
     if (file === "stack.json" || filesWithDiags.has(file)) {
-      fileStatus(file, result.diagnostics);
-    }
-  }
-
-  // Show all files that passed but aren't in our ordered list
-  const shownFiles = new Set(displayFiles);
-  for (const file of filesWithDiags) {
-    if (!shownFiles.has(file)) {
       fileStatus(file, result.diagnostics);
     }
   }

@@ -3,7 +3,7 @@ import { collectStack } from "./commands/collect.js";
 import { installStack } from "./commands/install.js";
 import { statusCommand } from "./commands/status.js";
 import { watchCommand } from "./commands/watch.js";
-import { validateCommand } from "./commands/validate.js";
+import { validateCommand, ExitError } from "./commands/validate.js";
 import path from "node:path";
 import { log } from "./shared/io.js";
 
@@ -112,7 +112,7 @@ program
       const stackDir = path.resolve(dir);
       await validateCommand(stackDir, opts);
     } catch (err: unknown) {
-      if (err instanceof Error && err.name === "ExitError") {
+      if (err instanceof ExitError) {
         process.exit(1);
       }
       if (err instanceof Error) {

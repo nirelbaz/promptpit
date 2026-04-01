@@ -8,8 +8,8 @@ import {
   stackManifestSchema,
   mcpConfigSchema,
   skillFrontmatterSchema,
-  isDangerousEnvName,
 } from "../shared/schema.js";
+import { validateEnvNames } from "../core/security.js";
 import { readFileOrNull } from "../shared/utils.js";
 import fg from "fast-glob";
 
@@ -46,9 +46,20 @@ function addDiag(
 export async function validateStack(stackDir: string): Promise<ValidateResult> {
   const diagnostics: Diagnostic[] = [];
 
+  // Fire agnix early so subprocess startup overlaps with file I/O
+  const agnixPromise = runAgnix(stackDir);
+
+  // Read all files in parallel
+  const skillsDir = path.join(stackDir, "skills");
+  const [manifestRaw, agentRaw, skillFiles, mcpRaw, envRaw] = await Promise.all([
+    readFileOrNull(path.join(stackDir, "stack.json")),
+    readFileOrNull(path.join(stackDir, "agent.promptpit.md")),
+    fg("*/SKILL.md", { cwd: skillsDir, absolute: true }).catch(() => [] as string[]),
+    readFileOrNull(path.join(stackDir, "mcp.json")),
+    readFileOrNull(path.join(stackDir, ".env.example")),
+  ]);
+
   // --- stack.json (required) ---
-  const manifestPath = path.join(stackDir, "stack.json");
-  const manifestRaw = await readFileOrNull(manifestPath);
   if (!manifestRaw) {
     addDiag(diagnostics, "stack.json", "error", "File not found (required)");
   } else {
@@ -62,20 +73,13 @@ export async function validateStack(stackDir: string): Promise<ValidateResult> {
       const result = stackManifestSchema.safeParse(parsed);
       if (!result.success) {
         for (const issue of result.error.issues) {
-          addDiag(
-            diagnostics,
-            "stack.json",
-            "error",
-            `${issue.path.join(".")}: ${issue.message}`,
-          );
+          addDiag(diagnostics, "stack.json", "error", `${issue.path.join(".")}: ${issue.message}`);
         }
       }
     }
   }
 
   // --- agent.promptpit.md (optional) ---
-  const agentPath = path.join(stackDir, "agent.promptpit.md");
-  const agentRaw = await readFileOrNull(agentPath);
   if (agentRaw) {
     try {
       matter(agentRaw, SAFE_MATTER_OPTIONS as never);
@@ -86,14 +90,15 @@ export async function validateStack(stackDir: string): Promise<ValidateResult> {
   }
 
   // --- skills/*/SKILL.md (optional) ---
-  const skillsDir = path.join(stackDir, "skills");
-  const skillFiles = await fg("*/SKILL.md", { cwd: skillsDir, absolute: true }).catch(
-    () => [] as string[],
+  const skillContents = await Promise.all(
+    skillFiles.map(async (file) => ({
+      file,
+      skillName: path.basename(path.dirname(file)),
+      raw: await readFileOrNull(file),
+    })),
   );
-  for (const file of skillFiles) {
-    const skillName = path.basename(path.dirname(file));
+  for (const { skillName, raw } of skillContents) {
     const relPath = `skills/${skillName}/SKILL.md`;
-    const raw = await readFileOrNull(file);
     if (!raw) continue;
     try {
       const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
@@ -110,8 +115,6 @@ export async function validateStack(stackDir: string): Promise<ValidateResult> {
   }
 
   // --- mcp.json (optional) ---
-  const mcpPath = path.join(stackDir, "mcp.json");
-  const mcpRaw = await readFileOrNull(mcpPath);
   if (mcpRaw) {
     let parsed: unknown;
     try {
@@ -123,36 +126,30 @@ export async function validateStack(stackDir: string): Promise<ValidateResult> {
       const result = mcpConfigSchema.safeParse(parsed);
       if (!result.success) {
         for (const issue of result.error.issues) {
-          addDiag(
-            diagnostics,
-            "mcp.json",
-            "error",
-            `${issue.path.join(".")}: ${issue.message}`,
-          );
+          addDiag(diagnostics, "mcp.json", "error", `${issue.path.join(".")}: ${issue.message}`);
         }
       }
     }
   }
 
   // --- .env.example (optional, warnings only) ---
-  const envPath = path.join(stackDir, ".env.example");
-  const envRaw = await readFileOrNull(envPath);
   if (envRaw) {
+    const envVars: Record<string, string> = {};
     for (const line of envRaw.split("\n")) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith("#")) continue;
       const eqIdx = trimmed.indexOf("=");
       if (eqIdx > 0) {
-        const name = trimmed.slice(0, eqIdx);
-        if (isDangerousEnvName(name)) {
-          addDiag(diagnostics, ".env.example", "warning", `Dangerous env name: ${name}`);
-        }
+        envVars[trimmed.slice(0, eqIdx)] = trimmed.slice(eqIdx + 1);
       }
+    }
+    for (const name of validateEnvNames(envVars)) {
+      addDiag(diagnostics, ".env.example", "warning", `Dangerous env name: ${name}`);
     }
   }
 
-  // --- agnix (optional, implemented in Task 4) ---
-  const agnixResult = await runAgnix(stackDir);
+  // --- agnix (optional) ---
+  const agnixResult = await agnixPromise;
 
   const errors = diagnostics.filter((d) => d.level === "error").length
     + agnixResult.diagnostics.filter((d) => d.level === "error").length;
