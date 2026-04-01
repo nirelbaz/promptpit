@@ -25,13 +25,20 @@ export type StackManifest = z.infer<typeof stackManifestSchema>;
 
 // --- Skill Frontmatter ---
 
+// YAML parses `allowed-tools: Read` as a string, not an array.
+// Coerce single strings into arrays so both forms are accepted.
+const stringOrArray = z.preprocess(
+  (val: unknown) => (typeof val === "string" ? [val] : val),
+  z.array(z.string()),
+);
+
 export const skillFrontmatterSchema = z.object({
   name: z.string().min(1),
   description: z.string().min(1),
   license: z.string().optional(),
   metadata: z.record(z.unknown()).optional(),
-  "allowed-tools": z.array(z.string()).optional(),
-  context: z.array(z.string()).optional(),
+  "allowed-tools": stringOrArray.optional(),
+  context: stringOrArray.optional(),
   agent: z.boolean().optional(),
   "user-invocable": z.boolean().optional(),
   model: z.string().optional(),
