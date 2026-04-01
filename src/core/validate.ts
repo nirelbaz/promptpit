@@ -1,4 +1,5 @@
 import path from "node:path";
+import { accessSync } from "node:fs";
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
 import matter from "gray-matter";
@@ -183,8 +184,9 @@ export function mapAgnixDiagnostic(d: {
 }
 
 function findAgnixBinary(): string | null {
+  const binPath = path.resolve("node_modules", ".bin", "agnix");
   try {
-    const binPath = path.resolve("node_modules", ".bin", "agnix");
+    accessSync(binPath);
     return binPath;
   } catch {
     return null;
