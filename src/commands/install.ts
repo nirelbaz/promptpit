@@ -1,7 +1,7 @@
 import path from "node:path";
 import { readStack } from "../core/stack.js";
 import { installCanonical } from "../core/skill-store.js";
-import { readManifest, writeManifest, upsertInstall, computeHash } from "../core/manifest.js";
+import { readManifest, writeManifest, upsertInstall, computeHash, computeMcpServerHash } from "../core/manifest.js";
 import { detectAdapters } from "../adapters/registry.js";
 import { validateEnvNames } from "../core/security.js";
 import { writeFileEnsureDir, removeDir, readFileOrNull, exists } from "../shared/utils.js";
@@ -243,7 +243,7 @@ export async function installStack(
         if (adapter.capabilities.mcpStdio && Object.keys(bundle.mcpServers).length > 0) {
           const mcp: Record<string, { hash: string }> = {};
           for (const [serverName, serverConfig] of Object.entries(bundle.mcpServers)) {
-            mcp[serverName] = { hash: computeHash(JSON.stringify(serverConfig)) };
+            mcp[serverName] = { hash: computeMcpServerHash(serverConfig) };
           }
           record.mcp = mcp;
         }

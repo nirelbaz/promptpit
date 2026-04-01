@@ -109,6 +109,8 @@ export const standardsAdapter: PlatformAdapter = {
     skillFormat: "md",
     mcpStdio: true,
     mcpRemote: false,
+    mcpFormat: "json",
+    mcpRootKey: "mcpServers",
     agentsmd: true,
     hooks: false,
   },

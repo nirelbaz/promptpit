@@ -2,7 +2,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { rename } from "node:fs/promises";
 import { installManifestSchema } from "../shared/schema.js";
-import type { InstallManifest, InstallEntry } from "../shared/schema.js";
+import type { InstallManifest, InstallEntry, McpServerConfig } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir } from "../shared/utils.js";
 
 const MANIFEST_FILE = "installed.json";
@@ -67,4 +67,31 @@ export function computeHash(content: string): string {
 // Normalize content for hash comparison (instructions may have whitespace diffs)
 export function normalizeForHash(content: string): string {
   return content.trim().replace(/\s+/g, " ");
+}
+
+// Canonical MCP server fields — only these are included in the hash.
+// Adapter-added fields (e.g. Copilot's "type") are excluded so install-time
+// and status-time hashes match regardless of adapter transformations.
+const MCP_CANONICAL_KEYS = ["command", "args", "env", "url", "serverUrl"];
+
+/** Sort all object keys recursively for deterministic serialization. */
+function sortedStringify(value: unknown): string {
+  if (Array.isArray(value)) return "[" + value.map(sortedStringify).join(",") + "]";
+  if (value !== null && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj).sort();
+    return "{" + keys.map((k) => JSON.stringify(k) + ":" + sortedStringify(obj[k])).join(",") + "}";
+  }
+  return JSON.stringify(value);
+}
+
+/** Deterministic hash of an MCP server config, ignoring adapter-added fields. */
+export function computeMcpServerHash(serverConfig: McpServerConfig | Record<string, unknown>): string {
+  const canonical: Record<string, unknown> = {};
+  for (const key of MCP_CANONICAL_KEYS) {
+    if (key in serverConfig && serverConfig[key] !== undefined) {
+      canonical[key] = serverConfig[key];
+    }
+  }
+  return computeHash(sortedStringify(canonical));
 }

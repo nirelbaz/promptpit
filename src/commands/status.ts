@@ -1,7 +1,8 @@
 import path from "node:path";
 import chalk from "chalk";
-import { readManifest, computeHash } from "../core/manifest.js";
+import { readManifest, computeHash, computeMcpServerHash } from "../core/manifest.js";
 import { readFileOrNull } from "../shared/utils.js";
+import { readMcpFromToml } from "../adapters/toml-utils.js";
 import { extractMarkerContent, hasMarkers } from "../shared/markers.js";
 import type { InstallManifest, AdapterInstallRecord } from "../shared/schema.js";
 import { getAdapter } from "../adapters/registry.js";
@@ -66,16 +67,18 @@ async function checkAdapterStatus(
   const driftedFiles: string[] = [];
   let worstState: ArtifactState = "synced";
 
+  // Resolve adapter once — used for paths and capabilities
+  let adapter: ReturnType<typeof getAdapter> | null = null;
+  try {
+    adapter = getAdapter(adapterId);
+  } catch {
+    // Unknown adapter — fall back to defaults below
+  }
+
   // Check instructions
   let instructionDetail: ArtifactDetail | undefined;
   if (record.instructions) {
-    let filePath: string | undefined;
-    try {
-      const adapter = getAdapter(adapterId);
-      filePath = adapter.paths.project(root).config;
-    } catch {
-      // Unknown adapter — skip instruction check
-    }
+    const filePath = adapter?.paths.project(root).config;
     if (filePath) {
       let instrState: ArtifactState = "synced";
       const content = await readFileOrNull(filePath);
@@ -92,7 +95,6 @@ async function checkAdapterStatus(
           }
         }
       } else {
-        // Markers removed by user
         instrState = "removed-by-user";
         driftedFiles.push(filePath);
       }
@@ -126,13 +128,7 @@ async function checkAdapterStatus(
   const mcpEntries = record.mcp ?? {};
   const mcpDetails: ArtifactDetail[] = [];
   if (Object.keys(mcpEntries).length > 0) {
-    let mcpPath: string;
-    try {
-      const adapter = getAdapter(adapterId);
-      mcpPath = adapter.paths.project(root).mcp;
-    } catch {
-      mcpPath = path.join(root, ".mcp.json");
-    }
+    const mcpPath = adapter?.paths.project(root).mcp ?? path.join(root, ".mcp.json");
     const mcpRaw = await readFileOrNull(mcpPath);
     if (mcpRaw == null) {
       worstState = escalateState(worstState, "deleted");
@@ -142,9 +138,15 @@ async function checkAdapterStatus(
       }
     } else {
       let mcpParsed: Record<string, unknown> | null = null;
+      const mcpFormat = adapter?.capabilities.mcpFormat ?? "json";
+      const mcpRootKey = adapter?.capabilities.mcpRootKey ?? "mcpServers";
       try {
-        const parsed = JSON.parse(mcpRaw);
-        mcpParsed = (parsed.mcpServers ?? {}) as Record<string, unknown>;
+        if (mcpFormat === "toml") {
+          mcpParsed = readMcpFromToml(mcpRaw) as Record<string, unknown>;
+        } else {
+          const parsed = JSON.parse(mcpRaw);
+          mcpParsed = (parsed[mcpRootKey] ?? {}) as Record<string, unknown>;
+        }
       } catch {
         worstState = escalateState(worstState, "drifted");
         driftedFiles.push(mcpPath);
@@ -160,7 +162,7 @@ async function checkAdapterStatus(
             serverState = "deleted";
             driftedFiles.push(mcpPath);
           } else {
-            const currentHash = computeHash(JSON.stringify(serverConfig));
+            const currentHash = computeMcpServerHash(serverConfig as Record<string, unknown>);
             if (currentHash !== mcpRecord.hash) {
               serverState = "drifted";
               driftedFiles.push(mcpPath);
