@@ -72,7 +72,8 @@ program
   .argument("[dir]", "Project directory to check", ".")
   .option("--json", "Output as JSON (porcelain mode)")
   .option("--short", "One-line summary per stack")
-  .action(async (dir: string, opts: { json?: boolean; short?: boolean }) => {
+  .option("-v, --verbose", "Show detailed per-adapter inventory with file paths")
+  .action(async (dir: string, opts: { json?: boolean; short?: boolean; verbose?: boolean }) => {
     try {
       const root = path.resolve(dir);
       await statusCommand(root, opts);
