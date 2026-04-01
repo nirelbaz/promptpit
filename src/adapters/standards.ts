@@ -6,10 +6,11 @@ import type {
   DetectionResult,
   WriteResult,
   WriteOptions,
+  DryRunEntry,
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, exists } from "../shared/utils.js";
-import { writeWithMarkers, readMcpFromSettings, mergeMcpIntoJson, rethrowPermissionError } from "./adapter-utils.js";
+import { writeWithMarkers, readMcpFromSettings, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry } from "./adapter-utils.js";
 
 const MCP_FILE = ".mcp.json";
 
@@ -63,12 +64,13 @@ async function write(
   const p = opts.global ? userPaths() : projectPaths(root);
   const filesWritten: string[] = [];
   const warnings: string[] = [];
+  const dryRunEntries: DryRunEntry[] = [];
   const stackName = stack.manifest.name;
   const version = stack.manifest.version;
 
   try {
     if (stack.agentInstructions) {
-      const written = await writeWithMarkers(
+      const result = await writeWithMarkers(
         p.config,
         stack.agentInstructions,
         stackName,
@@ -76,23 +78,24 @@ async function write(
         "standards",
         opts.dryRun,
       );
-      if (written) filesWritten.push(written);
+      if (result.written) filesWritten.push(result.written);
+      if (opts.dryRun) {
+        dryRunEntries.push(markersDryRunEntry(p.config, result, opts.verbose));
+      }
     }
 
     if (!opts.global) {
-      const written = await mergeMcpIntoJson(
-        p.mcp,
-        stack.mcpServers,
-        warnings,
-        opts.dryRun,
-      );
-      if (written) filesWritten.push(written);
+      const mcpResult = await mergeMcpIntoJson(p.mcp, stack.mcpServers, warnings, opts.dryRun);
+      if (mcpResult.written) filesWritten.push(mcpResult.written);
+      if (opts.dryRun && Object.keys(stack.mcpServers).length > 0) {
+        dryRunEntries.push(mcpDryRunEntry(p.mcp, Object.keys(stack.mcpServers).length, mcpResult, opts.verbose));
+      }
     }
   } catch (err: unknown) {
     rethrowPermissionError(err, !!opts.global, "standards config");
   }
 
-  return { filesWritten, filesSkipped: [], warnings };
+  return { filesWritten, filesSkipped: [], warnings, ...(opts.dryRun && { dryRunEntries }) };
 }
 
 export const standardsAdapter: PlatformAdapter = {

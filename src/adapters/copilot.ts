@@ -9,10 +9,11 @@ import type {
   DetectionResult,
   WriteResult,
   WriteOptions,
+  DryRunEntry,
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
-import { readMcpFromSettings, writeWithMarkers, rethrowPermissionError } from "./adapter-utils.js";
+import { readMcpFromSettings, writeWithMarkers, rethrowPermissionError, markersDryRunEntry } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -117,13 +118,14 @@ async function write(
   const p = opts.global ? userPaths() : projectPaths(root);
   const filesWritten: string[] = [];
   const warnings: string[] = [];
+  const dryRunEntries: DryRunEntry[] = [];
   const stackName = stack.manifest.name;
   const version = stack.manifest.version;
 
   try {
     // Write instructions to .github/copilot-instructions.md
     if (stack.agentInstructions) {
-      const written = await writeWithMarkers(
+      const result = await writeWithMarkers(
         p.config,
         stack.agentInstructions,
         stackName,
@@ -131,14 +133,24 @@ async function write(
         "copilot",
         opts.dryRun,
       );
-      if (written) filesWritten.push(written);
+      if (result.written) filesWritten.push(result.written);
+      if (opts.dryRun) {
+        dryRunEntries.push(markersDryRunEntry(p.config, result, opts.verbose));
+      }
     }
 
     // Install skills as .github/instructions/*.instructions.md (translate-copy)
     for (const skill of stack.skills) {
       const instructionContent = skillToInstructionsMd(skill.content);
       const dest = path.join(p.skills, `${skill.name}.instructions.md`);
-      if (!opts.dryRun) {
+      if (opts.dryRun) {
+        const skillExists = await exists(dest);
+        dryRunEntries.push({
+          file: dest,
+          action: skillExists ? "modify" : "create",
+          detail: "translate to .instructions.md",
+        });
+      } else {
         await writeFileEnsureDir(dest, instructionContent);
         filesWritten.push(dest);
       }
@@ -155,12 +167,26 @@ async function write(
           warnings.push(`Could not parse existing ${p.mcp}, creating new`);
         }
       }
+      const mcpExisted = existingRaw != null;
       config.servers = {
         ...((config.servers as Record<string, unknown>) ?? {}),
         ...translateMcpServers(stack.mcpServers as Record<string, Record<string, unknown>>),
       };
-      if (!opts.dryRun) {
-        await writeFileEnsureDir(p.mcp, JSON.stringify(config, null, 2));
+      const newContent = JSON.stringify(config, null, 2);
+
+      if (opts.dryRun) {
+        const serverCount = Object.keys(stack.mcpServers).length;
+        dryRunEntries.push({
+          file: p.mcp,
+          action: mcpExisted ? "modify" : "create",
+          detail: `add ${serverCount} MCP server${serverCount !== 1 ? "s" : ""}`,
+          ...(opts.verbose && mcpExisted && existingRaw && {
+            oldContent: existingRaw,
+            newContent,
+          }),
+        });
+      } else {
+        await writeFileEnsureDir(p.mcp, newContent);
         filesWritten.push(p.mcp);
       }
     }
@@ -168,7 +194,7 @@ async function write(
     rethrowPermissionError(err, !!opts.global, "Copilot paths");
   }
 
-  return { filesWritten, filesSkipped: [], warnings };
+  return { filesWritten, filesSkipped: [], warnings, ...(opts.dryRun && { dryRunEntries }) };
 }
 
 export const copilotAdapter: PlatformAdapter = {

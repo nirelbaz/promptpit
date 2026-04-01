@@ -6,10 +6,11 @@ import type {
   DetectionResult,
   WriteResult,
   WriteOptions,
+  DryRunEntry,
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists, removeFileOrSymlink, symlinkOrCopy } from "../shared/utils.js";
-import { readSkillsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError } from "./adapter-utils.js";
+import { readSkillsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -72,13 +73,14 @@ async function write(
   const p = opts.global ? userPaths() : projectPaths(root);
   const filesWritten: string[] = [];
   const warnings: string[] = [];
+  const dryRunEntries: DryRunEntry[] = [];
   const stackName = stack.manifest.name;
   const version = stack.manifest.version;
 
   try {
     // Write agent instructions to CLAUDE.md
     if (stack.agentInstructions) {
-      const written = await writeWithMarkers(
+      const result = await writeWithMarkers(
         p.config,
         stack.agentInstructions,
         stackName,
@@ -86,14 +88,24 @@ async function write(
         "claude-code",
         opts.dryRun,
       );
-      if (written) filesWritten.push(written);
+      if (result.written) filesWritten.push(result.written);
+      if (opts.dryRun) {
+        dryRunEntries.push(markersDryRunEntry(p.config, result, opts.verbose));
+      }
     }
 
     // Install skills (symlink from canonical location, or direct write as fallback)
     for (const skill of stack.skills) {
       const skillDir = path.join(p.skills, skill.name);
       const dest = path.join(skillDir, "SKILL.md");
-      if (!opts.dryRun) {
+      if (opts.dryRun) {
+        const skillExists = await exists(dest);
+        dryRunEntries.push({
+          file: dest,
+          action: skillExists ? "modify" : "create",
+          detail: opts.canonicalSkillPaths?.get(skill.name) ? "symlink" : undefined,
+        });
+      } else {
         const canonicalPath = opts.canonicalSkillPaths?.get(skill.name);
         if (canonicalPath) {
           await symlinkOrCopy(canonicalPath, dest);
@@ -106,18 +118,16 @@ async function write(
     }
 
     // Write MCP config
-    const mcpWritten = await mergeMcpIntoJson(
-      p.mcp,
-      stack.mcpServers,
-      warnings,
-      opts.dryRun,
-    );
-    if (mcpWritten) filesWritten.push(mcpWritten);
+    const mcpResult = await mergeMcpIntoJson(p.mcp, stack.mcpServers, warnings, opts.dryRun);
+    if (mcpResult.written) filesWritten.push(mcpResult.written);
+    if (opts.dryRun && Object.keys(stack.mcpServers).length > 0) {
+      dryRunEntries.push(mcpDryRunEntry(p.mcp, Object.keys(stack.mcpServers).length, mcpResult, opts.verbose));
+    }
   } catch (err: unknown) {
     rethrowPermissionError(err, !!opts.global, "Claude Code paths");
   }
 
-  return { filesWritten, filesSkipped: [], warnings };
+  return { filesWritten, filesSkipped: [], warnings, ...(opts.dryRun && { dryRunEntries }) };
 }
 
 export const claudeCodeAdapter: PlatformAdapter = {

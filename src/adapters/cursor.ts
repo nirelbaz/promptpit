@@ -9,10 +9,11 @@ import type {
   DetectionResult,
   WriteResult,
   WriteOptions,
+  DryRunEntry,
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
-import { readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError } from "./adapter-utils.js";
+import { readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -95,12 +96,13 @@ async function write(
   const p = opts.global ? userPaths() : projectPaths(root);
   const filesWritten: string[] = [];
   const warnings: string[] = [];
+  const dryRunEntries: DryRunEntry[] = [];
   const stackName = stack.manifest.name;
   const version = stack.manifest.version;
 
   try {
     if (stack.agentInstructions) {
-      const written = await writeWithMarkers(
+      const result = await writeWithMarkers(
         p.config,
         stack.agentInstructions,
         stackName,
@@ -108,30 +110,38 @@ async function write(
         "cursor",
         opts.dryRun,
       );
-      if (written) filesWritten.push(written);
+      if (result.written) filesWritten.push(result.written);
+      if (opts.dryRun) {
+        dryRunEntries.push(markersDryRunEntry(p.config, result, opts.verbose));
+      }
     }
 
     for (const skill of stack.skills) {
       const mdcContent = skillToMdc(skill.content, skill.name);
       const dest = path.join(p.rules!, `${skill.name}.mdc`);
-      if (!opts.dryRun) {
+      if (opts.dryRun) {
+        const skillExists = await exists(dest);
+        dryRunEntries.push({
+          file: dest,
+          action: skillExists ? "modify" : "create",
+          detail: "translate to .mdc",
+        });
+      } else {
         await writeFileEnsureDir(dest, mdcContent);
         filesWritten.push(dest);
       }
     }
 
-    const mcpWritten = await mergeMcpIntoJson(
-      p.mcp,
-      stack.mcpServers,
-      warnings,
-      opts.dryRun,
-    );
-    if (mcpWritten) filesWritten.push(mcpWritten);
+    const mcpResult = await mergeMcpIntoJson(p.mcp, stack.mcpServers, warnings, opts.dryRun);
+    if (mcpResult.written) filesWritten.push(mcpResult.written);
+    if (opts.dryRun && Object.keys(stack.mcpServers).length > 0) {
+      dryRunEntries.push(mcpDryRunEntry(p.mcp, Object.keys(stack.mcpServers).length, mcpResult, opts.verbose));
+    }
   } catch (err: unknown) {
     rethrowPermissionError(err, !!opts.global, "Cursor paths");
   }
 
-  return { filesWritten, filesSkipped: [], warnings };
+  return { filesWritten, filesSkipped: [], warnings, ...(opts.dryRun && { dryRunEntries }) };
 }
 
 export const cursorAdapter: PlatformAdapter = {
