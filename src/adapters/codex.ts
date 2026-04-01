@@ -6,6 +6,7 @@ import type {
   DetectionResult,
   WriteResult,
   WriteOptions,
+  DryRunEntry,
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
 import {
@@ -15,7 +16,7 @@ import {
   removeFileOrSymlink,
   symlinkOrCopy,
 } from "../shared/utils.js";
-import { readSkillsFromDir, writeWithMarkers, rethrowPermissionError } from "./adapter-utils.js";
+import { readSkillsFromDir, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, skillDryRunEntry } from "./adapter-utils.js";
 import { readMcpFromToml, writeMcpToToml } from "./toml-utils.js";
 
 function projectPaths(root: string) {
@@ -79,12 +80,13 @@ async function write(
   const p = opts.global ? userPaths() : projectPaths(root);
   const filesWritten: string[] = [];
   const warnings: string[] = [];
+  const dryRunEntries: DryRunEntry[] = [];
   const stackName = stack.manifest.name;
   const version = stack.manifest.version;
 
   try {
     if (stack.agentInstructions) {
-      const written = await writeWithMarkers(
+      const result = await writeWithMarkers(
         p.config,
         stack.agentInstructions,
         stackName,
@@ -92,13 +94,18 @@ async function write(
         "codex",
         opts.dryRun,
       );
-      if (written) filesWritten.push(written);
+      if (result.written) filesWritten.push(result.written);
+      if (opts.dryRun) {
+        dryRunEntries.push(markersDryRunEntry(p.config, result, opts.verbose));
+      }
     }
 
     for (const skill of stack.skills) {
       const skillDir = path.join(p.skills, skill.name);
       const dest = path.join(skillDir, "SKILL.md");
-      if (!opts.dryRun) {
+      if (opts.dryRun) {
+        dryRunEntries.push(skillDryRunEntry(dest, await exists(dest), "symlink"));
+      } else {
         const canonicalPath = opts.canonicalSkillPaths?.get(skill.name);
         if (canonicalPath) {
           await symlinkOrCopy(canonicalPath, dest);
@@ -126,7 +133,7 @@ async function write(
     rethrowPermissionError(err, !!opts.global, "Codex CLI paths");
   }
 
-  return { filesWritten, filesSkipped: [], warnings };
+  return { filesWritten, filesSkipped: [], warnings, ...(opts.dryRun && { dryRunEntries }) };
 }
 
 export const codexAdapter: PlatformAdapter = {

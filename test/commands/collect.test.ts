@@ -38,6 +38,18 @@ describe("collectStack", () => {
     await rm(outDir, { recursive: true });
   });
 
+  it("dry-run does not write any files", async () => {
+    const outDir = await mkdtemp(path.join(tmpdir(), "pit-collect-"));
+    const outputPath = path.join(outDir, ".promptpit");
+
+    await collectStack(CLAUDE_PROJECT, outputPath, { dryRun: true });
+
+    const { existsSync } = await import("node:fs");
+    expect(existsSync(path.join(outputPath, "stack.json"))).toBe(false);
+
+    await rm(outDir, { recursive: true });
+  });
+
   it("errors when no AI tools detected", async () => {
     const emptyDir = await mkdtemp(path.join(tmpdir(), "pit-collect-"));
     const outDir = path.join(emptyDir, ".promptpit");

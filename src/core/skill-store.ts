@@ -3,14 +3,18 @@ import os from "node:os";
 import { writeFileEnsureDir } from "../shared/utils.js";
 import type { SkillEntry } from "../shared/schema.js";
 
+export function canonicalSkillBase(root: string, global?: boolean): string {
+  return global
+    ? path.join(os.homedir(), ".agents", "skills")
+    : path.join(root, ".agents", "skills");
+}
+
 export async function installCanonical(
   root: string,
   skills: SkillEntry[],
   opts?: { global?: boolean },
 ): Promise<Map<string, string>> {
-  const base = opts?.global
-    ? path.join(os.homedir(), ".agents", "skills")
-    : path.join(root, ".agents", "skills");
+  const base = canonicalSkillBase(root, opts?.global);
 
   const pathMap = new Map<string, string>();
 

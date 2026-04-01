@@ -180,4 +180,31 @@ describe("installStack", () => {
     const content = await readFile(skillPath, "utf-8");
     expect(content).toContain("browse");
   });
+
+  it("dry-run does not write any files", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(VALID_STACK, target, { dryRun: true });
+
+    const claudeMd = await readFile(path.join(target, "CLAUDE.md"), "utf-8");
+    expect(claudeMd).toBe("# Existing\n");
+
+    const { existsSync } = await import("node:fs");
+    expect(existsSync(path.join(target, ".claude", "skills"))).toBe(false);
+    expect(existsSync(path.join(target, ".promptpit", "installed.json"))).toBe(false);
+    expect(existsSync(path.join(target, ".env"))).toBe(false);
+  });
+
+  it("dry-run with verbose does not write any files", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(VALID_STACK, target, { dryRun: true, verbose: true });
+
+    const claudeMd = await readFile(path.join(target, "CLAUDE.md"), "utf-8");
+    expect(claudeMd).toBe("# Existing\n");
+  });
 });

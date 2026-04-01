@@ -24,7 +24,10 @@ describe("writeWithMarkers", () => {
       "1.0.0",
       "claude-code",
     );
-    expect(result).toBe(filePath);
+    expect(result.written).toBe(filePath);
+    expect(result.existed).toBe(false);
+    expect(result.content).toContain("promptpit:start:my-stack:1.0.0:claude-code");
+    expect(result.content).toContain("New instructions");
     const content = await readFile(filePath, "utf-8");
     expect(content).toContain("promptpit:start:my-stack:1.0.0:claude-code");
     expect(content).toContain("New instructions");
@@ -41,7 +44,10 @@ describe("writeWithMarkers", () => {
       "1.0.0",
       "claude-code",
     );
-    expect(result).toBe(filePath);
+    expect(result.written).toBe(filePath);
+    expect(result.existed).toBe(true);
+    expect(result.content).toContain("# Existing content");
+    expect(result.content).toContain("Stack instructions");
     const content = await readFile(filePath, "utf-8");
     expect(content).toContain("# Existing content");
     expect(content).toContain("Keep this.");
@@ -62,12 +68,11 @@ describe("writeWithMarkers", () => {
       "1.0.0",
       "claude-code",
     );
-    expect(result).toBe(filePath);
-    const content = await readFile(filePath, "utf-8");
-    expect(content).toContain("# Header");
-    expect(content).toContain("Updated content");
-    expect(content).not.toContain("Old content");
-    expect(content).toContain("promptpit:start:my-stack:1.0.0:claude-code");
+    expect(result.written).toBe(filePath);
+    expect(result.existed).toBe(true);
+    expect(result.oldContent).toContain("Old content");
+    expect(result.content).toContain("Updated content");
+    expect(result.content).not.toContain("Old content");
   });
 
   it("skips write when dryRun is true", async () => {
@@ -80,8 +85,30 @@ describe("writeWithMarkers", () => {
       "claude-code",
       true,
     );
-    expect(result).toBeNull();
+    expect(result.written).toBeNull();
+    expect(result.existed).toBe(false);
+    expect(result.content).toContain("promptpit:start:my-stack");
     await expect(readFile(filePath, "utf-8")).rejects.toThrow();
+  });
+
+  it("returns oldContent for verbose dry-run diffs", async () => {
+    const filePath = path.join(tmpDir, "CLAUDE.md");
+    await writeFile(filePath, "# Old\n");
+    const result = await writeWithMarkers(
+      filePath,
+      "new content",
+      "s",
+      "1.0",
+      "a",
+      true,
+    );
+    expect(result.written).toBeNull();
+    expect(result.existed).toBe(true);
+    expect(result.oldContent).toBe("# Old\n");
+    expect(result.content).toContain("new content");
+    // File should not be modified
+    const onDisk = await readFile(filePath, "utf-8");
+    expect(onDisk).toBe("# Old\n");
   });
 
   it("handles empty content string", async () => {
@@ -93,7 +120,7 @@ describe("writeWithMarkers", () => {
       "1.0.0",
       "claude-code",
     );
-    expect(result).toBe(filePath);
+    expect(result.written).toBe(filePath);
     const content = await readFile(filePath, "utf-8");
     expect(content).toContain("promptpit:start:my-stack");
     expect(content).toContain("promptpit:end:my-stack");

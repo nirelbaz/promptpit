@@ -4,9 +4,11 @@ import { mergeConfigs } from "../core/merger.js";
 import { stripSecrets } from "../core/security.js";
 import { writeStack } from "../core/stack.js";
 import { stripAllMarkerBlocks } from "../shared/markers.js";
-import { readFileOrNull } from "../shared/utils.js";
+import { readFileOrNull, exists } from "../shared/utils.js";
 import type { StackBundle } from "../shared/schema.js";
-import { log, spinner } from "../shared/io.js";
+import { log, spinner, printDryRunReport } from "../shared/io.js";
+import type { DryRunEntry } from "../adapters/types.js";
+import type { DryRunSection } from "../shared/io.js";
 
 async function detectProjectInfo(
   root: string,
@@ -28,6 +30,7 @@ async function detectProjectInfo(
 
 export interface CollectOptions {
   dryRun?: boolean;
+  verbose?: boolean;
 }
 
 export async function collectStack(
@@ -88,14 +91,6 @@ export async function collectStack(
 
   const { stripped, envExample } = stripSecrets(mergeResult.mcpServers);
 
-  if (opts.dryRun) {
-    log.info("Dry run — showing what would be stripped:");
-    for (const [key, comment] of Object.entries(envExample)) {
-      log.info(`  ${key}: ${comment}`);
-    }
-    return;
-  }
-
   const projectInfo = await detectProjectInfo(root);
 
   const bundle: StackBundle = {
@@ -111,6 +106,48 @@ export async function collectStack(
     mcpServers: stripped,
     envExample,
   };
+
+  if (opts.dryRun) {
+    // Build list of files that would be written, checking existence in parallel
+    const filePaths: string[] = [path.join(outputDir, "stack.json")];
+    if (bundle.agentInstructions) {
+      filePaths.push(path.join(outputDir, "agent.promptpit.md"));
+    }
+    for (const skill of bundle.skills) {
+      filePaths.push(path.join(outputDir, "skills", skill.name, "SKILL.md"));
+    }
+    if (Object.keys(bundle.mcpServers).length > 0) {
+      filePaths.push(path.join(outputDir, "mcp.json"));
+    }
+    if (Object.keys(bundle.envExample).length > 0) {
+      filePaths.push(path.join(outputDir, ".env.example"));
+    }
+
+    const existsResults = await Promise.all(filePaths.map((f) => exists(f)));
+    const entries: DryRunEntry[] = filePaths.map((file, i) => ({
+      file,
+      action: existsResults[i] ? "modify" as const : "create" as const,
+    }));
+
+    const sections: DryRunSection[] = [{ label: "Files", entries }];
+
+    printDryRunReport(
+      `Dry run — would write to ${outputDir}/:`,
+      sections,
+      !!opts.verbose,
+    );
+
+    const skillCount = bundle.skills.length;
+    const mcpCount = Object.keys(bundle.mcpServers).length;
+    const secretCount = Object.keys(bundle.envExample).length;
+    log.info(
+      `Summary: ${bundle.agentInstructions ? "1 instruction file" : "no instructions"}, ` +
+        `${skillCount} skill${skillCount !== 1 ? "s" : ""}, ` +
+        `${mcpCount} MCP server${mcpCount !== 1 ? "s" : ""}, ` +
+        `${secretCount} secret${secretCount !== 1 ? "s" : ""} stripped`,
+    );
+    return;
+  }
 
   const writeSpin = spinner("Writing stack bundle...");
   await writeStack(outputDir, bundle);
