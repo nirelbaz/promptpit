@@ -2,16 +2,22 @@
 
 ## Overview
 
-promptpit has two commands: `pit collect` (bundle configs) and `pit install` (write them into each tool's format). The core design principle is that promptpit knows nothing about specific AI tools - adapters do.
+promptpit has four commands: `pit collect` (bundle configs), `pit install` (write them into each tool's format), `pit status` (show what's installed and drifted), and `pit watch` (live-sync skill changes). The core design principle is that promptpit knows nothing about specific AI tools, adapters do.
 
 ## Data flow
 
 ```
 collect:
-  detect adapters → read each tool's configs → merge → strip secrets → write .promptpit/
+  detect adapters → read each tool's configs → strip installed markers → merge (hash dedup) → strip secrets → write .promptpit/
 
 install:
-  read .promptpit/ (or clone from GitHub) → write canonical .agents/skills/ → detect adapters → symlink or copy+translate to each tool's format
+  read .promptpit/ (or clone from GitHub) → write canonical .agents/skills/ → detect adapters → symlink or copy+translate to each tool's format → write manifest (.promptpit/installed.json)
+
+status:
+  read manifest → compute content hashes of installed files → compare → report synced/drifted/deleted
+
+watch:
+  fs.watch .agents/skills/ → debounce → re-translate for copy/translate adapters → update manifest hashes
 ```
 
 ## Adapters
@@ -25,7 +31,8 @@ src/adapters/
 ├── adapter-utils.ts  # Shared read/write helpers (readSkillsFromDir, writeWithMarkers, etc.)
 ├── claude-code.ts    # Claude Code: CLAUDE.md, .claude/skills/ (symlinked), .claude/settings.json
 ├── cursor.ts         # Cursor: .cursorrules, .cursor/rules/ (.mdc, translated copies), .cursor/mcp.json
-└── agents-md.ts      # AGENTS.md: universal cross-tool output, fallback-only read during collect
+├── agents-md.ts      # AGENTS.md: universal cross-tool output, fallback-only read during collect
+└── mcp-standard.ts   # .mcp.json: project-level MCP config (emerging cross-tool standard)
 ```
 
 Adding a tool means one file plus one registry entry. The contract tests in `test/adapters/contract.test.ts` automatically validate any registered adapter against 7 checks.
@@ -65,7 +72,15 @@ This means:
 - Re-installing the same stack replaces its block cleanly
 - Uninstall (future) can remove a specific stack without touching others
 
-Marker logic lives in `src/shared/markers.ts`.
+Marker logic lives in `src/shared/markers.ts`. During collect, `stripAllMarkerBlocks()` removes installed content to prevent recursive duplication.
+
+## Install manifest
+
+`.promptpit/installed.json` tracks what pit installed: stack name, version, source, per-adapter content hashes (SHA-256). Written atomically (temp file + rename). Upsert semantics: re-installing the same stack replaces its entry, different stacks coexist.
+
+`pit status` reads the manifest, computes current hashes of on-disk files, and compares. Reconciliation follows the git model: disk is truth, manifest is a ledger. States: synced, drifted, deleted, removed-by-user.
+
+Schema defined in `src/shared/schema.ts`, I/O in `src/core/manifest.ts`.
 
 ## Security model
 

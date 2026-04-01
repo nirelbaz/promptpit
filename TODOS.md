@@ -5,6 +5,9 @@
 ### Read `.mcp.json` during collect
 `.mcp.json` at project root is the emerging project-level MCP standard (Claude Code popularized it, teams check it into git). Currently we only read MCP from adapter-specific paths (`.claude/settings.json`, `.cursor/mcp.json`). Should read `.mcp.json` directly as a first-class input during collect, and write it as an output during install alongside adapter-specific configs.
 
+### Verbose status flag
+`pit status --verbose` (or `-v`) shows detailed info per adapter: skill names, MCP server names, instruction file paths, and individual hash status for each artifact. The default output stays compact (counts only), verbose expands to full inventory. Useful for debugging drift and verifying exactly what's installed.
+
 ### Watch command
 `pit watch` — lightweight daemon using `fs.watch` on `.agents/skills/` that auto-regenerates translated copies (Cursor `.mdc`, Windsurf `.md` rules) when canonical SKILL.md files change. Symlinked tools (Claude Code, Codex) already see changes for free. Turns pit from an install-time tool into a live sync bus. Depends on hybrid symlinks being implemented first.
 

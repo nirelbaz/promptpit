@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.1 (2026-04-01)
+
+### Fixed
+
+- `pit status` now shows correct MCP server counts for all adapters, not just .mcp.json. Previously Claude Code's MCP servers were invisible in status output
+- `.mcp.json` is now created during install even when it didn't exist before. Previously you needed a pre-existing .mcp.json for the adapter to activate
+- `pit status` no longer shows phantom "removed-by-user" entries for the mcp-standard adapter's instructions (it doesn't write instructions)
+- Duplicate file entries in `pit status` Changes section are now deduplicated
+
+### Added
+
+- 6 install-to-status integration tests that verify the full loop: MCP counts, .mcp.json creation, drift detection, multi-stack manifests, re-install upsert, and dry-run isolation
+
 ## 0.2.0 (2026-04-01)
 
 ### Added

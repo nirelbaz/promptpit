@@ -105,6 +105,18 @@ export async function installStack(
       });
     }
 
+    // Always include mcp-standard for writing when stack has MCP servers
+    if (
+      Object.keys(bundle.mcpServers).length > 0 &&
+      !detected.some((d) => d.adapter.id === "mcp-standard")
+    ) {
+      const { mcpStandardAdapter } = await import("../adapters/mcp-standard.js");
+      detected.push({
+        adapter: mcpStandardAdapter,
+        detection: { detected: true, configPaths: [] },
+      });
+    }
+
     // Write skills to canonical .agents/skills/ location
     let canonicalSkillPaths: Map<string, string> | undefined;
     if (bundle.skills.length > 0 && !opts.dryRun) {
@@ -146,8 +158,9 @@ export async function installStack(
       for (const { adapter } of detected) {
         const record: AdapterInstallRecord = {};
 
-        // Hash instructions — trim to match what extractMarkerContent returns
-        if (bundle.agentInstructions) {
+        // Hash instructions — only for adapters that write marker-based instruction files.
+        // mcp-standard writes JSON (no instructions), so skip it.
+        if (bundle.agentInstructions && adapter.id !== "mcp-standard") {
           const configPath = adapter.paths.project(target).config;
           if (configPath) {
             record.instructions = { hash: computeHash(bundle.agentInstructions.trim()) };
@@ -165,8 +178,8 @@ export async function installStack(
           }
         }
 
-        // Hash MCP — hash each server config individually (not the whole file)
-        if (adapter.id === "mcp-standard" && Object.keys(bundle.mcpServers).length > 0) {
+        // Hash MCP for any adapter that supports it
+        if (adapter.capabilities.mcpStdio && Object.keys(bundle.mcpServers).length > 0) {
           const mcp: Record<string, { hash: string }> = {};
           for (const [serverName, serverConfig] of Object.entries(bundle.mcpServers)) {
             mcp[serverName] = { hash: computeHash(JSON.stringify(serverConfig)) };

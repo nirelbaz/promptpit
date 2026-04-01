@@ -38,20 +38,20 @@ The adapter needs to implement:
 
 ```
 src/
-├── cli.ts              # Commander.js entry point
-├── commands/           # collect.ts, install.ts
-├── adapters/           # One file per AI tool + registry + shared utils
-├── core/               # stack.ts (bundle I/O), skill-store.ts (canonical install), merger.ts, security.ts
+├── cli.ts              # Commander.js entry point (collect, install, status, watch)
+├── commands/           # collect.ts, install.ts, status.ts, watch.ts
+├── adapters/           # One file per AI tool + registry + shared utils (mcp-standard.ts for .mcp.json)
+├── core/               # stack.ts (bundle I/O), skill-store.ts, manifest.ts (install ledger), merger.ts, security.ts
 ├── sources/            # github.ts (clone + auto-collect)
-└── shared/             # schema.ts, markers.ts, utils.ts, io.ts
+└── shared/             # schema.ts (Zod types + manifest schema), markers.ts, utils.ts, io.ts
 
 test/
 ├── adapters/           # Contract tests (parameterized) + per-adapter tests
-├── commands/           # collect + install integration tests
-├── core/               # merger, security, stack unit tests
-├── shared/             # markers, schema tests
+├── commands/           # collect, install, status integration tests
+├── core/               # manifest, merger, security, stack unit tests
+├── shared/             # markers, markers-strip, schema tests
 ├── sources/            # github source tests
-└── e2e/                # Full round-trip tests
+└── e2e/                # Round-trip, dedup, and install→status integration tests
 ```
 
 ## Slash commands (Claude Code)
