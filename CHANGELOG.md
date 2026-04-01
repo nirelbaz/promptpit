@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.3 (2026-04-01)
+
+### Changed
+
+- The separate `agents-md` and `mcp-standard` adapters are now a single `standards` adapter that owns all cross-tool conventions (AGENTS.md, .mcp.json, .agents/skills/). `pit install` writes both files in one pass instead of coordinating two adapters
+- MCP JSON merge logic and permission error handling extracted into shared utilities (`mergeMcpIntoJson`, `rethrowPermissionError`), reducing ~60 lines of duplication across claude-code, cursor, and standards adapters
+- All adapters that write MCP config now emit overwrite warnings when replacing existing servers, not just some of them
+- `pit collect` dedup logic simplified: reads all adapters, then clears MCP from standards when other MCP-capable adapters are present (instead of pre-filtering the read set)
+- `pit install` always-include logic consolidated from two separate blocks into one
+
 ## 0.2.2 (2026-04-01)
 
 ### Added
