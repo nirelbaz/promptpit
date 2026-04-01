@@ -2,7 +2,7 @@
 
 ## Overview
 
-promptpit is the composition layer for AI agent configuration. It bundles instructions, skills ([Agent Skills](https://agentskills.io) spec), MCP servers, and env vars into one distributable stack, then installs it across multiple AI coding tools. Four commands: `pit collect` (bundle configs), `pit install` (write them into each tool's format), `pit status` (show what's installed and drifted), and `pit watch` (live-sync skill changes). The core design principle is that promptpit knows nothing about specific AI tools, adapters do.
+promptpit is the composition layer for AI agent configuration. It bundles instructions, skills ([Agent Skills](https://agentskills.io) spec), MCP servers, and env vars into one distributable stack, then installs it across multiple AI coding tools. Seven commands: `pit init` (scaffold a stack), `pit collect` (bundle configs), `pit install` (write them into each tool's format), `pit status` (show what's installed and drifted), `pit watch` (live-sync skill changes), `pit validate` (check stack validity), and `pit check` (CI sync verification). The core design principle is that promptpit knows nothing about specific AI tools, adapters do.
 
 ## Data flow
 
@@ -32,6 +32,7 @@ src/adapters/
 ├── claude-code.ts    # Claude Code: CLAUDE.md, .claude/skills/ (symlinked), .claude/settings.json
 ├── cursor.ts         # Cursor: .cursorrules, .cursor/rules/ (.mdc, translated copies), .cursor/mcp.json
 ├── codex.ts          # Codex CLI: AGENTS.md, .codex/skills/ (symlinked), .codex/config.toml (TOML)
+├── copilot.ts        # GitHub Copilot: .github/copilot-instructions.md, .github/instructions/ (.instructions.md), .vscode/mcp.json
 ├── toml-utils.ts     # TOML read/write helpers for Codex CLI config.toml MCP sections
 └── standards.ts      # Cross-tool standards: AGENTS.md (instructions), .mcp.json (MCP servers), .agents/skills/
 ```
@@ -115,5 +116,8 @@ This means any GitHub repo can be used as a source, even if it doesn't know abou
 | gray-matter | YAML frontmatter parsing |
 | fast-glob | File pattern matching for skill/rule discovery |
 | chalk + ora | Terminal output formatting |
+| smol-toml | TOML parsing for Codex CLI config.toml |
+| js-yaml | YAML frontmatter generation for init/collect |
+| diff | Unified diffs for --dry-run --verbose |
 | tsup | Build (single ESM bundle) |
 | vitest | Test runner |

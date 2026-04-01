@@ -8,9 +8,13 @@ Every AI tool has its own config files. pit turns them into one bundle you can s
 `pit collect` to bundle. `pit install` to write it out for each tool. `pit status` to see what drifted. Commit `.promptpit/` and your team stays in sync.
 
 ```sh
+pit init           # scaffold a new .promptpit/ stack
 pit collect        # bundle your AI config into .promptpit/
 pit install        # write it out for each tool
 pit status         # see what drifted
+pit watch          # live-sync skill changes
+pit validate       # check if a stack is well-formed
+pit check          # CI integration — verify config is fresh and in sync
 ```
 
 ## Features
@@ -20,7 +24,7 @@ pit status         # see what drifted
 - `pit status` shows what's synced and what's drifted
 - `.mcp.json` and MCP configs handled automatically, secrets stripped during collect
 - Multiple stacks coexist, re-installs replace cleanly
-- Supports Claude Code and Cursor today, more adapters coming (see [TODOS.md](TODOS.md))
+- Supports Claude Code, Cursor, Codex CLI, GitHub Copilot, and cross-tool standards (AGENTS.md, .mcp.json)
 
 ## Installation
 
@@ -42,7 +46,7 @@ npx promptpit <command>
 pit collect
 ```
 
-Scans for Claude Code and Cursor configs, merges them, strips secrets from MCP configs, and writes:
+Scans for Claude Code, Cursor, Codex CLI, Copilot, and Standards configs, merges them, strips secrets from MCP configs, and writes:
 
 ```
 .promptpit/
@@ -78,8 +82,10 @@ Add `.promptpit/` to your AI tool's ignore list so it doesn't scan the raw bundl
 | Claude Code | CLAUDE.md, .claude/skills/, .claude/settings.json | Symlinked SKILL.md | skill.md |
 | Cursor | .cursorrules, .cursor/rules/, .cursor/mcp.json | Auto-converted .mdc | mdc |
 | Codex CLI | AGENTS.md, .codex/skills/, .codex/config.toml | Symlinked SKILL.md | skill.md |
+| GitHub Copilot | .github/copilot-instructions.md, .github/instructions/, .vscode/mcp.json | Auto-converted .instructions.md | md |
+| Standards | AGENTS.md, .mcp.json | AGENTS.md + .mcp.json | — |
 
-pit also writes AGENTS.md (cross-tool standard, read by 60+ tools) and .mcp.json (project-level MCP config) on every install.
+pit writes AGENTS.md (cross-tool standard, read by 60+ tools) and .mcp.json (project-level MCP config) on every install. Copilot MCP goes to .vscode/mcp.json with the `servers` root key and auto-inferred `type` field. Codex MCP is written as TOML to .codex/config.toml.
 
 Skills are installed to `.agents/skills/` as the canonical location (matching the [Agent Skills](https://agentskills.io) ecosystem convention), then symlinked into tool-native paths. Tools that need different formats (like Cursor's .mdc) get translated copies. Windows falls back to copies when symlinks aren't available.
 
@@ -108,9 +114,9 @@ npm run lint      # TypeScript strict mode check
 
 See [TODOS.md](TODOS.md) for the full roadmap. The big milestones:
 
-- **v0.3 (Team Platform):** Copilot adapter, `pit check` for CI, polished drift detection
-- **v0.5 (Stack Composer):** Stack composition via `extends` in stack.json, `pit diff`, `pit update`
-- **v1.0 (Ecosystem Bridge):** Multi-source install (skills.sh, SkillsMP, cursor.directory), `pit publish`, `pit search`
+- **v0.3 (Team Platform):** Done. Five adapters (Claude Code, Cursor, Codex, Copilot, Standards), seven commands, drift detection, dry-run previews, CI integration.
+- **v0.5 (Stack Composer):** Stack composition via `extends` in stack.json, `pit diff`, `pit update`, rules and agents in the bundle schema.
+- **v1.0 (Ecosystem Bridge):** Multi-source install (skills.sh, SkillsMP, cursor.directory), `pit publish`, `pit search`.
 
 ## Related
 

@@ -27,7 +27,7 @@ This is the most likely contribution. Each AI tool (Claude Code, Cursor, etc.) i
 
 ### Adapter tiers
 
-- **Tier 1 (creator-maintained):** Claude Code, Cursor, Codex (shipped), Copilot (planned). These get full test coverage and are maintained by the project owner.
+- **Tier 1 (creator-maintained):** Claude Code, Cursor, Codex, Copilot (all shipped). These get full test coverage and are maintained by the project owner.
 - **Tier 2 (community-contributed):** Windsurf, Gemini CLI, and others. Community PRs welcome. Tier 2 adapters need contract tests passing but ongoing maintenance is shared.
 
 ### How to add one
@@ -45,10 +45,10 @@ The adapter needs to implement:
 
 ```
 src/
-├── cli.ts              # Commander.js entry point (collect, install, status, watch)
-├── commands/           # collect.ts, install.ts, status.ts, watch.ts
-├── adapters/           # One file per AI tool + registry + shared utils (standards.ts for cross-tool conventions)
-├── core/               # stack.ts (bundle I/O), skill-store.ts, manifest.ts (install ledger), merger.ts, security.ts
+├── cli.ts              # Commander.js entry point (init, collect, install, status, watch, validate, check)
+├── commands/           # init.ts, collect.ts, install.ts, status.ts, watch.ts, validate.ts, check.ts
+├── adapters/           # One file per AI tool + registry + shared utils (standards.ts, copilot.ts, codex.ts, etc.)
+├── core/               # stack.ts (bundle I/O), skill-store.ts, manifest.ts (install ledger), merger.ts, security.ts, validate.ts
 ├── sources/            # github.ts (clone + auto-collect)
 └── shared/             # schema.ts (Zod types + manifest schema), markers.ts, utils.ts, io.ts
 
