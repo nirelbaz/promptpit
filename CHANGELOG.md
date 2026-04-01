@@ -10,6 +10,13 @@
 
 ## 0.2.3 (2026-04-01)
 
+### Added
+
+- GitHub Copilot adapter (Tier 1). `pit install` now writes to Copilot's native config paths: instructions to `.github/copilot-instructions.md`, skills translated to `.github/instructions/*.instructions.md` with `applyTo` glob frontmatter, and MCP servers to `.vscode/mcp.json` with the correct `servers` root key and required `type` field per entry
+- `pit collect` now detects Copilot projects via `.github/copilot-instructions.md` and `.vscode/mcp.json`, and reads scoped instructions as rules
+- `pit watch` automatically re-translates skills for Copilot when `.agents/skills/` files change (same translate-copy strategy as Cursor)
+- Error message in `pit collect` now lists Copilot paths so users know what's detected
+
 ### Changed
 
 - The separate `agents-md` and `mcp-standard` adapters are now a single `standards` adapter that owns all cross-tool conventions (AGENTS.md, .mcp.json, .agents/skills/). `pit install` writes both files in one pass instead of coordinating two adapters

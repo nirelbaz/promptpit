@@ -28,8 +28,8 @@ Merged agents-md + mcp-standard into a single `standards` adapter that owns AGEN
 ### Codex CLI adapter (Tier 1)
 Instructions to AGENTS.md (shared with AGENTS.md support), skills to `.codex/skills/` (native SKILL.md, symlinked from `.agents/skills/`), MCP to `config.toml` (needs TOML writer, consider `@iarna/toml` or `smol-toml`). Detection: `~/.codex` directory exists. Also supports `.agents/skills/` as universal alias. Confirm paths against current Codex CLI docs before shipping.
 
-### Copilot adapter (Tier 1)
-Instructions to `.github/copilot-instructions.md`, rules to `.github/instructions/*.instructions.md` (`applyTo` glob frontmatter), MCP to `.vscode/mcp.json` (note: root key is `servers`, not `mcpServers`), agents to `.github/agents/*.agent.md` (native agent support with tools/mcp-servers grants), skills to `.github/skills/*/SKILL.md` (standard Agent Skills spec). Detection: `.github` directory exists. Copilot also reads AGENTS.md, CLAUDE.md, and GEMINI.md natively. Confirm paths against current Copilot docs before shipping.
+### ~~Copilot adapter (Tier 1)~~
+**Completed:** v0.2.3 (2026-04-01). Instructions to `.github/copilot-instructions.md`, skills translated to `.github/instructions/*.instructions.md` (applyTo glob frontmatter), MCP to `.vscode/mcp.json` (root key `servers`, type field per entry). Detection via `.github/copilot-instructions.md`, `.github/instructions/`, or `.vscode/mcp.json`. Agents deferred to Phase 2 (not yet in StackBundle schema).
 
 ### `pit check` (NEW)
 CI integration command. Exits non-zero if: (a) required skills from stack.json are missing, (b) installed config has drifted from the stack's expected hashes (already tracked in installed.json), or (c) adapter-specific configs are out of sync. Simplest useful version: compare installed.json against what `pit install` would produce, exit 1 on any diff. Ship a GitHub Actions example in README.
