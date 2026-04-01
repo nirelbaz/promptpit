@@ -1,4 +1,6 @@
 import path from "node:path";
+import { execFile as execFileCb } from "node:child_process";
+import { promisify } from "node:util";
 import matter from "gray-matter";
 import { SAFE_MATTER_OPTIONS } from "../adapters/adapter-utils.js";
 import {
@@ -9,6 +11,8 @@ import {
 } from "../shared/schema.js";
 import { readFileOrNull } from "../shared/utils.js";
 import fg from "fast-glob";
+
+const execFileAsync = promisify(execFileCb);
 
 export interface Diagnostic {
   file: string;
@@ -149,19 +153,70 @@ export async function validateStack(stackDir: string): Promise<ValidateResult> {
   // --- agnix (optional, implemented in Task 4) ---
   const agnixResult = await runAgnix(stackDir);
 
-  const errors = diagnostics.filter((d) => d.level === "error").length;
-  const warnings = diagnostics.filter((d) => d.level === "warning").length;
+  const errors = diagnostics.filter((d) => d.level === "error").length
+    + agnixResult.diagnostics.filter((d) => d.level === "error").length;
+  const warnings = diagnostics.filter((d) => d.level === "warning").length
+    + agnixResult.diagnostics.filter((d) => d.level === "warning").length;
 
   return {
     valid: errors === 0,
     errors,
-    warnings: warnings + agnixResult.diagnostics.filter((d) => d.level === "warning").length,
+    warnings,
     diagnostics,
     agnix: agnixResult,
   };
 }
 
-// Placeholder — implemented in Task 4
-async function runAgnix(_stackDir: string): Promise<ValidateResult["agnix"]> {
-  return { available: false, diagnostics: [] };
+export function mapAgnixDiagnostic(d: {
+  level: string;
+  rule?: string;
+  file: string;
+  message: string;
+}): Diagnostic {
+  return {
+    file: d.file,
+    level: d.level === "error" ? "error" : "warning",
+    message: d.message,
+    source: "agnix",
+    rule: d.rule,
+  };
+}
+
+function findAgnixBinary(): string | null {
+  try {
+    const binPath = path.resolve("node_modules", ".bin", "agnix");
+    return binPath;
+  } catch {
+    return null;
+  }
+}
+
+async function runAgnix(stackDir: string): Promise<ValidateResult["agnix"]> {
+  const binPath = findAgnixBinary();
+  if (!binPath) {
+    return { available: false, diagnostics: [] };
+  }
+
+  try {
+    const { stdout } = await execFileAsync(binPath, [
+      "validate",
+      "--format", "json",
+      stackDir,
+    ]).catch((err: { stdout?: string; stderr?: string }) => {
+      // agnix exits 1 on validation errors but still outputs JSON to stdout
+      if (err.stdout) return { stdout: err.stdout, stderr: err.stderr ?? "" };
+      throw err;
+    });
+
+    const parsed = JSON.parse(stdout);
+    if (!parsed.diagnostics || !Array.isArray(parsed.diagnostics)) {
+      return { available: true, diagnostics: [] };
+    }
+
+    const diagnostics: Diagnostic[] = parsed.diagnostics.map(mapAgnixDiagnostic);
+    return { available: true, diagnostics };
+  } catch {
+    // Binary not executable, JSON parse failed, or other error — skip gracefully
+    return { available: false, diagnostics: [] };
+  }
 }
