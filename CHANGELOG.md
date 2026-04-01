@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.3.0 (2026-04-01) — Phase 1: Team Platform
+
+The "new dev joins, runs one command, every AI tool is configured" release. Five adapters, seven commands, and drift detection that actually works across all of them.
+
+### Highlights
+
+- **Five adapters ship as Tier 1:** Claude Code, Cursor, Codex CLI, GitHub Copilot, and Standards (AGENTS.md + .mcp.json). Install one stack, every tool gets configured in its native format
+- **Seven commands:** `pit init` (scaffold), `pit collect` (bundle), `pit install` (write), `pit status` (drift check), `pit watch` (live-sync), `pit validate` (lint), `pit check` (CI gate)
+- **Dry-run previews:** `--dry-run` on collect and install shows exactly what would change. `--verbose` adds unified diffs
+- **HTTP remote MCP servers:** Stacks can now include url-based MCP servers alongside stdio ones. Copilot gets `type: "http"` inferred automatically
+
+### Added
+
+- `pit init` scaffolds a new `.promptpit/` stack with interactive prompts for name, version, description, author, and optional files
+- `pit validate` checks stack.json, skills, mcp.json, agent instructions, and .env.example. Reports all errors at once. `--json` for CI. Optional agnix integration for 385+ adapter-specific lint rules
+- `pit check` verifies installed config is fresh (stack.json matches installed.json) and in sync (files on disk match recorded hashes). Exits non-zero on drift. `--json` for CI pipelines
+- GitHub Copilot adapter: instructions to `.github/copilot-instructions.md`, skills translated to `.github/instructions/*.instructions.md` (applyTo globs), MCP to `.vscode/mcp.json` (servers key, type inference)
+- Codex CLI adapter: instructions to AGENTS.md, skills symlinked to `.codex/skills/`, MCP merged into `.codex/config.toml` via TOML writer
+- Standards adapter unified from separate agents-md and mcp-standard adapters. Owns AGENTS.md and .mcp.json as cross-tool outputs
+- `--dry-run` on both collect and install with file-by-file preview (create/modify per adapter). `--verbose` adds unified diffs for modified files
+- `--verbose` / `-v` on `pit status` shows per-adapter detail: skill names, MCP server names, instruction paths, individual hash status
+
+### Fixed
+
+- HTTP remote MCP servers (url-only) no longer silently break schema validation
+- `pit status` no longer reports false drift for Codex TOML or Copilot MCP immediately after install
+- Empty MCP server configs rejected by schema validation
+- MCP drift detection uses canonical hashing that ignores adapter-added fields
+
+### Changed
+
+- Each adapter declares `mcpFormat` and `mcpRootKey` in its capabilities for native MCP reading
+- 286 tests across 33 test files
+
 ## 0.2.9 (2026-04-01)
 
 ### Fixed

@@ -18,9 +18,9 @@ Reviewed SkillKit (rohitg00/skillkit). Different approach: 17 adapters with code
 ### ~~Read Agent Skills spec~~
 Agent Skills spec (agentskills.io) = directory with SKILL.md (YAML frontmatter: name, description, license, compatibility, metadata, allowed-tools) + optional scripts/, references/, assets/. Vercel's `npx skills add` installs by symlinking into agent-native paths (45+ agents). Cloudflare `.well-known/agent-skills/index.json` RFC for web discovery with SHA-256 digest. **The formats are complementary**: Agent Skills defines individual skills, PromptPit is the composition layer it lacks (no concept of bundling skills + MCP + env + instructions). PromptPit already parses Agent Skills frontmatter in `schema.ts`. Position `.promptpit/` as "Agent Skills + composition" rather than a separate format.
 
-## Phase 1 — Team Platform (v0.2.x -> v0.3)
+## ~~Phase 1 — Team Platform (v0.2.x -> v0.3)~~ ✅
 
-Goal: give teams a reason to adopt PromptPit. "New dev joins, runs one command, every AI tool is configured."
+Goal: give teams a reason to adopt PromptPit. "New dev joins, runs one command, every AI tool is configured." **Completed v0.3.0 (2026-04-01).** Five Tier 1 adapters, seven commands, drift detection, dry-run previews, CI integration.
 
 ### ~~Unify standards adapters~~
 Merged agents-md + mcp-standard into a single `standards` adapter that owns AGENTS.md, .mcp.json, and .agents/skills/.

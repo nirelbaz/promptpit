@@ -19,12 +19,14 @@ pit check          # CI integration — verify config is fresh and in sync
 
 ## Features
 
-- Install from any GitHub repo, even ones that don't use promptpit
-- Skills follow the [Agent Skills](https://agentskills.io) spec, symlinked or translated per tool
-- `pit status` shows what's synced and what's drifted
-- `.mcp.json` and MCP configs handled automatically, secrets stripped during collect
-- Multiple stacks coexist, re-installs replace cleanly
-- Supports Claude Code, Cursor, Codex CLI, GitHub Copilot, and cross-tool standards (AGENTS.md, .mcp.json)
+- **Five adapters:** Claude Code, Cursor, Codex CLI, GitHub Copilot, and cross-tool standards (AGENTS.md, .mcp.json). One stack, every tool configured.
+- **Install from any GitHub repo,** even ones that don't use promptpit. pit auto-collects from raw configs.
+- **Skills follow the [Agent Skills](https://agentskills.io) spec,** symlinked or translated per tool (SKILL.md, .mdc, .instructions.md)
+- **Drift detection:** `pit status` shows what's synced, drifted, or deleted across all adapters
+- **Dry-run previews:** `--dry-run` on collect and install shows exactly what would change. `--verbose` adds unified diffs.
+- **CI integration:** `pit check` exits non-zero on stale or drifted config. `pit validate` lints your stack before publishing.
+- **MCP handled automatically:** stdio and HTTP remote servers, secrets stripped during collect, per-adapter format translation (JSON, TOML)
+- **Multiple stacks coexist,** re-installs replace cleanly via idempotent markers
 
 ## Installation
 
@@ -40,6 +42,14 @@ npx promptpit <command>
 
 ## Usage
 
+### Start a new stack
+
+```sh
+pit init
+```
+
+Interactive prompts for name, version, description, and optional files (agent instructions, MCP config, .env.example). Creates a `.promptpit/` directory ready to edit.
+
 ### Collect your config
 
 ```sh
@@ -51,11 +61,13 @@ Scans for Claude Code, Cursor, Codex CLI, Copilot, and Standards configs, merges
 ```
 .promptpit/
 ├── stack.json          # Manifest (name, version, skills, compatibility)
-├── agent.promptpit.md  # Agent instructions (from CLAUDE.md, .cursorrules)
+├── agent.promptpit.md  # Agent instructions (from CLAUDE.md, .cursorrules, AGENTS.md, etc.)
 ├── skills/             # SKILL.md files
 ├── mcp.json            # MCP server configs (secrets replaced with placeholders)
 └── .env.example        # Required environment variables
 ```
+
+Use `--dry-run` to preview what would be collected without writing anything. Add `--verbose` for unified diffs.
 
 ### Install a stack
 
@@ -64,10 +76,18 @@ pit install                              # from .promptpit/ in current dir
 pit install ./path/to/.promptpit         # from local path
 pit install github:user/repo             # from GitHub
 pit install github:user/repo@v2.0       # specific tag or branch
-pit install github:user/repo --global   # install to ~/.claude/ and ~/.cursor/
+pit install github:user/repo --global   # install to user-level paths (~/.claude/, ~/.codex/, etc.)
 ```
 
-pit detects which AI tools are in your project and writes config in each one's format. If the repo doesn't have a `.promptpit/` bundle, pit auto-collects one from the raw configs it finds.
+pit detects which AI tools are in your project and writes config in each one's format. If the repo doesn't have a `.promptpit/` bundle, pit auto-collects one from the raw configs it finds. Use `--dry-run` to preview changes before writing.
+
+### Validate and check
+
+```sh
+pit validate                # lint your stack before publishing
+pit check                   # CI gate — exits non-zero on stale or drifted config
+pit check --json            # machine-readable output for CI pipelines
+```
 
 ### Team setup
 
