@@ -18,7 +18,16 @@ const ADAPTER_FIXTURES: Record<string, (dir: string) => Promise<void>> = {
   "agents-md": async (dir) => {
     await writeFile(path.join(dir, "AGENTS.md"), "# Test agents");
   },
+  "mcp-standard": async (dir) => {
+    await writeFile(
+      path.join(dir, ".mcp.json"),
+      JSON.stringify({ mcpServers: {} }, null, 2),
+    );
+  },
 };
+
+// Adapters that write JSON instead of marker-based text files
+const NON_MARKER_ADAPTERS = new Set(["mcp-standard"]);
 
 describe.each(listAdapters().map((a) => [a.id, a] as const))(
   "Adapter contract: %s",
@@ -58,8 +67,9 @@ describe.each(listAdapters().map((a) => [a.id, a] as const))(
       expect(typeof config.mcpServers).toBe("object");
     });
 
-    // 4. write() produces files with markers
+    // 4. write() produces files with markers (marker-based adapters only)
     it("write() produces files with correct markers", async () => {
+      if (NON_MARKER_ADAPTERS.has(id)) return; // JSON adapters don't use markers
       const setup = ADAPTER_FIXTURES[id];
       if (setup) await setup(tmpDir);
       const bundle = await readStack(VALID_STACK);
@@ -74,6 +84,7 @@ describe.each(listAdapters().map((a) => [a.id, a] as const))(
 
     // 5. write() is idempotent
     it("write() is idempotent (run twice, same result)", async () => {
+      if (NON_MARKER_ADAPTERS.has(id)) return; // JSON adapters tested differently
       const setup = ADAPTER_FIXTURES[id];
       if (setup) await setup(tmpDir);
       const bundle = await readStack(VALID_STACK);
@@ -96,8 +107,9 @@ describe.each(listAdapters().map((a) => [a.id, a] as const))(
       expect(typeof userP.mcp).toBe("string");
     });
 
-    // 7. write() preserves existing content outside markers
+    // 7. write() preserves existing content outside markers (marker-based adapters only)
     it("write() preserves existing content outside markers", async () => {
+      if (NON_MARKER_ADAPTERS.has(id)) return; // JSON adapters merge, not marker-based
       const setup = ADAPTER_FIXTURES[id];
       if (setup) await setup(tmpDir);
 

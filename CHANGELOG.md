@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.0 (2026-04-01)
+
+### Added
+
+- `pit status` shows what stacks are installed, which adapters are synced, and what's drifted. Like `git status` for your AI tooling. Supports `--json` (porcelain) and `--short` output modes
+- `pit watch` monitors `.agents/skills/` and re-translates skill files for non-symlinked adapters when they change. Foreground process with 200ms debounce for batch changes
+- `.mcp.json` support via a new `mcp-standard` adapter. Project-level MCP configs are read during collect and written during install, alongside adapter-specific MCP paths
+- Install manifest (`.promptpit/installed.json`) tracks every install with per-artifact SHA-256 content hashes. Enables status drift detection, collect dedup, and future update/uninstall/diff commands. Atomic writes via temp+rename
+- Instruction hash dedup in the merger prevents identical content from multiple adapters (e.g., CLAUDE.md and AGENTS.md with the same text) from being collected twice
+- `stripMarkerBlock()` and `stripAllMarkerBlocks()` in markers.ts for removing installed content during collect
+
+### Fixed
+
+- Recursive duplication on collect+install. Previously, re-collecting after install would bundle the installed content again, causing it to grow on each cycle. Now collect strips all promptpit marker blocks before bundling, guaranteeing the round-trip: collect -> install -> collect produces identical output
+
+### Changed
+
+- Replaced the fragile fallback-only read logic (excluding AGENTS.md when Claude Code is detected) with content-hash dedup in the merger. Different content from multiple adapters is now kept; only exact duplicates are removed
+- Manifest schema (InstallManifest, InstallEntry, AdapterInstallRecord) co-located with existing Zod schemas in `schema.ts`
+
 ## 0.1.6 (2026-03-30)
 
 ### Added

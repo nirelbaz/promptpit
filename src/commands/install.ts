@@ -1,12 +1,14 @@
 import path from "node:path";
 import { readStack } from "../core/stack.js";
 import { installCanonical } from "../core/skill-store.js";
+import { readManifest, writeManifest, upsertInstall, computeHash } from "../core/manifest.js";
 import { detectAdapters } from "../adapters/registry.js";
 import { validateEnvNames } from "../core/security.js";
 import { writeFileEnsureDir, removeDir, readFileOrNull, exists } from "../shared/utils.js";
 import { log, spinner } from "../shared/io.js";
 import { parseGitHubSource, cloneAndResolve } from "../sources/github.js";
 import type { WriteOptions } from "../adapters/types.js";
+import type { InstallEntry, AdapterInstallRecord } from "../shared/schema.js";
 
 export interface InstallOptions {
   global?: boolean;
@@ -132,6 +134,62 @@ export async function installStack(
       for (const w of result.warnings) {
         log.warn(w);
       }
+    }
+
+    // Write manifest (tracks what was installed for status/dedup)
+    if (!opts.dryRun) {
+      const manifestSpin = spinner("Writing install manifest...");
+      const manifest = await readManifest(target);
+
+      // Build adapter records with content hashes
+      const adapterRecords: Record<string, AdapterInstallRecord> = {};
+      for (const { adapter } of detected) {
+        const record: AdapterInstallRecord = {};
+
+        // Hash instructions — trim to match what extractMarkerContent returns
+        if (bundle.agentInstructions) {
+          const configPath = adapter.paths.project(target).config;
+          if (configPath) {
+            record.instructions = { hash: computeHash(bundle.agentInstructions.trim()) };
+          }
+        }
+
+        // Hash skills from in-memory content
+        if (bundle.skills.length > 0) {
+          const skills: Record<string, { hash: string }> = {};
+          for (const skill of bundle.skills) {
+            skills[skill.name] = { hash: computeHash(skill.content) };
+          }
+          if (Object.keys(skills).length > 0) {
+            record.skills = skills;
+          }
+        }
+
+        // Hash MCP — hash each server config individually (not the whole file)
+        if (adapter.id === "mcp-standard" && Object.keys(bundle.mcpServers).length > 0) {
+          const mcp: Record<string, { hash: string }> = {};
+          for (const [serverName, serverConfig] of Object.entries(bundle.mcpServers)) {
+            mcp[serverName] = { hash: computeHash(JSON.stringify(serverConfig)) };
+          }
+          record.mcp = mcp;
+        }
+
+        if (record.instructions || record.skills || record.mcp) {
+          adapterRecords[adapter.id] = record;
+        }
+      }
+
+      const entry: InstallEntry = {
+        stack: bundle.manifest.name,
+        stackVersion: bundle.manifest.version,
+        source: gh ? source : undefined,
+        installedAt: new Date().toISOString(),
+        adapters: adapterRecords,
+      };
+
+      const updated = upsertInstall(manifest, entry);
+      await writeManifest(target, updated);
+      manifestSpin.succeed("Manifest updated");
     }
 
     // Write .env file with placeholders (don't overwrite existing)

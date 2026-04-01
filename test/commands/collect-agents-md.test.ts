@@ -32,7 +32,7 @@ describe("collect: agents-md fallback logic", () => {
     expect(agentMd).toContain("Use strict mode.");
   });
 
-  it("excludes AGENTS.md when claude-code is also detected", async () => {
+  it("keeps both adapters when content differs (dedup by hash)", async () => {
     await writeFile(
       path.join(tmpDir, "AGENTS.md"),
       "# AGENTS instructions\n\nFrom AGENTS.md.\n",
@@ -49,6 +49,22 @@ describe("collect: agents-md fallback logic", () => {
       "utf-8",
     );
     expect(agentMd).toContain("From CLAUDE.md.");
-    expect(agentMd).not.toContain("From AGENTS.md.");
+    expect(agentMd).toContain("From AGENTS.md.");
+  });
+
+  it("deduplicates identical instructions from multiple adapters", async () => {
+    const sharedContent = "# Shared instructions\n\nUse strict mode.\n";
+    await writeFile(path.join(tmpDir, "AGENTS.md"), sharedContent);
+    await writeFile(path.join(tmpDir, "CLAUDE.md"), sharedContent);
+
+    await collectStack(tmpDir, outputDir);
+
+    const agentMd = await readFile(
+      path.join(outputDir, "agent.promptpit.md"),
+      "utf-8",
+    );
+    // Content appears once (deduped), not twice
+    const matches = agentMd.match(/Use strict mode\./g) || [];
+    expect(matches.length).toBe(1);
   });
 });
