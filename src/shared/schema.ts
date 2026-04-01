@@ -42,10 +42,15 @@ export type SkillFrontmatter = z.infer<typeof skillFrontmatterSchema>;
 // --- MCP Server Config ---
 
 export const mcpServerSchema = z.object({
-  command: z.string(),
+  command: z.string().optional(),
   args: z.array(z.string()).optional(),
   env: z.record(z.string()).optional(),
-});
+  url: z.string().optional(),
+  serverUrl: z.string().optional(),
+}).passthrough().refine(
+  (s) => s.command || s.url || s.serverUrl,
+  { message: "MCP server must have command (stdio) or url/serverUrl (remote)" },
+);
 
 export type McpServerConfig = z.infer<typeof mcpServerSchema>;
 

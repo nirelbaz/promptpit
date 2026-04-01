@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { stackManifestSchema, skillFrontmatterSchema } from "../../src/shared/schema.js";
+import { stackManifestSchema, skillFrontmatterSchema, mcpServerSchema, mcpConfigSchema } from "../../src/shared/schema.js";
 
 describe("stackManifestSchema", () => {
   it("validates a complete stack manifest", () => {
@@ -68,6 +68,60 @@ describe("skillFrontmatterSchema", () => {
   it("requires name and description", () => {
     const missing = { name: "no-desc" };
     const result = skillFrontmatterSchema.safeParse(missing);
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("mcpServerSchema", () => {
+  it("validates a stdio server with command", () => {
+    const server = { command: "npx", args: ["-y", "@context7/mcp"] };
+    expect(mcpServerSchema.safeParse(server).success).toBe(true);
+  });
+
+  it("validates an HTTP remote server with url only", () => {
+    const server = { url: "https://api.example.com/mcp" };
+    expect(mcpServerSchema.safeParse(server).success).toBe(true);
+  });
+
+  it("validates an HTTP remote server with serverUrl only", () => {
+    const server = { serverUrl: "https://api.example.com/mcp" };
+    expect(mcpServerSchema.safeParse(server).success).toBe(true);
+  });
+
+  it("validates a server with command, args, and env", () => {
+    const server = { command: "npx", args: ["-y", "pkg"], env: { API_KEY: "test" } };
+    expect(mcpServerSchema.safeParse(server).success).toBe(true);
+  });
+
+  it("rejects an empty server (no command, no url)", () => {
+    const server = {};
+    expect(mcpServerSchema.safeParse(server).success).toBe(false);
+  });
+
+  it("preserves unknown fields via passthrough", () => {
+    const server = { command: "npx", type: "stdio", customField: true };
+    const result = mcpServerSchema.safeParse(server);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toHaveProperty("type", "stdio");
+      expect(result.data).toHaveProperty("customField", true);
+    }
+  });
+});
+
+describe("mcpConfigSchema", () => {
+  it("validates a mix of stdio and HTTP remote servers", () => {
+    const config = {
+      context7: { command: "npx", args: ["-y", "@context7/mcp"] },
+      "remote-api": { url: "https://api.example.com/mcp" },
+    };
+    const result = mcpConfigSchema.safeParse(config);
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects config with invalid env type", () => {
+    const config = { bad: { command: "npx", env: { KEY: 123 } } };
+    const result = mcpConfigSchema.safeParse(config);
     expect(result.success).toBe(false);
   });
 });
