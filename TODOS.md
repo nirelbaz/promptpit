@@ -25,8 +25,8 @@ Goal: give teams a reason to adopt PromptPit. "New dev joins, runs one command, 
 ### ~~Unify standards adapters~~
 Merged agents-md + mcp-standard into a single `standards` adapter that owns AGENTS.md, .mcp.json, and .agents/skills/.
 
-### Codex CLI adapter (Tier 1)
-Instructions to AGENTS.md (shared with AGENTS.md support), skills to `.codex/skills/` (native SKILL.md, symlinked from `.agents/skills/`), MCP to `config.toml` (needs TOML writer, consider `@iarna/toml` or `smol-toml`). Detection: `~/.codex` directory exists. Also supports `.agents/skills/` as universal alias. Confirm paths against current Codex CLI docs before shipping.
+### ~~Codex CLI adapter (Tier 1)~~
+**Completed:** v0.2.5 (2026-04-01). Instructions to AGENTS.md, skills symlinked to `.codex/skills/`, MCP merged into `.codex/config.toml` via `smol-toml`. Detection: AGENTS.md, `.codex/` directory, or `.codex/config.toml`. Validated against Codex CLI docs via context7. 29 new tests (12 TOML utils + 17 adapter).
 
 ### ~~Copilot adapter (Tier 1)~~
 **Completed:** v0.2.3 (2026-04-01). Instructions to `.github/copilot-instructions.md`, skills translated to `.github/instructions/*.instructions.md` (applyTo glob frontmatter), MCP to `.vscode/mcp.json` (root key `servers`, type field per entry). Detection via `.github/copilot-instructions.md`, `.github/instructions/`, or `.vscode/mcp.json`. Agents deferred to Phase 2 (not yet in StackBundle schema).
