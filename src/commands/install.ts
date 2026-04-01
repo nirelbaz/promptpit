@@ -165,8 +165,8 @@ export async function installStack(
           }
         }
 
-        // Hash MCP — hash each server config individually (not the whole file)
-        if (adapter.id === "mcp-standard" && Object.keys(bundle.mcpServers).length > 0) {
+        // Hash MCP for any adapter that supports it
+        if (adapter.capabilities.mcpStdio && Object.keys(bundle.mcpServers).length > 0) {
           const mcp: Record<string, { hash: string }> = {};
           for (const [serverName, serverConfig] of Object.entries(bundle.mcpServers)) {
             mcp[serverName] = { hash: computeHash(JSON.stringify(serverConfig)) };
