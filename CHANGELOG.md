@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.4 (2026-04-01)
+
+### Added
+
+- `pit init` scaffolds a new `.promptpit/` stack from scratch with interactive prompts. Asks for stack name, version, description, and author, then optionally creates agent instructions, MCP config, and .env.example files. Validates input against the stack schema before writing. Use `--force` to overwrite an existing stack, `--output` to target a custom directory
+- Default stack name auto-sanitized from the directory name (strips invalid characters, falls back to `my-stack`)
+- Agent instructions frontmatter now generated via `js-yaml` for correctness with special characters
+
 ## 0.2.3 (2026-04-01)
 
 ### Changed

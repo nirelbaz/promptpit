@@ -37,9 +37,6 @@ CI integration command. Exits non-zero if: (a) required skills from stack.json a
 ### Dry-run output
 `--dry-run` flags exist but output is half-baked. Collect only shows secret stripping, install skips writes but doesn't report what would change. Need proper preview output: list files that would be created/modified, show diffs for config merges, summarize skills/MCP that would be added.
 
-### Init command
-`pit init` — scaffold a `.promptpit/` from scratch with prompts. For new projects or people who want to build a stack from zero without collecting from an existing setup first.
-
 ### Validate command
 `pit validate` — check if a stack.json is valid, skills parse correctly, MCP configs are well-formed. Useful before publishing, and as a CI check for teams maintaining shared stacks. Can integrate with agnix (385 validation rules across 12+ AI tools, npm package with JS API: `await agnix.lint(dir, { target })`). Make agnix an optional peer dependency — detect at runtime, offer validation if present, suggest installing if not. Filter diagnostics by installed adapters (CC-* for Claude, CUR-* for Cursor, etc.).
 
@@ -154,6 +151,9 @@ Added in v0.1.6. Skills written to `.agents/skills/` as canonical location, syml
 
 ### ~~Recursive duplication on collect + install~~
 **Completed:** v0.2.0 (2026-04-01). `stripAllMarkerBlocks()` removes installed content during collect. Instruction hash dedup in the merger prevents identical content from multiple adapters being collected twice. Round-trip collect→install→collect now produces identical output.
+
+### ~~Init command~~
+**Completed:** v0.2.4 (2026-04-01). `pit init` scaffolds a `.promptpit/` stack from scratch with interactive prompts for name, version, description, author, and optional files (agent instructions, MCP config, .env.example). Validates against stack schema, sanitizes dirname defaults, uses `js-yaml` for frontmatter generation.
 
 ### ~~Verbose status flag~~
 **Completed:** v0.2.2 (2026-04-01). `pit status --verbose` / `-v` shows per-adapter detail: skill names, MCP server names, instruction paths, and individual hash status for each artifact.

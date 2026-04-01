@@ -2,12 +2,12 @@
 
 ## Project
 
-PromptPit (`pit`) — the composition layer for AI agent configuration. Bundles instructions, skills (Agent Skills spec), MCP servers, and env vars into one distributable stack that installs across Claude Code, Cursor, and other AI coding tools. Four commands: `pit collect` (bundle configs), `pit install` (install stacks), `pit status` (show what's installed and drifted), and `pit watch` (live-sync skill changes). Translation is the entry point, stack management is the product.
+PromptPit (`pit`) — the composition layer for AI agent configuration. Bundles instructions, skills (Agent Skills spec), MCP servers, and env vars into one distributable stack that installs across Claude Code, Cursor, and other AI coding tools. Five commands: `pit init` (scaffold a stack), `pit collect` (bundle configs), `pit install` (install stacks), `pit status` (show what's installed and drifted), and `pit watch` (live-sync skill changes). Translation is the entry point, stack management is the product.
 
 ## Commands
 
 ```bash
-npm test          # run tests (vitest, 163 tests)
+npm test          # run tests (vitest, 189 tests)
 npm run build     # build dist/cli.js (tsup, ESM)
 npm run lint      # TypeScript strict mode check
 npm run dev       # watch mode build
@@ -20,7 +20,7 @@ Adapter pattern with composition. Each AI tool is a plain object implementing `P
 ```
 src/
 ├── cli.ts              # Commander.js entry point
-├── commands/           # collect.ts, install.ts, status.ts, watch.ts
+├── commands/           # init.ts, collect.ts, install.ts, status.ts, watch.ts
 ├── adapters/           # claude-code.ts, cursor.ts, standards.ts, registry.ts, types.ts, adapter-utils.ts
 ├── core/               # stack.ts, skill-store.ts, manifest.ts, merger.ts, security.ts
 ├── sources/            # github.ts (clone + auto-collect)
