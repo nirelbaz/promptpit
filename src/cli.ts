@@ -44,11 +44,12 @@ program
   .argument("[dir]", "Project directory to collect from", ".")
   .option("-o, --output <path>", "Output directory", ".promptpit")
   .option("--dry-run", "Show what would be collected without writing")
-  .action(async (dir: string, opts: { output: string; dryRun?: boolean }) => {
+  .option("-v, --verbose", "Show full diffs in dry-run output")
+  .action(async (dir: string, opts: { output: string; dryRun?: boolean; verbose?: boolean }) => {
     try {
       const root = path.resolve(dir);
       const outputDir = path.resolve(root, opts.output);
-      await collectStack(root, outputDir, { dryRun: opts.dryRun });
+      await collectStack(root, outputDir, { dryRun: opts.dryRun, verbose: opts.verbose });
     } catch (err: unknown) {
       if (err instanceof Error) {
         log.error(err.message);
@@ -67,12 +68,13 @@ program
     "Install to user-level paths (available to all projects)",
   )
   .option("--dry-run", "Show what would be installed without writing")
+  .option("-v, --verbose", "Show full diffs in dry-run output")
   .option("--force", "Overwrite existing content outside markers")
   .action(
     async (
       source: string | undefined,
       target: string,
-      opts: { global?: boolean; dryRun?: boolean; force?: boolean },
+      opts: { global?: boolean; dryRun?: boolean; force?: boolean; verbose?: boolean },
     ) => {
       try {
         const resolvedSource = source ?? ".promptpit";

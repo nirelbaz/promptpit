@@ -5,15 +5,18 @@ import { readManifest, writeManifest, upsertInstall, computeHash } from "../core
 import { detectAdapters } from "../adapters/registry.js";
 import { validateEnvNames } from "../core/security.js";
 import { writeFileEnsureDir, removeDir, readFileOrNull, exists } from "../shared/utils.js";
-import { log, spinner } from "../shared/io.js";
+import { log, spinner, printDryRunReport } from "../shared/io.js";
 import { parseGitHubSource, cloneAndResolve } from "../sources/github.js";
-import type { WriteOptions } from "../adapters/types.js";
+import type { WriteOptions, DryRunEntry } from "../adapters/types.js";
+import type { DryRunSection } from "../shared/io.js";
 import type { InstallEntry, AdapterInstallRecord } from "../shared/schema.js";
+import { canonicalSkillBase } from "../core/skill-store.js";
 
 export interface InstallOptions {
   global?: boolean;
   dryRun?: boolean;
   force?: boolean;
+  verbose?: boolean;
 }
 
 export async function installStack(
@@ -40,6 +43,9 @@ export async function installStack(
 
   const gh = parseGitHubSource(source);
   if (gh) {
+    if (opts.dryRun) {
+      log.info("Fetching stack metadata from GitHub (required for dry-run preview)...");
+    }
     const resolved = await cloneAndResolve(gh);
     resolvedSource = resolved.stackDir;
     tmpDir = resolved.tmpDir;
@@ -107,37 +113,105 @@ export async function installStack(
 
     // Write skills to canonical .agents/skills/ location
     let canonicalSkillPaths: Map<string, string> | undefined;
-    if (bundle.skills.length > 0 && !opts.dryRun) {
-      const canonSpin = spinner("Writing canonical skills...");
-      canonicalSkillPaths = await installCanonical(target, bundle.skills, {
-        global: opts.global,
-      });
-      canonSpin.succeed(
-        `Canonical: ${canonicalSkillPaths.size} skills in .agents/skills/`,
-      );
+    const canonicalEntries: DryRunEntry[] = [];
+    if (bundle.skills.length > 0) {
+      if (opts.dryRun) {
+        const base = canonicalSkillBase(target, opts.global);
+        for (const skill of bundle.skills) {
+          const dest = path.join(base, skill.name, "SKILL.md");
+          const skillExists = await exists(dest);
+          canonicalEntries.push({
+            file: dest,
+            action: skillExists ? "modify" : "create",
+          });
+        }
+      } else {
+        const canonSpin = spinner("Writing canonical skills...");
+        canonicalSkillPaths = await installCanonical(target, bundle.skills, {
+          global: opts.global,
+        });
+        canonSpin.succeed(
+          `Canonical: ${canonicalSkillPaths.size} skills in .agents/skills/`,
+        );
+      }
     }
 
     // Write to each detected adapter
     const writeOpts: WriteOptions = {
       dryRun: opts.dryRun,
+      verbose: opts.verbose,
       force: opts.force,
       global: opts.global,
       canonicalSkillPaths,
     };
 
+    const adapterSections: DryRunSection[] = [];
+
     for (const { adapter } of detected) {
-      const writeSpin = spinner(`Installing to ${adapter.displayName}...`);
-      const result = await adapter.write(target, bundle, writeOpts);
-      writeSpin.succeed(
-        `${adapter.displayName}: ${result.filesWritten.length} files written`,
-      );
-      for (const w of result.warnings) {
-        log.warn(w);
+      if (opts.dryRun) {
+        const result = await adapter.write(target, bundle, writeOpts);
+        if (result.dryRunEntries && result.dryRunEntries.length > 0) {
+          adapterSections.push({
+            label: adapter.displayName,
+            entries: result.dryRunEntries,
+          });
+        }
+        for (const w of result.warnings) {
+          log.warn(w);
+        }
+      } else {
+        const writeSpin = spinner(`Installing to ${adapter.displayName}...`);
+        const result = await adapter.write(target, bundle, writeOpts);
+        writeSpin.succeed(
+          `${adapter.displayName}: ${result.filesWritten.length} files written`,
+        );
+        for (const w of result.warnings) {
+          log.warn(w);
+        }
       }
     }
 
+    if (opts.dryRun) {
+      const otherEntries: DryRunEntry[] = [];
+
+      otherEntries.push({
+        file: path.join(target, ".promptpit", "installed.json"),
+        action: (await exists(path.join(target, ".promptpit", "installed.json")))
+          ? "modify"
+          : "create",
+        detail: "install manifest",
+      });
+
+      const envCount = Object.keys(bundle.envExample).length;
+      if (envCount > 0) {
+        const envPath = path.join(target, ".env");
+        const envExists = await exists(envPath);
+        otherEntries.push({
+          file: envPath,
+          action: envExists ? "modify" : "create",
+          detail: `${envCount} placeholder${envCount !== 1 ? "s" : ""}`,
+        });
+      }
+
+      const sections: DryRunSection[] = [];
+      if (canonicalEntries.length > 0) {
+        sections.push({ label: "Canonical skills", entries: canonicalEntries });
+      }
+      sections.push(...adapterSections);
+      if (otherEntries.length > 0) {
+        sections.push({ label: "Other", entries: otherEntries });
+      }
+
+      printDryRunReport(
+        `Dry run — would install ${bundle.manifest.name}@${bundle.manifest.version}:`,
+        sections,
+        !!opts.verbose,
+      );
+      return;
+    }
+
     // Write manifest (tracks what was installed for status/dedup)
-    if (!opts.dryRun) {
+    {
       const manifestSpin = spinner("Writing install manifest...");
       const manifest = await readManifest(target);
 
@@ -193,7 +267,7 @@ export async function installStack(
     }
 
     // Write .env file with placeholders (don't overwrite existing)
-    if (Object.keys(bundle.envExample).length > 0 && !opts.dryRun) {
+    if (Object.keys(bundle.envExample).length > 0) {
       const envPath = path.join(target, ".env");
       const existing = await readFileOrNull(envPath);
       if (existing != null) {
