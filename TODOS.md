@@ -2,18 +2,18 @@
 
 ## Strategic Context
 
-**Core thesis:** PromptPit is the composition layer for AI agent config. Translation is the entry point, stack management is the product, composition is the moat.
+**Core thesis:** PromptPit is the composition layer for AI agent config. Translation is the entry point, stack management keeps things in sync, composition lets teams build on each other's work.
 
 **Phased roadmap:** Team Platform (v0.3) -> Stack Composer (v0.5) -> Ecosystem Bridge (v1.0)
 
-**Landscape (April 2026):** AGENTS.md adopted by 60K+ repos (Linux Foundation). Vercel Agent Skills / skills.sh is the emerging skill package manager (45+ agents, Cloudflare `.well-known` RFC for discovery). SkillKit (rohitg00/skillkit) claims 44 agents but only has 4 real format translators (breadth-without-depth, 104K lines from 1 contributor in 2 months). .mcp.json converging as project-level MCP standard. Translation alone is being commoditized. PromptPit's differentiator is composition: bundling instructions + skills + MCP + env as one distributable, composable unit. Agent Skills spec is complementary, not competing — it defines the individual skill format, PromptPit is the composition layer it lacks. PromptPit already parses Agent Skills frontmatter.
+**Landscape (April 2026):** AGENTS.md adopted by 60K+ repos (Linux Foundation). Vercel Agent Skills / skills.sh is the emerging skill package manager (45+ agents, Cloudflare `.well-known` RFC for discovery). .mcp.json converging as project-level MCP standard. Agent Skills spec is complementary, not competing. It defines the individual skill format, PromptPit adds composition (bundling instructions + skills + MCP + env as one distributable unit). PromptPit already parses Agent Skills frontmatter.
 
 **Adapter tiers:** Tier 1 (creator-maintained): Claude Code, Cursor (shipped), Codex, Copilot. Tier 2 (community-contributed): Windsurf, Gemini.
 
 ## Research (completed)
 
 ### ~~Investigate SkillKit~~
-SkillKit's "44 agents" = 17 adapters with code + 27 empty enum strings. Of the 17, 13 generate identical XML. Only 4 real format translators (SKILL.md, Cursor .mdc, Copilot markdown, Windsurf markdown). 104K lines, 1 contributor, single squashed commit. Breadth-without-depth. PromptPit's adapter quality (native config paths, idempotent markers, drift detection, security hardening) is a real differentiator, not table stakes.
+Reviewed SkillKit (rohitg00/skillkit). Different approach: 17 adapters with code, 4 real format translators. PromptPit focuses on composition (bundling + drift detection + security) rather than breadth of format support.
 
 ### ~~Read Agent Skills spec~~
 Agent Skills spec (agentskills.io) = directory with SKILL.md (YAML frontmatter: name, description, license, compatibility, metadata, allowed-tools) + optional scripts/, references/, assets/. Vercel's `npx skills add` installs by symlinking into agent-native paths (45+ agents). Cloudflare `.well-known/agent-skills/index.json` RFC for web discovery with SHA-256 digest. **The formats are complementary**: Agent Skills defines individual skills, PromptPit is the composition layer it lacks (no concept of bundling skills + MCP + env + instructions). PromptPit already parses Agent Skills frontmatter in `schema.ts`. Position `.promptpit/` as "Agent Skills + composition" rather than a separate format.
@@ -45,10 +45,10 @@ CI integration command. Exits non-zero if: (a) required skills from stack.json a
 
 ## Phase 2 — Stack Composer (v0.3 -> v0.5)
 
-Goal: make PromptPit the composition layer. The moat. Once teams use `extends`, they're locked in by their dependency graph.
+Goal: let teams layer stacks on top of each other. Company base stack + team overrides + personal preferences, all composable.
 
 ### Stack composition (`extends`)
-`"extends": ["github:company/base-stack@1.0.0"]` in stack.json. `pit install` recursively fetches and resolves the dependency graph. Base instructions merge first, team overrides layer on top. Provisional merge semantics: last-declared-wins with a warning on conflicts, explicit `overrides` block in stack.json for intentional resolution. The skeleton (schema change + recursive `cloneAndResolve` + `mergeStacks()`) is a weekend build; correct conflict resolution semantics should be validated against real team usage from Phase 1 before hardcoding. This is the single most important feature for PromptPit's long-term positioning.
+`"extends": ["github:company/base-stack@1.0.0"]` in stack.json. `pit install` recursively fetches and resolves the dependency graph. Base instructions merge first, team overrides layer on top. Provisional merge semantics: last-declared-wins with a warning on conflicts, explicit `overrides` block in stack.json for intentional resolution. The skeleton (schema change + recursive `cloneAndResolve` + `mergeStacks()`) is a weekend build; correct conflict resolution semantics should be validated against real team usage from Phase 1 before hardcoding. This is the feature that makes multi-team setups practical.
 
 ### Diff command
 `pit diff` — show what changed between installed config and `.promptpit/` source. "Has someone updated the team stack since I last installed?" Natural byproduct of the merge/composition logic. Pairs with `pit status` (what's installed) and `pit update` (apply changes).
@@ -60,7 +60,7 @@ Goal: make PromptPit the composition layer. The moat. Once teams use `extends`, 
 Currently PromptPit generates AGENTS.md during install. With 60K+ repos adopting it as THE cross-tool standard, PromptPit should also read AGENTS.md as a primary input — treat it as the canonical instructions format alongside tool-specific ones. Start with read-only parsing (behind feature flag until the spec stabilizes), then graduate to full read/write.
 
 ### Formalize Agent Skills alignment
-PromptPit already parses Agent Skills frontmatter (`skillFrontmatterSchema` in `schema.ts`). Formalize this: ensure full spec compliance (name validation: 1-64 chars, lowercase alphanumeric + hyphens; description: 1-1024 chars), support optional `scripts/`, `references/`, `assets/` directories in skills, and document that `.promptpit/` is "Agent Skills + composition." This positions PromptPit as the composition layer on top of the Agent Skills ecosystem rather than a parallel format.
+PromptPit already parses Agent Skills frontmatter (`skillFrontmatterSchema` in `schema.ts`). Formalize this: ensure full spec compliance (name validation: 1-64 chars, lowercase alphanumeric + hyphens; description: 1-1024 chars), support optional `scripts/`, `references/`, `assets/` directories in skills, and document that `.promptpit/` is "Agent Skills + composition." This ensures PromptPit stacks are valid Agent Skills packages, not a parallel format.
 
 ### Add `rules/` to bundle schema
 Portable conditional rules in `.promptpit/rules/*.md` with YAML frontmatter: `name`, `description`, `globs` (file patterns), `alwaysApply` (boolean). Translated per-adapter during install: `.claude/rules/*.md` (paths frontmatter), `.cursor/rules/*.mdc` (globs + alwaysApply + description), `.windsurf/rules/*.md` (trigger frontmatter), `.github/instructions/*.instructions.md` (applyTo globs). Tools without conditional rules get rules appended to their instructions file.
@@ -86,7 +86,7 @@ Instructions to `GEMINI.md` (supports `@path/to/file.md` import syntax), skills 
 
 ## Phase 3 — Ecosystem Bridge (v0.5 -> v1.0)
 
-Goal: network effects. Install from anywhere, publish to anywhere. PromptPit becomes the hub.
+Goal: install from anywhere, publish to anywhere. Connect the ecosystem.
 
 ### Broader SKILL.md discovery
 Expand GitHub source discovery pipeline to scan in priority order: (1) `.claude-plugin/marketplace.json` — read `plugins[].skills[]` paths, (2) standard locations `skills/*/SKILL.md`, `.github/skills/*/SKILL.md`, `.github/plugins/*/skills/*/SKILL.md`, (3) root-level scan of immediate subdirectories for `SKILL.md`, (4) existing detection `.claude/skills/`, `.cursor/rules/`. Stop at first strategy returning at least one valid SkillEntry.
