@@ -31,8 +31,8 @@ Merged agents-md + mcp-standard into a single `standards` adapter that owns AGEN
 ### ~~Copilot adapter (Tier 1)~~
 **Completed:** v0.2.3 (2026-04-01). Instructions to `.github/copilot-instructions.md`, skills translated to `.github/instructions/*.instructions.md` (applyTo glob frontmatter), MCP to `.vscode/mcp.json` (root key `servers`, type field per entry). Detection via `.github/copilot-instructions.md`, `.github/instructions/`, or `.vscode/mcp.json`. Agents deferred to Phase 2 (not yet in StackBundle schema).
 
-### `pit check` (NEW)
-CI integration command. Exits non-zero if: (a) required skills from stack.json are missing, (b) installed config has drifted from the stack's expected hashes (already tracked in installed.json), or (c) adapter-specific configs are out of sync. Simplest useful version: compare installed.json against what `pit install` would produce, exit 1 on any diff. Ship a GitHub Actions example in README.
+### ~~`pit check`~~
+**Completed:** v0.2.6 (2026-04-01). Two-phase CI check: freshness (stack.json vs installed.json) and drift (installed.json vs disk). Supports `--json`. GitHub Actions example deferred to README update.
 
 ### Dry-run output
 `--dry-run` flags exist but output is half-baked. Collect only shows secret stripping, install skips writes but doesn't report what would change. Need proper preview output: list files that would be created/modified, show diffs for config merges, summarize skills/MCP that would be added.
