@@ -125,6 +125,24 @@ Curated list of tested repos in the README. Per entry: repo name + link + stars,
 
 ## Done
 
+### ~~MCP schema and drift detection fixes~~
+**Completed:** v0.2.9 (2026-04-01). `mcpServerSchema` now supports HTTP remote servers (url/serverUrl). Drift detection uses canonical hashing (`computeMcpServerHash`) that ignores adapter-added fields. Each adapter declares `mcpFormat`/`mcpRootKey` in capabilities for native MCP reading in status. Empty MCP configs rejected via Zod refine. 19 new tests.
+
+### ~~Dry-run output~~
+**Completed:** v0.2.8 (2026-04-01). `--dry-run` on both collect and install now shows file-by-file preview (create/modify per adapter, with details). `-v`/`--verbose` adds unified diffs for modified files.
+
+### ~~`pit check`~~
+**Completed:** v0.2.6 (2026-04-01). Two-phase CI check: freshness (stack.json vs installed.json) and drift (installed.json vs disk). Supports `--json`. GitHub Actions example deferred to README update.
+
+### ~~Codex CLI adapter (Tier 1)~~
+**Completed:** v0.2.5 (2026-04-01). Instructions to AGENTS.md, skills symlinked to `.codex/skills/`, MCP merged into `.codex/config.toml` via `smol-toml`. Detection: AGENTS.md, `.codex/` directory, or `.codex/config.toml`. Validated against Codex CLI docs via context7. 29 new tests (12 TOML utils + 17 adapter).
+
+### ~~Copilot adapter (Tier 1)~~
+**Completed:** v0.2.3 (2026-04-01). Instructions to `.github/copilot-instructions.md`, skills translated to `.github/instructions/*.instructions.md` (applyTo glob frontmatter), MCP to `.vscode/mcp.json` (root key `servers`, type field per entry). Detection via `.github/copilot-instructions.md`, `.github/instructions/`, or `.vscode/mcp.json`. Agents deferred to Phase 2 (not yet in StackBundle schema).
+
+### ~~Unify standards adapters~~
+Merged agents-md + mcp-standard into a single `standards` adapter that owns AGENTS.md, .mcp.json, and .agents/skills/.
+
 ### ~~Validate command~~
 **Completed:** v0.2.7 (2026-04-01). `pit validate` checks stack.json, agent.promptpit.md, skills, mcp.json, and .env.example. Reports all errors at once. `--json` for CI. Optional agnix integration auto-detects the binary for 385+ adapter-specific lint rules.
 

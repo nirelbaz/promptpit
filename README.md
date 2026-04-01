@@ -99,7 +99,7 @@ Adding a new tool is one file plus one registry entry. See [CONTRIBUTING.md](CON
 git clone https://github.com/nirelbaz/promptpit.git
 cd promptpit
 npm install
-npm test          # 163 tests, vitest
+npm test          # 286 tests, vitest
 npm run build     # builds dist/cli.js via tsup
 npm run lint      # TypeScript strict mode check
 ```

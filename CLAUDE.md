@@ -7,7 +7,7 @@ PromptPit (`pit`) — the composition layer for AI agent configuration. Bundles 
 ## Commands
 
 ```bash
-npm test          # run tests (vitest, 254 tests)
+npm test          # run tests (vitest, 286 tests)
 npm run build     # build dist/cli.js (tsup, ESM)
 npm run lint      # TypeScript strict mode check
 npm run dev       # watch mode build
@@ -39,6 +39,8 @@ src/
 - No `simple-git` dependency — uses `child_process.execFileSync` directly
 - Skills installed to `.agents/skills/` as canonical location, symlinked into tool-native paths (Claude Code), copied+translated for tools needing different formats (Cursor .mdc)
 - `AdapterCapabilities.skillLinkStrategy` declares each adapter's skill install strategy: `"symlink"`, `"translate-copy"`, or `"none"`
+- `AdapterCapabilities.mcpFormat` (`"json"` or `"toml"`) and `mcpRootKey` (e.g. `"mcpServers"`, `"servers"`, `"mcp_servers"`) declare how each adapter stores MCP config, used by `status.ts` for drift detection
+- `computeMcpServerHash()` in `manifest.ts` hashes only canonical MCP fields (command, args, env, url, serverUrl) with recursive key sorting, ignoring adapter-added fields like Copilot's `type`
 
 ## Testing
 
