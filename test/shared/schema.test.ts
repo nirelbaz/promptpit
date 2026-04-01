@@ -70,6 +70,27 @@ describe("skillFrontmatterSchema", () => {
     const result = skillFrontmatterSchema.safeParse(missing);
     expect(result.success).toBe(false);
   });
+
+  it("coerces allowed-tools string to array", () => {
+    const input = { name: "s", description: "d", "allowed-tools": "Read" };
+    const result = skillFrontmatterSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    expect(result.data!["allowed-tools"]).toEqual(["Read"]);
+  });
+
+  it("accepts allowed-tools as array", () => {
+    const input = { name: "s", description: "d", "allowed-tools": ["Read", "Edit"] };
+    const result = skillFrontmatterSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    expect(result.data!["allowed-tools"]).toEqual(["Read", "Edit"]);
+  });
+
+  it("coerces context string to array", () => {
+    const input = { name: "s", description: "d", context: "file.md" };
+    const result = skillFrontmatterSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    expect(result.data!.context).toEqual(["file.md"]);
+  });
 });
 
 describe("mcpServerSchema", () => {
