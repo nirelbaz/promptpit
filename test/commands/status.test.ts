@@ -168,7 +168,7 @@ describe("pit status", () => {
         stackVersion: "1.0.0",
         installedAt: new Date().toISOString(),
         adapters: {
-          "mcp-standard": {
+          "standards": {
             mcp: { "my-server": { hash: computeHash(JSON.stringify(mcpConfig.mcpServers["my-server"])) } },
           },
         },
@@ -335,7 +335,7 @@ describe("pit status", () => {
         stackVersion: "1.0.0",
         installedAt: new Date().toISOString(),
         adapters: {
-          "mcp-standard": {
+          "standards": {
             mcp: {
               "server-a": { hash: "sha256:aaa" },
               "server-b": { hash: "sha256:bbb" },
@@ -363,7 +363,7 @@ describe("pit status", () => {
         stackVersion: "1.0.0",
         installedAt: new Date().toISOString(),
         adapters: {
-          "mcp-standard": {
+          "standards": {
             mcp: { "my-server": { hash: "sha256:aaa" } },
           },
         },
@@ -373,7 +373,7 @@ describe("pit status", () => {
 
     const output = await captureOutput(() => statusCommand(dir, { verbose: true }));
     expect(output).toContain("my-stack");
-    expect(output).toContain("mcp-standard");
+    expect(output).toContain("standards");
   });
 
   it("--verbose with empty adapter (no skills, no MCP, no instructions)", async () => {
@@ -400,7 +400,7 @@ describe("pit status", () => {
   it("--verbose with multiple stacks and multiple adapters", async () => {
     const dir = await makeTmpDir();
 
-    // Stack A: claude-code with 1 skill, mcp-standard with 1 MCP
+    // Stack A: claude-code with 1 skill, standards with 1 MCP
     const skillDirA = path.join(dir, ".agents", "skills", "lint");
     await mkdir(skillDirA, { recursive: true });
     const lintContent = "lint rules";
@@ -427,7 +427,7 @@ describe("pit status", () => {
             "claude-code": {
               skills: { lint: { hash: computeHash(lintContent) } },
             },
-            "mcp-standard": {
+            "standards": {
               mcp: { "db-server": { hash: computeHash(JSON.stringify(mcpConfig.mcpServers["db-server"])) } },
             },
           },
@@ -493,7 +493,7 @@ describe("pit status", () => {
               "deleted-one": { hash: "sha256:gone" },
             },
           },
-          "mcp-standard": {
+          "standards": {
             mcp: { "ok-server": { hash: computeHash(JSON.stringify(mcpConfig.mcpServers["ok-server"])) } },
           },
         },

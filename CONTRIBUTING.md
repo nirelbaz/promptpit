@@ -47,7 +47,7 @@ The adapter needs to implement:
 src/
 ├── cli.ts              # Commander.js entry point (collect, install, status, watch)
 ├── commands/           # collect.ts, install.ts, status.ts, watch.ts
-├── adapters/           # One file per AI tool + registry + shared utils (mcp-standard.ts for .mcp.json)
+├── adapters/           # One file per AI tool + registry + shared utils (standards.ts for cross-tool conventions)
 ├── core/               # stack.ts (bundle I/O), skill-store.ts, manifest.ts (install ledger), merger.ts, security.ts
 ├── sources/            # github.ts (clone + auto-collect)
 └── shared/             # schema.ts (Zod types + manifest schema), markers.ts, utils.ts, io.ts

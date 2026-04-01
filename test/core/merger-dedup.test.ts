@@ -16,7 +16,7 @@ describe("merger instruction hash dedup", () => {
   it("keeps both when instructions differ", () => {
     const result = mergeConfigs([
       makeConfig("claude-code", "Use TypeScript."),
-      makeConfig("agents-md", "Use Python."),
+      makeConfig("standards", "Use Python."),
     ]);
     expect(result.agentInstructions).toContain("Use TypeScript.");
     expect(result.agentInstructions).toContain("Use Python.");
@@ -26,7 +26,7 @@ describe("merger instruction hash dedup", () => {
     const shared = "# Instructions\n\nUse strict mode.";
     const result = mergeConfigs([
       makeConfig("claude-code", shared),
-      makeConfig("agents-md", shared),
+      makeConfig("standards", shared),
     ]);
     const matches = result.agentInstructions.match(/Use strict mode\./g) || [];
     expect(matches.length).toBe(1);
@@ -45,7 +45,7 @@ describe("merger instruction hash dedup", () => {
     const shared = "Same content";
     const result = mergeConfigs([
       makeConfig("claude-code", shared),
-      makeConfig("agents-md", shared),
+      makeConfig("standards", shared),
       makeConfig("cursor", "Different content"),
     ]);
     const sameMatches = result.agentInstructions.match(/Same content/g) || [];

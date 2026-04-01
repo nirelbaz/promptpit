@@ -9,7 +9,7 @@ import type {
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists, removeFileOrSymlink, symlinkOrCopy } from "../shared/utils.js";
-import { readSkillsFromDir, readMcpFromSettings, writeWithMarkers } from "./adapter-utils.js";
+import { readSkillsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -106,38 +106,15 @@ async function write(
     }
 
     // Write MCP config
-    if (Object.keys(stack.mcpServers).length > 0) {
-      const existingRaw = await readFileOrNull(p.mcp);
-      let settings: Record<string, unknown> = {};
-      if (existingRaw) {
-        try {
-          settings = JSON.parse(existingRaw);
-        } catch {
-          warnings.push(`Could not parse existing ${p.mcp}, creating new`);
-        }
-      }
-      settings.mcpServers = {
-        ...((settings.mcpServers as Record<string, unknown>) ?? {}),
-        ...stack.mcpServers,
-      };
-
-      if (!opts.dryRun) {
-        await writeFileEnsureDir(p.mcp, JSON.stringify(settings, null, 2));
-        filesWritten.push(p.mcp);
-      }
-    }
+    const mcpWritten = await mergeMcpIntoJson(
+      p.mcp,
+      stack.mcpServers,
+      warnings,
+      opts.dryRun,
+    );
+    if (mcpWritten) filesWritten.push(mcpWritten);
   } catch (err: unknown) {
-    if (err instanceof Error && "code" in err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === "EACCES" || code === "EPERM") {
-        const target = opts.global ? "user-level" : "project-level";
-        throw new Error(
-          `Cannot write to ${target} paths. Check file permissions.\n` +
-            `Attempted path: ${(err as NodeJS.ErrnoException).path ?? "unknown"}`,
-        );
-      }
-    }
-    throw err;
+    rethrowPermissionError(err, !!opts.global, "Claude Code paths");
   }
 
   return { filesWritten, filesSkipped: [], warnings };

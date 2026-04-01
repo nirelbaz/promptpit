@@ -96,23 +96,11 @@ export async function installStack(
       );
     }
 
-    // Always include agents-md for writing — AGENTS.md is the universal cross-tool output
-    if (!detected.some((d) => d.adapter.id === "agents-md")) {
-      const { agentsMdAdapter } = await import("../adapters/agents-md.js");
+    // Always include standards for writing — AGENTS.md + .mcp.json are universal cross-tool outputs
+    if (!detected.some((d) => d.adapter.id === "standards")) {
+      const { standardsAdapter } = await import("../adapters/standards.js");
       detected.push({
-        adapter: agentsMdAdapter,
-        detection: { detected: true, configPaths: [] },
-      });
-    }
-
-    // Always include mcp-standard for writing when stack has MCP servers
-    if (
-      Object.keys(bundle.mcpServers).length > 0 &&
-      !detected.some((d) => d.adapter.id === "mcp-standard")
-    ) {
-      const { mcpStandardAdapter } = await import("../adapters/mcp-standard.js");
-      detected.push({
-        adapter: mcpStandardAdapter,
+        adapter: standardsAdapter,
         detection: { detected: true, configPaths: [] },
       });
     }
@@ -158,9 +146,8 @@ export async function installStack(
       for (const { adapter } of detected) {
         const record: AdapterInstallRecord = {};
 
-        // Hash instructions — only for adapters that write marker-based instruction files.
-        // mcp-standard writes JSON (no instructions), so skip it.
-        if (bundle.agentInstructions && adapter.id !== "mcp-standard") {
+        // Hash instructions for adapters that write marker-based instruction files
+        if (bundle.agentInstructions) {
           const configPath = adapter.paths.project(target).config;
           if (configPath) {
             record.instructions = { hash: computeHash(bundle.agentInstructions.trim()) };

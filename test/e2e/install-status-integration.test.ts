@@ -78,20 +78,15 @@ describe("E2E: install → status integration", () => {
 
     // Check each adapter has correct counts
     for (const adapter of stack.adapters) {
-      if (adapter.adapterId === "mcp-standard") {
-        // mcp-standard should NOT have instructions
-        expect(adapter.hasInstructions).toBe(false);
-        // mcp-standard SHOULD have MCP count matching the stack's MCP servers
-        expect(adapter.mcpCount).toBeGreaterThan(0);
-      } else if (adapter.adapterId === "claude-code") {
+      if (adapter.adapterId === "claude-code") {
         // Claude Code should have instructions, skills, and MCP
         expect(adapter.hasInstructions).toBe(true);
         expect(adapter.skillCount).toBeGreaterThan(0);
         expect(adapter.mcpCount).toBeGreaterThan(0);
-      } else if (adapter.adapterId === "agents-md") {
-        // agents-md should have instructions but no MCP (it doesn't support MCP)
+      } else if (adapter.adapterId === "standards") {
+        // Standards should have instructions and MCP
         expect(adapter.hasInstructions).toBe(true);
-        expect(adapter.mcpCount).toBe(0);
+        expect(adapter.mcpCount).toBeGreaterThan(0);
       }
 
       // Every adapter should be synced right after install
