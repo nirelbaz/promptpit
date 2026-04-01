@@ -1,6 +1,6 @@
 {
   "name": "promptpit",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "The composition layer for AI agent stacks — bundle, install, and sync instructions, skills, and MCP servers across every coding tool",
   "type": "module",
   "bin": {

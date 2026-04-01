@@ -159,8 +159,14 @@ Added in v0.1.5. AGENTS.md adapter with fallback-only read during collect and al
 ### ~~Hybrid symlinks for skill installation~~
 Added in v0.1.6. Skills written to `.agents/skills/` as canonical location, symlinked into Claude Code, copied+translated for Cursor. Windows fallback to copies. `skillLinkStrategy` capability replaces boolean `skills` flag.
 
-### ~~Read `.mcp.json` during collect~~ (v0.2)
-### ~~Verbose status flag~~ (v0.2)
-### ~~Watch command~~ (v0.2)
-### ~~Status command~~ (v0.2)
-### ~~Recursive duplication on collect + install~~ (v0.2)
+### ~~Read `.mcp.json` during collect~~
+**Completed:** v0.2.0 (2026-04-01). Added `mcp-standard` adapter that reads/writes `.mcp.json` as a first-class project-level MCP config alongside adapter-specific paths.
+
+### ~~Status command~~
+**Completed:** v0.2.0 (2026-04-01). `pit status` shows installed stacks, per-adapter sync state, and drift detection via SHA-256 content hashes. Supports `--json` and `--short` output modes.
+
+### ~~Watch command~~
+**Completed:** v0.2.0 (2026-04-01). `pit watch` monitors `.agents/skills/` and re-translates skill files for non-symlinked adapters (Cursor `.mdc`) when they change. 200ms debounce for batch changes.
+
+### ~~Recursive duplication on collect + install~~
+**Completed:** v0.2.0 (2026-04-01). `stripAllMarkerBlocks()` removes installed content during collect. Instruction hash dedup in the merger prevents identical content from multiple adapters being collected twice. Round-trip collect→install→collect now produces identical output.
