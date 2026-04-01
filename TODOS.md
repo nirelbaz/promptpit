@@ -2,27 +2,8 @@
 
 ## v0.2
 
-### Read `.mcp.json` during collect
-`.mcp.json` at project root is the emerging project-level MCP standard (Claude Code popularized it, teams check it into git). Currently we only read MCP from adapter-specific paths (`.claude/settings.json`, `.cursor/mcp.json`). Should read `.mcp.json` directly as a first-class input during collect, and write it as an output during install alongside adapter-specific configs.
-
 ### Verbose status flag
 `pit status --verbose` (or `-v`) shows detailed info per adapter: skill names, MCP server names, instruction file paths, and individual hash status for each artifact. The default output stays compact (counts only), verbose expands to full inventory. Useful for debugging drift and verifying exactly what's installed.
-
-### Watch command
-`pit watch` — lightweight daemon using `fs.watch` on `.agents/skills/` that auto-regenerates translated copies (Cursor `.mdc`, Windsurf `.md` rules) when canonical SKILL.md files change. Symlinked tools (Claude Code, Codex) already see changes for free. Turns pit from an install-time tool into a live sync bus. Depends on hybrid symlinks being implemented first.
-
-### Status command
-`pit status` — show what's installed, what's in `.promptpit/`, what's drifted since install. The "git status" for AI agent stacks. Answers the first question teams will ask: "what's even installed right now?"
-
-### Recursive duplication on collect + install
-When `pit collect` reads CLAUDE.md, it captures everything including content previously installed by `pit install` (marked blocks). This causes two problems:
-
-1. **Installed stacks get re-collected** — marked blocks from other stacks get baked into the bundle as plain text, causing recursive nesting on re-install.
-2. **Project content duplicates on re-install** — the project's native CLAUDE.md content gets collected into the bundle. When the bundle is installed back (e.g. team re-sync from shared `.promptpit/`), that content appears twice: once as the file's native content, once inside markers.
-
-**Core challenge:** The file has no concept of "what's project-native vs what was installed" beyond the marker blocks. Stripping markers on collect fixes problem 1 but not problem 2. Need a design that cleanly separates project content from stack content in both collect and install flows.
-
-**Current mitigation:** The agents-md adapter uses fallback-only read during collect — AGENTS.md is only read when no other adapters (claude-code, cursor) are detected. This prevents the most common duplication case (CLAUDE.md + AGENTS.md with similar content) but doesn't solve the general problem. A full deduplication solution (content hashing, similarity detection across adapter outputs) is still needed.
 
 ## v0.2.x
 
@@ -145,3 +126,15 @@ Added in v0.1.5. AGENTS.md adapter with fallback-only read during collect and al
 
 ### ~~Hybrid symlinks for skill installation~~
 Added in v0.1.6. Skills written to `.agents/skills/` as canonical location, symlinked into Claude Code, copied+translated for Cursor. Windows fallback to copies. `skillLinkStrategy` capability replaces boolean `skills` flag.
+
+### ~~Read `.mcp.json` during collect~~
+**Completed:** v0.2.0 (2026-04-01). Added `mcp-standard` adapter that reads/writes `.mcp.json` as a first-class project-level MCP config alongside adapter-specific paths.
+
+### ~~Status command~~
+**Completed:** v0.2.0 (2026-04-01). `pit status` shows installed stacks, per-adapter sync state, and drift detection via SHA-256 content hashes. Supports `--json` and `--short` output modes.
+
+### ~~Watch command~~
+**Completed:** v0.2.0 (2026-04-01). `pit watch` monitors `.agents/skills/` and re-translates skill files for non-symlinked adapters (Cursor `.mdc`) when they change. 200ms debounce for batch changes.
+
+### ~~Recursive duplication on collect + install~~
+**Completed:** v0.2.0 (2026-04-01). `stripAllMarkerBlocks()` removes installed content during collect. Instruction hash dedup in the merger prevents identical content from multiple adapters being collected twice. Round-trip collect→install→collect now produces identical output.
