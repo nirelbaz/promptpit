@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.7 (2026-04-01)
+
+### Added
+
+- `pit validate` checks if a `.promptpit/` stack is well-formed before publishing or installing. Validates stack.json (schema), agent.promptpit.md (frontmatter), skills (frontmatter per skill), mcp.json (config schema), and .env.example (dangerous env names). Reports all errors at once instead of failing on the first one. Supports `--json` for CI integration. Exit 0 when valid (warnings allowed), exit 1 on errors
+- Optional agnix integration. When agnix is installed (`npm i -D agnix`), `pit validate` auto-detects the binary and runs 385+ adapter-specific lint rules on top of the built-in checks. Diagnostics from agnix appear in a separate section. If agnix isn't installed, a one-line tip suggests it
+
 ## 0.2.6 (2026-04-01)
 
 ### Added
