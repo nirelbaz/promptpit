@@ -1,7 +1,7 @@
 {
   "name": "promptpit",
   "version": "0.2.2",
-  "description": "Portable AI agent stacks — collect, install, and share across Claude Code, Cursor, and more",
+  "description": "The composition layer for AI agent stacks — bundle, install, and sync instructions, skills, and MCP servers across every coding tool",
   "type": "module",
   "bin": {
     "pit": "./dist/cli.js"

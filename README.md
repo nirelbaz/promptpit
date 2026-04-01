@@ -3,25 +3,24 @@
 [![npm](https://img.shields.io/npm/v/promptpit)](https://www.npmjs.com/package/promptpit)
 [![license](https://img.shields.io/github/license/nirelbaz/promptpit)](LICENSE)
 
-Every AI coding tool stores config differently. Claude Code uses CLAUDE.md, Cursor uses .cursorrules. Sharing your setup means copy-pasting into formats that only work for one tool.
+Every AI tool has its own config files. pit turns them into one bundle you can share and actually keep track of.
 
-pit fixes that. `pit collect` bundles your configs, `pit install` writes them into each tool's native format, `pit status` shows what's installed and what's drifted, and `pit watch` keeps translated copies in sync when skills change. Point it at any GitHub repo, even ones that don't use promptpit, and it auto-detects what's there.
+`pit collect` to bundle. `pit install` to write it out for each tool. `pit status` to see what drifted. Commit `.promptpit/` and your team stays in sync.
 
 ```sh
-npx promptpit install github:nirelbaz/promptpit-starter
+pit collect        # bundle your AI config into .promptpit/
+pit install        # write it out for each tool
+pit status         # see what drifted
 ```
 
 ## Features
 
-- Install directly from any GitHub repo, even ones that don't use promptpit
-- SKILL.md files auto-convert to .mdc for Cursor
-- Commit `.promptpit/` to your repo, teammates run `pit install`, everyone gets the same setup
-- Secrets are auto-stripped from MCP configs during collect
-- `pit status` shows what's installed, what's synced, what's drifted
-- `pit watch` auto-re-translates skills when they change
-- `.mcp.json` project-level MCP configs read and written automatically
-- Install manifest tracks everything with content hashes for drift detection
-- Supports Claude Code and Cursor today, new tools are one adapter file to add
+- Install from any GitHub repo, even ones that don't use promptpit
+- Skills follow the [Agent Skills](https://agentskills.io) spec, symlinked or translated per tool
+- `pit status` shows what's synced and what's drifted
+- `.mcp.json` and MCP configs handled automatically, secrets stripped during collect
+- Multiple stacks coexist, re-installs replace cleanly
+- Supports Claude Code and Cursor today, more adapters coming (see [TODOS.md](TODOS.md))
 
 ## Installation
 
@@ -37,25 +36,13 @@ npx promptpit <command>
 
 ## Usage
 
-Install someone's AI stack from GitHub:
-
-```sh
-npx promptpit install github:nirelbaz/promptpit-starter
-```
-
-This clones the repo, reads its AI tool configs, detects which tools you have locally (Claude Code, Cursor), and writes everything in each tool's format. Skills, agent instructions, MCP server configs, and env vars are all handled.
-
-If the repo doesn't have a `.promptpit/` bundle, pit auto-collects one from the raw configs it finds.
-
-## Collecting a stack
-
-Bundle your project's AI tool configs into a `.promptpit/` directory:
+### Collect your config
 
 ```sh
 pit collect
 ```
 
-This scans for Claude Code and Cursor configs, merges them, strips secrets from MCP configs, and writes:
+Scans for Claude Code and Cursor configs, merges them, strips secrets from MCP configs, and writes:
 
 ```
 .promptpit/
@@ -66,9 +53,7 @@ This scans for Claude Code and Cursor configs, merges them, strips secrets from 
 └── .env.example        # Required environment variables
 ```
 
-## Installing a stack
-
-Install from a local bundle, a GitHub repo, or a specific tag:
+### Install a stack
 
 ```sh
 pit install                              # from .promptpit/ in current dir
@@ -78,17 +63,11 @@ pit install github:user/repo@v2.0       # specific tag or branch
 pit install github:user/repo --global   # install to ~/.claude/ and ~/.cursor/
 ```
 
-pit detects which AI tools are in your project and writes config in each one's format. Content is wrapped in idempotent markers, so multiple stacks coexist and re-installs replace cleanly.
+pit detects which AI tools are in your project and writes config in each one's format. If the repo doesn't have a `.promptpit/` bundle, pit auto-collects one from the raw configs it finds.
 
-## Team setup
+### Team setup
 
-Commit `.promptpit/` to your repo. Teammates install with:
-
-```sh
-pit install
-```
-
-Everyone gets the same config in their tool's format.
+Commit `.promptpit/` to your repo. Teammates run `pit install`, everyone gets the same config.
 
 Add `.promptpit/` to your AI tool's ignore list so it doesn't scan the raw bundle files. For Claude Code, add `.promptpit` to `ignorePatterns` in `.claude/settings.json`. For Cursor, add it to `.cursorignore`.
 
@@ -98,10 +77,10 @@ Add `.promptpit/` to your AI tool's ignore list so it doesn't scan the raw bundl
 |------|------|-------|--------------|
 | Claude Code | CLAUDE.md, .claude/skills/, .claude/settings.json | Symlinked SKILL.md | skill.md |
 | Cursor | .cursorrules, .cursor/rules/, .cursor/mcp.json | Auto-converted .mdc | mdc |
-| AGENTS.md | AGENTS.md (fallback) | Always written | md |
-| .mcp.json | .mcp.json (project-level MCP) | Always written | json |
 
-Skills are installed to `.agents/skills/` as the canonical location (matching the skills.sh ecosystem convention), then symlinked into tool-native paths. Tools that need different formats (like Cursor's .mdc) get translated copies. Windows falls back to copies when symlinks aren't available.
+pit also writes AGENTS.md (cross-tool standard, read by 60+ tools) and .mcp.json (project-level MCP config) on every install.
+
+Skills are installed to `.agents/skills/` as the canonical location (matching the [Agent Skills](https://agentskills.io) ecosystem convention), then symlinked into tool-native paths. Tools that need different formats (like Cursor's .mdc) get translated copies. Windows falls back to copies when symlinks aren't available.
 
 Adding a new tool is one file plus one registry entry. See [CONTRIBUTING.md](CONTRIBUTING.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -126,13 +105,19 @@ npm run lint      # TypeScript strict mode check
 
 ## Roadmap
 
-See [TODOS.md](TODOS.md) for planned features: more adapters, update/uninstall commands, stack composition, and a registry.
+See [TODOS.md](TODOS.md) for the full roadmap. The big milestones:
+
+- **v0.3 (Team Platform):** Codex and Copilot adapters, `pit check` for CI, polished drift detection
+- **v0.5 (Stack Composer):** Stack composition via `extends` in stack.json, `pit diff`, `pit update`
+- **v1.0 (Ecosystem Bridge):** Multi-source install (skills.sh, SkillsMP, cursor.directory), `pit publish`, `pit search`
 
 ## Related
 
-- [gstack](https://github.com/garrytan/gstack) - AI coding skill stack for Claude Code (works as a promptpit source)
-- [promptpit-starter](https://github.com/nirelbaz/promptpit-starter) - starter kit with 7 skills for Claude Code and Cursor
-- [MCP](https://modelcontextprotocol.io/) - Model Context Protocol, the server config format pit reads and writes
+- [Agent Skills](https://agentskills.io) - Open spec for portable AI agent skills
+- [skills.sh](https://skills.sh) - Vercel's skill package manager
+- [gstack](https://github.com/garrytan/gstack) - AI coding skill stack for Claude Code
+- [promptpit-starter](https://github.com/nirelbaz/promptpit-starter) - Starter kit with 7 skills for Claude Code and Cursor
+- [MCP](https://modelcontextprotocol.io/) - Model Context Protocol
 
 ## License
 
