@@ -1,9 +1,8 @@
 import path from "node:path";
 import chalk from "chalk";
 import { readManifest } from "../core/manifest.js";
-import { readFileOrNull } from "../shared/utils.js";
-import { stackManifestSchema, mcpConfigSchema } from "../shared/schema.js";
-import type { InstallManifest, StackManifest, McpConfig } from "../shared/schema.js";
+import { tryReadStackManifest, tryReadMcpConfig } from "../core/stack.js";
+import type { InstallManifest, InstallEntry } from "../shared/schema.js";
 import { readSkillsFromDir } from "../adapters/adapter-utils.js";
 import { computeStatus } from "./status.js";
 import type { ArtifactState, StatusResult } from "./status.js";
@@ -38,41 +37,29 @@ export interface CheckResult {
   };
 }
 
-async function readStackManifest(root: string): Promise<StackManifest | null> {
-  const stackPath = path.join(root, ".promptpit", "stack.json");
-  const raw = await readFileOrNull(stackPath);
-  if (!raw) return null;
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
+/** Collect all installed names for a given artifact key across all adapters */
+function collectInstalledNames(
+  entry: InstallEntry,
+  key: "skills" | "mcp",
+): Set<string> {
+  const names = new Set<string>();
+  for (const record of Object.values(entry.adapters)) {
+    const artifacts = record[key];
+    if (artifacts) {
+      for (const name of Object.keys(artifacts)) {
+        names.add(name);
+      }
+    }
   }
-
-  const result = stackManifestSchema.safeParse(parsed);
-  return result.success ? result.data : null;
-}
-
-async function readStackMcp(root: string): Promise<McpConfig> {
-  const mcpPath = path.join(root, ".promptpit", "mcp.json");
-  const raw = await readFileOrNull(mcpPath);
-  if (!raw) return {};
-
-  try {
-    const parsed = JSON.parse(raw);
-    const result = mcpConfigSchema.safeParse(parsed);
-    return result.success ? result.data : {};
-  } catch {
-    return {};
-  }
+  return names;
 }
 
 async function checkFreshness(
   root: string,
   manifest: InstallManifest,
 ): Promise<CheckResult["freshness"]> {
-  const stackManifest = await readStackManifest(root);
+  const stackDir = path.join(root, ".promptpit");
+  const stackManifest = await tryReadStackManifest(stackDir);
   if (!stackManifest) {
     return { pass: true, skipped: true, issues: [] };
   }
@@ -95,17 +82,10 @@ async function checkFreshness(
     });
   }
 
-  // Check skills: read actual skill files from .promptpit/skills/
-  const skillsDir = path.join(root, ".promptpit", "skills");
+  // Check skills
+  const skillsDir = path.join(stackDir, "skills");
   const stackSkills = await readSkillsFromDir(skillsDir);
-  const installedSkillNames = new Set<string>();
-  for (const record of Object.values(entry.adapters)) {
-    if (record.skills) {
-      for (const name of Object.keys(record.skills)) {
-        installedSkillNames.add(name);
-      }
-    }
-  }
+  const installedSkillNames = collectInstalledNames(entry, "skills");
 
   for (const skill of stackSkills) {
     if (!installedSkillNames.has(skill.name)) {
@@ -116,15 +96,9 @@ async function checkFreshness(
   }
 
   // Check MCP servers
-  const stackMcp = await readStackMcp(root);
-  const installedMcpNames = new Set<string>();
-  for (const record of Object.values(entry.adapters)) {
-    if (record.mcp) {
-      for (const name of Object.keys(record.mcp)) {
-        installedMcpNames.add(name);
-      }
-    }
-  }
+  const mcpPath = path.join(stackDir, "mcp.json");
+  const stackMcp = await tryReadMcpConfig(mcpPath);
+  const installedMcpNames = collectInstalledNames(entry, "mcp");
 
   for (const serverName of Object.keys(stackMcp)) {
     if (!installedMcpNames.has(serverName)) {
@@ -142,21 +116,17 @@ function checkDrift(statusResult: StatusResult): CheckResult["drift"] {
 
   for (const stack of statusResult.stacks) {
     for (const adapter of stack.adapters) {
-      const details = [
-        ...(adapter.instructionDetail ? [adapter.instructionDetail] : []),
-        ...adapter.skillDetails,
-        ...adapter.mcpDetails,
+      // Tag each detail with its artifact type
+      const tagged: { detail: typeof adapter.skillDetails[0]; artifact: string }[] = [
+        ...(adapter.instructionDetail
+          ? [{ detail: adapter.instructionDetail, artifact: "instructions" }]
+          : []),
+        ...adapter.skillDetails.map((d) => ({ detail: d, artifact: "skill" })),
+        ...adapter.mcpDetails.map((d) => ({ detail: d, artifact: "mcp" })),
       ];
 
-      for (const detail of details) {
+      for (const { detail, artifact } of tagged) {
         if (detail.state !== "synced") {
-          const artifact =
-            detail === adapter.instructionDetail
-              ? "instructions"
-              : adapter.skillDetails.includes(detail)
-                ? "skill"
-                : "mcp";
-
           issues.push({
             type: detail.state,
             artifact,
@@ -223,9 +193,11 @@ export async function checkCommand(
   opts: CheckOptions,
 ): Promise<CheckResult> {
   const manifest = await readManifest(root);
-  const statusResult = await computeStatus(root);
 
-  const freshness = await checkFreshness(root, manifest);
+  const [freshness, statusResult] = await Promise.all([
+    checkFreshness(root, manifest),
+    computeStatus(root),
+  ]);
   const drift = checkDrift(statusResult);
 
   const result: CheckResult = {
