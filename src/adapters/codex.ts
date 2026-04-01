@@ -112,6 +112,12 @@ async function write(
 
     if (Object.keys(stack.mcpServers).length > 0 && !opts.dryRun) {
       const existingToml = (await readFileOrNull(p.mcp)) ?? "";
+      const existingMcp = readMcpFromToml(existingToml);
+      for (const name of Object.keys(stack.mcpServers)) {
+        if (name in existingMcp) {
+          warnings.push(`MCP server "${name}" already exists in config.toml — overwriting with stack version`);
+        }
+      }
       const updated = writeMcpToToml(existingToml, stack.mcpServers);
       await writeFileEnsureDir(p.mcp, updated);
       filesWritten.push(p.mcp);
