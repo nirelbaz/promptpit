@@ -201,7 +201,7 @@ async function runAgnix(stackDir: string): Promise<ValidateResult["agnix"]> {
       "validate",
       "--format", "json",
       stackDir,
-    ]).catch((err: { stdout?: string; stderr?: string }) => {
+    ], { timeout: 15_000 }).catch((err: { stdout?: string; stderr?: string }) => {
       // agnix exits 1 on validation errors but still outputs JSON to stdout
       if (err.stdout) return { stdout: err.stdout, stderr: err.stderr ?? "" };
       throw err;

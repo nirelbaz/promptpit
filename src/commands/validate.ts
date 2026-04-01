@@ -54,8 +54,14 @@ function formatHuman(result: ValidateResult, stackDir: string): void {
     ".env.example",
   ];
 
+  const shownFiles = new Set(displayFiles);
   for (const file of displayFiles) {
     if (file === "stack.json" || filesWithDiags.has(file)) {
+      fileStatus(file, result.diagnostics);
+    }
+  }
+  for (const file of filesWithDiags) {
+    if (!shownFiles.has(file)) {
       fileStatus(file, result.diagnostics);
     }
   }

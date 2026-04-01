@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { validateStack } from "../../src/core/validate.js";
 import path from "node:path";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 const VALID_STACK = path.resolve("test/__fixtures__/stacks/valid-stack");
@@ -58,6 +58,20 @@ describe("validateStack", () => {
     const result = await validateStack(INVALID_STACK);
     expect(result.diagnostics.some((d) => d.file === "mcp.json" && d.level === "error")).toBe(true);
     expect(result.diagnostics.some((d) => d.file.startsWith("skills/") && d.level === "error")).toBe(true);
+  });
+
+  it("returns error for invalid agent.promptpit.md frontmatter", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-validate-"));
+    try {
+      await writeFile(path.join(dir, "stack.json"), JSON.stringify({ name: "test", version: "1.0.0" }));
+      await writeFile(path.join(dir, "agent.promptpit.md"), "---\n: bad yaml: [\n---\n");
+      const result = await validateStack(dir);
+      const agentDiag = result.diagnostics.find((d) => d.file === "agent.promptpit.md");
+      expect(agentDiag).toMatchObject({ level: "error", source: "pit" });
+      expect(agentDiag!.message).toContain("Invalid frontmatter");
+    } finally {
+      await rm(dir, { recursive: true });
+    }
   });
 
   it("returns warnings for dangerous env names", async () => {
