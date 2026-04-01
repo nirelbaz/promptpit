@@ -31,6 +31,8 @@ src/adapters/
 ├── adapter-utils.ts  # Shared read/write helpers (readSkillsFromDir, writeWithMarkers, etc.)
 ├── claude-code.ts    # Claude Code: CLAUDE.md, .claude/skills/ (symlinked), .claude/settings.json
 ├── cursor.ts         # Cursor: .cursorrules, .cursor/rules/ (.mdc, translated copies), .cursor/mcp.json
+├── codex.ts          # Codex CLI: AGENTS.md, .codex/skills/ (symlinked), .codex/config.toml (TOML)
+├── toml-utils.ts     # TOML read/write helpers for Codex CLI config.toml MCP sections
 └── standards.ts      # Cross-tool standards: AGENTS.md (instructions), .mcp.json (MCP servers), .agents/skills/
 ```
 
