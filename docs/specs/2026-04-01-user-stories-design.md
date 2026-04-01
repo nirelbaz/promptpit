@@ -84,7 +84,7 @@ Each journey follows this structure:
 
 **Tags:**
 - Status: supported
-- Test coverage: untested (install supports multi-adapter, no E2E for "add tool to existing")
+- Test coverage: tested (journeys-solo-dev.test.ts "install adds a new adapter without touching existing ones")
 - Priority: P1
 - Commands: `install`, `status`
 
@@ -163,7 +163,7 @@ Each journey follows this structure:
 
 **Tags:**
 - Status: supported
-- Test coverage: untested (no E2E for "update stack then re-install" flow)
+- Test coverage: tested (journeys-team-ci.test.ts "collect after config change updates the bundle")
 - Priority: P0
 - Commands: `collect`, `install`, `check`
 
@@ -183,7 +183,7 @@ Each journey follows this structure:
 
 **Tags:**
 - Status: supported
-- Test coverage: partial (check.test.ts covers freshness + version mismatch, not full CI pipeline flow)
+- Test coverage: tested (journeys-team-ci.test.ts "check fails when stack updated but not re-installed" + check.test.ts)
 - Priority: P0
 - Commands: `check`
 
@@ -222,7 +222,7 @@ Each journey follows this structure:
 
 **Tags:**
 - Status: supported
-- Test coverage: untested (install skips missing adapters, no explicit E2E for partial tooling scenario)
+- Test coverage: tested (journeys-onboarding.test.ts "install succeeds with only one tool present")
 - Priority: P0
 - Commands: `install`, `status`
 
@@ -397,7 +397,7 @@ Each journey follows this structure:
 
 **Tags:**
 - Status: supported
-- Test coverage: untested (no E2E for "collect from Cursor, install Claude Code" cross-tool migration)
+- Test coverage: tested (journeys-onboarding.test.ts "collect from Cursor project installs into Claude Code")
 - Priority: P1
 - Commands: `collect`, `install`, `status`
 
@@ -435,7 +435,7 @@ Each journey follows this structure:
 
 **Tags:**
 - Status: supported
-- Test coverage: partial (skill-store tests + round-trip covers skills in collect/install; no E2E for "author writes skill, team installs it" flow)
+- Test coverage: tested (journeys-skill-author.test.ts "skill in .agents/skills/ is collected and distributable" + skill-store.test.ts + round-trip.test.ts)
 - Priority: P1
 - Commands: `collect`, `install`
 
@@ -534,7 +534,7 @@ Each journey follows this structure:
 
 **Tags:**
 - Status: supported
-- Test coverage: untested (markers are per-stack so selective re-install works by design, but no explicit E2E test)
+- Test coverage: tested (journeys-edge-cases.test.ts "re-installing one stack does not clobber another")
 - Priority: P2
 - Commands: `install`, `status`
 
@@ -571,8 +571,8 @@ Each journey follows this structure:
 3. Suggests re-running `pit install` to regenerate
 
 **Tags:**
-- Status: partial
-- Test coverage: untested (readManifest may throw on malformed JSON; no test verifies graceful error message for corrupt installed.json)
+- Status: supported (computeStatus catches parse errors, returns empty result with hasManifest: false)
+- Test coverage: tested (journeys-edge-cases.test.ts "status handles corrupted installed.json gracefully")
 - Priority: P2
 - Commands: `status`
 
@@ -641,9 +641,42 @@ Each journey follows this structure:
 
 ---
 
-## Next Steps
+## Findings
 
-1. **Verify each journey** — Walk the codebase and tests to fill in the Status and Test Coverage tags
-2. **Gap analysis** — Identify journeys tagged `partial` or `unsupported`
-3. **Test backlog** — Create E2E tests for untested journeys, prioritized by P0 → P1 → P2
-4. **Roadmap input** — Feed `unsupported` journeys into Phase 2/3 planning
+### Summary
+
+- **29 journeys** across 9 personas
+- **22 supported + tested** (including 11 new E2E tests added during this verification)
+- **4 supported + untested** (not feasible to E2E test — see below)
+- **2 partial** (gaps identified — see below)
+- **1 N/A** (Journey 10 — non-user of pit, inert by design)
+
+### Gaps Identified
+
+| Journey | Issue | Severity | Recommendation |
+|---------|-------|----------|----------------|
+| 18. Drop a tool | Status shows `removed-by-user` for deleted markers but no explicit handling for "tool was uninstalled" | P2 | Consider graceful skip when adapter paths no longer exist |
+| 23. Stack conflict detection | MCP merge warns on conflict in merger.ts but warnings aren't surfaced clearly at install time | P2 | Surface MCP server name conflicts as visible warnings during `pit install` |
+
+### Not Testable as E2E
+
+| Journey | Reason |
+|---------|--------|
+| 10. Contributor without pit | Non-user — .promptpit/ is inert by design, nothing to test |
+| 11. Install from GitHub | Requires network access (git clone) |
+| 12. Install globally | Requires writing to user home directory (~/.claude, ~/.cursor) |
+| 20. Live skill development | Watch command requires filesystem watcher timing, hard to test deterministically |
+
+### New E2E Tests Added
+
+| Test File | Journeys Covered |
+|-----------|-----------------|
+| `test/e2e/journeys-solo-dev.test.ts` | 2, 25, 29 |
+| `test/e2e/journeys-team-ci.test.ts` | 5, 6/14, 15 |
+| `test/e2e/journeys-onboarding.test.ts` | 8, 17 |
+| `test/e2e/journeys-edge-cases.test.ts` | 24, 26, 28 |
+| `test/e2e/journeys-skill-author.test.ts` | 19 |
+
+### Key Discovery
+
+Journey 26 (corrupted manifest) was originally tagged as `partial` — we assumed `readManifest` would throw on invalid JSON. Testing revealed that `computeStatus` in `status.ts` already catches the error and returns `{ stacks: [], hasManifest: false }`, making this fully supported.
