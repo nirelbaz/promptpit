@@ -1,5 +1,4 @@
 import path from "node:path";
-import { accessSync } from "node:fs";
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
 import matter from "gray-matter";
@@ -180,42 +179,39 @@ export function mapAgnixDiagnostic(d: {
   };
 }
 
-function findAgnixBinary(): string | null {
-  const binPath = path.resolve("node_modules", ".bin", "agnix");
-  try {
-    accessSync(binPath);
-    return binPath;
-  } catch {
-    return null;
-  }
+async function execAgnix(bin: string, stackDir: string) {
+  return execFileAsync(bin, ["validate", "--format", "json", stackDir], {
+    timeout: 15_000,
+  }).catch((err: { stdout?: string; stderr?: string }) => {
+    // agnix exits 1 on validation errors but still outputs JSON to stdout
+    if (err.stdout) return { stdout: err.stdout, stderr: err.stderr ?? "" };
+    throw err;
+  });
 }
 
 async function runAgnix(stackDir: string): Promise<ValidateResult["agnix"]> {
-  const binPath = findAgnixBinary();
-  if (!binPath) {
-    return { available: false, diagnostics: [] };
+  // Try local install first, fall back to global (bare name resolved via PATH)
+  const localBin = path.resolve("node_modules", ".bin", "agnix");
+  let stdout: string;
+  try {
+    ({ stdout } = await execAgnix(localBin, stackDir));
+  } catch {
+    try {
+      ({ stdout } = await execAgnix("agnix", stackDir));
+    } catch {
+      return { available: false, diagnostics: [] };
+    }
   }
 
   try {
-    const { stdout } = await execFileAsync(binPath, [
-      "validate",
-      "--format", "json",
-      stackDir,
-    ], { timeout: 15_000 }).catch((err: { stdout?: string; stderr?: string }) => {
-      // agnix exits 1 on validation errors but still outputs JSON to stdout
-      if (err.stdout) return { stdout: err.stdout, stderr: err.stderr ?? "" };
-      throw err;
-    });
-
     const parsed = JSON.parse(stdout);
     if (!parsed.diagnostics || !Array.isArray(parsed.diagnostics)) {
       return { available: true, diagnostics: [] };
     }
-
     const diagnostics: Diagnostic[] = parsed.diagnostics.map(mapAgnixDiagnostic);
     return { available: true, diagnostics };
   } catch {
-    // Binary not executable, JSON parse failed, or other error — skip gracefully
+    // JSON parse failed — skip gracefully
     return { available: false, diagnostics: [] };
   }
 }
