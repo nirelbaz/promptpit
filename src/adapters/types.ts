@@ -47,9 +47,20 @@ export interface PlatformConfig {
 
 export interface WriteOptions {
   dryRun?: boolean;
+  verbose?: boolean;
   force?: boolean;
   global?: boolean;
   canonicalSkillPaths?: Map<string, string>;
+}
+
+// --- Dry-Run Reporting ---
+
+export interface DryRunEntry {
+  file: string;
+  action: "create" | "modify" | "skip";
+  detail?: string;
+  oldContent?: string;
+  newContent?: string;
 }
 
 // --- Write Result ---
@@ -58,6 +69,7 @@ export interface WriteResult {
   filesWritten: string[];
   filesSkipped: string[];
   warnings: string[];
+  dryRunEntries?: DryRunEntry[];
 }
 
 // --- The Adapter Contract ---
