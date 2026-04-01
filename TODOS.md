@@ -2,8 +2,7 @@
 
 ## v0.2
 
-### Verbose status flag
-`pit status --verbose` (or `-v`) shows detailed info per adapter: skill names, MCP server names, instruction file paths, and individual hash status for each artifact. The default output stays compact (counts only), verbose expands to full inventory. Useful for debugging drift and verifying exactly what's installed.
+All v0.2 tasks completed.
 
 ## v0.2.x
 

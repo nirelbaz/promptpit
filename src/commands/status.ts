@@ -10,10 +10,26 @@ import { log } from "../shared/io.js";
 export interface StatusOptions {
   json?: boolean;
   short?: boolean;
+  verbose?: boolean;
 }
 
 // Reconciliation states per the design doc
 type ArtifactState = "synced" | "drifted" | "deleted" | "removed-by-user" | "untracked";
+
+// Priority: deleted > removed-by-user > drifted > untracked > synced
+const STATE_SEVERITY: Record<ArtifactState, number> = {
+  synced: 0, untracked: 1, drifted: 2, "removed-by-user": 3, deleted: 4,
+};
+
+function escalateState(current: ArtifactState, next: ArtifactState): ArtifactState {
+  return STATE_SEVERITY[next] > STATE_SEVERITY[current] ? next : current;
+}
+
+interface ArtifactDetail {
+  name: string;
+  path: string;
+  state: ArtifactState;
+}
 
 interface AdapterStatus {
   adapterId: string;
@@ -22,6 +38,10 @@ interface AdapterStatus {
   hasInstructions: boolean;
   state: ArtifactState;
   driftedFiles: string[];
+  // Verbose details
+  instructionDetail?: ArtifactDetail;
+  skillDetails: ArtifactDetail[];
+  mcpDetails: ArtifactDetail[];
 }
 
 interface StackStatus {
@@ -47,6 +67,7 @@ async function checkAdapterStatus(
   let worstState: ArtifactState = "synced";
 
   // Check instructions
+  let instructionDetail: ArtifactDetail | undefined;
   if (record.instructions) {
     let filePath: string | undefined;
     try {
@@ -56,46 +77,54 @@ async function checkAdapterStatus(
       // Unknown adapter — skip instruction check
     }
     if (filePath) {
+      let instrState: ArtifactState = "synced";
       const content = await readFileOrNull(filePath);
       if (content == null) {
-        worstState = "deleted";
+        instrState = "deleted";
         driftedFiles.push(filePath);
       } else if (hasMarkers(content, stackName)) {
         const markerContent = extractMarkerContent(content, stackName);
         if (markerContent != null) {
           const currentHash = computeHash(markerContent);
           if (currentHash !== record.instructions.hash) {
-            worstState = "drifted";
+            instrState = "drifted";
             driftedFiles.push(filePath);
           }
         }
       } else {
         // Markers removed by user
-        worstState = "removed-by-user";
+        instrState = "removed-by-user";
         driftedFiles.push(filePath);
       }
+      worstState = escalateState(worstState, instrState);
+      instructionDetail = { name: "instructions", path: filePath, state: instrState };
     }
   }
 
   // Check skills — use canonical .agents/skills/ path (all adapters read from here)
   const skillEntries = record.skills ?? {};
+  const skillDetails: ArtifactDetail[] = [];
   for (const [skillName, skillRecord] of Object.entries(skillEntries)) {
     const skillPath = path.join(root, ".agents", "skills", skillName, "SKILL.md");
+    let skillState: ArtifactState = "synced";
     const content = await readFileOrNull(skillPath);
     if (content == null) {
-      if (worstState === "synced") worstState = "deleted";
+      skillState = "deleted";
       driftedFiles.push(skillPath);
     } else {
       const currentHash = computeHash(content);
       if (currentHash !== skillRecord.hash) {
-        if (worstState === "synced") worstState = "drifted";
+        skillState = "drifted";
         driftedFiles.push(skillPath);
       }
     }
+    worstState = escalateState(worstState, skillState);
+    skillDetails.push({ name: skillName, path: skillPath, state: skillState });
   }
 
   // Check MCP — read file once, check each server's hash
   const mcpEntries = record.mcp ?? {};
+  const mcpDetails: ArtifactDetail[] = [];
   if (Object.keys(mcpEntries).length > 0) {
     let mcpPath: string;
     try {
@@ -106,28 +135,39 @@ async function checkAdapterStatus(
     }
     const mcpRaw = await readFileOrNull(mcpPath);
     if (mcpRaw == null) {
-      if (worstState === "synced") worstState = "deleted";
+      worstState = escalateState(worstState, "deleted");
       driftedFiles.push(mcpPath);
+      for (const serverName of Object.keys(mcpEntries)) {
+        mcpDetails.push({ name: serverName, path: mcpPath, state: "deleted" });
+      }
     } else {
-      let mcpParsed: Record<string, unknown> = {};
+      let mcpParsed: Record<string, unknown> | null = null;
       try {
         const parsed = JSON.parse(mcpRaw);
         mcpParsed = (parsed.mcpServers ?? {}) as Record<string, unknown>;
       } catch {
-        if (worstState === "synced") worstState = "drifted";
+        worstState = escalateState(worstState, "drifted");
         driftedFiles.push(mcpPath);
+        for (const serverName of Object.keys(mcpEntries)) {
+          mcpDetails.push({ name: serverName, path: mcpPath, state: "drifted" });
+        }
       }
-      for (const [serverName, mcpRecord] of Object.entries(mcpEntries)) {
-        const serverConfig = mcpParsed[serverName];
-        if (!serverConfig) {
-          if (worstState === "synced") worstState = "deleted";
-          driftedFiles.push(mcpPath);
-        } else {
-          const currentHash = computeHash(JSON.stringify(serverConfig));
-          if (currentHash !== mcpRecord.hash) {
-            if (worstState === "synced") worstState = "drifted";
+      if (mcpParsed) {
+        for (const [serverName, mcpRecord] of Object.entries(mcpEntries)) {
+          let serverState: ArtifactState = "synced";
+          const serverConfig = mcpParsed[serverName];
+          if (!serverConfig) {
+            serverState = "deleted";
             driftedFiles.push(mcpPath);
+          } else {
+            const currentHash = computeHash(JSON.stringify(serverConfig));
+            if (currentHash !== mcpRecord.hash) {
+              serverState = "drifted";
+              driftedFiles.push(mcpPath);
+            }
           }
+          worstState = escalateState(worstState, serverState);
+          mcpDetails.push({ name: serverName, path: mcpPath, state: serverState });
         }
       }
     }
@@ -140,6 +180,9 @@ async function checkAdapterStatus(
     hasInstructions: !!record.instructions,
     state: worstState,
     driftedFiles,
+    instructionDetail,
+    skillDetails,
+    mcpDetails,
   };
 }
 
@@ -165,14 +208,9 @@ async function computeStatus(root: string): Promise<StatusResult> {
       adapters.push(status);
     }
 
-    // Priority: deleted > removed-by-user > drifted > untracked > synced
-    const nonSynced = adapters.find((a) => a.state !== "synced");
-    const overallState: ArtifactState = nonSynced
-      ? (adapters.find((a) => a.state === "deleted")?.state ??
-        adapters.find((a) => a.state === "removed-by-user")?.state ??
-        adapters.find((a) => a.state === "drifted")?.state ??
-        nonSynced.state)
-      : "synced";
+    const overallState = adapters.reduce<ArtifactState>(
+      (worst, a) => escalateState(worst, a.state), "synced",
+    );
 
     stacks.push({
       stack: entry.stack,
@@ -214,7 +252,14 @@ function formatAdapterSummary(a: AdapterStatus): string {
   return parts.join(", ");
 }
 
-function formatLong(result: StatusResult): void {
+function printDetailLine(d: ArtifactDetail, typeLabel: string, root: string): void {
+  const relPath = path.relative(root, d.path);
+  const label = chalk.dim(typeLabel.padEnd(14));
+  const name = typeLabel === "instructions" ? "" : `${d.name}  `;
+  console.log(`      ${stateIcon(d.state)} ${label}${name}${chalk.dim(relPath)}`);
+}
+
+function formatDetailed(result: StatusResult, root: string, verbose: boolean): void {
   if (!result.hasManifest || result.stacks.length === 0) {
     log.info("No stacks installed. Run `pit install` to get started.");
     return;
@@ -232,29 +277,48 @@ function formatLong(result: StatusResult): void {
       const summary = formatAdapterSummary(adapter);
       const colorFn = stateColor(adapter.state);
       console.log(`    ${icon} ${adapter.adapterId.padEnd(15)} ${colorFn(summary)}`);
-    }
-  }
 
-  // Show drifted files (deduplicated — same file can appear across multiple adapters/stacks)
-  const seenFiles = new Set<string>();
-  const allDrifted: { file: string; state: ArtifactState }[] = [];
-  for (const s of result.stacks) {
-    for (const a of s.adapters) {
-      for (const f of a.driftedFiles) {
-        if (!seenFiles.has(f)) {
-          seenFiles.add(f);
-          allDrifted.push({ file: f, state: a.state });
+      if (verbose) {
+        if (adapter.instructionDetail) {
+          printDetailLine(adapter.instructionDetail, "instructions", root);
+        }
+        for (const d of adapter.skillDetails) {
+          printDetailLine(d, "skill", root);
+        }
+        for (const d of adapter.mcpDetails) {
+          printDetailLine(d, "mcp", root);
         }
       }
     }
   }
 
-  if (allDrifted.length > 0) {
-    console.log();
-    console.log(chalk.bold("Changes:"));
-    for (const { file, state } of allDrifted) {
-      console.log(`  ${stateIcon(state)} ${file}`);
+  if (!verbose) {
+    // Show drifted files with per-artifact state (deduplicated)
+    const fileStates = new Map<string, ArtifactState>();
+    for (const s of result.stacks) {
+      for (const a of s.adapters) {
+        const details = [
+          ...(a.instructionDetail ? [a.instructionDetail] : []),
+          ...a.skillDetails,
+          ...a.mcpDetails,
+        ];
+        for (const d of details) {
+          if (d.state !== "synced" && !fileStates.has(d.path)) {
+            fileStates.set(d.path, d.state);
+          }
+        }
+      }
     }
+    const allDrifted = [...fileStates.entries()].map(([file, state]) => ({ file, state }));
+
+    if (allDrifted.length > 0) {
+      console.log();
+      console.log(chalk.bold("Changes:"));
+      for (const { file, state } of allDrifted) {
+        console.log(`  ${stateIcon(state)} ${file}`);
+      }
+    }
+
   }
 
   // Suggestions
@@ -297,6 +361,6 @@ export async function statusCommand(
   } else if (opts.short) {
     formatShort(result);
   } else {
-    formatLong(result);
+    formatDetailed(result, root, !!opts.verbose);
   }
 }

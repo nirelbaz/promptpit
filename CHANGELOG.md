@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.2 (2026-04-01)
+
+### Added
+
+- `pit status --verbose` (or `-v`) shows the full inventory per adapter: individual skill names, MCP server names, instruction file paths, and per-artifact sync state. Default output stays compact (counts only), verbose expands to the complete picture. Useful for debugging drift and verifying exactly what's installed
+- Suggestions ("Run `pit install`...") now appear in both default and verbose modes, so users debugging drift always see remediation hints
+
+### Changed
+
+- State severity logic centralized into `escalateState()` with a priority table, replacing scattered inline guards. Fixes a latent bug where instruction state was set unconditionally instead of escalating
+- `formatLong` and `formatVerbose` unified into a single `formatDetailed` renderer, eliminating 15 lines of duplication
+- Non-verbose "Changes" section now shows per-file state icons (e.g., a drifted skill shows M, a deleted skill shows D) instead of using the adapter's overall worst state for all files
+- Corrupt MCP JSON files now correctly mark all servers as "drifted" instead of misclassifying them as "deleted"
+- Test helper `captureOutput()` extracted, replacing 22 instances of spy/capture/restore boilerplate
+
 ## 0.2.1 (2026-04-01)
 
 ### Fixed
