@@ -7,6 +7,7 @@ import { skillFrontmatterSchema } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir } from "../shared/utils.js";
 import { log } from "../shared/io.js";
 import { hasMarkers, insertMarkers, replaceMarkerContent } from "../shared/markers.js";
+import type { DryRunEntry } from "./types.js";
 
 // Safe YAML parsing — prevents !!js/function RCE from untrusted SKILL.md (eng review #12)
 export const SAFE_MATTER_OPTIONS = {
@@ -67,13 +68,20 @@ export async function readMcpFromSettings(
   }
 }
 
+export interface MergeMcpResult {
+  written: string | null;
+  existed: boolean;
+  oldContent?: string;
+  newContent?: string;
+}
+
 export async function mergeMcpIntoJson(
   filePath: string,
   mcpServers: McpConfig,
   warnings: string[],
   dryRun?: boolean,
-): Promise<string | null> {
-  if (Object.keys(mcpServers).length === 0) return null;
+): Promise<MergeMcpResult> {
+  if (Object.keys(mcpServers).length === 0) return { written: null, existed: false };
 
   const existingRaw = await readFileOrNull(filePath);
   let config: Record<string, unknown> = {};
@@ -84,17 +92,21 @@ export async function mergeMcpIntoJson(
       warnings.push(`Could not parse existing ${filePath}, creating new`);
     }
   }
+  const existed = existingRaw != null;
   const currentMcp = (config.mcpServers as Record<string, unknown>) ?? {};
-  for (const name of Object.keys(mcpServers)) {
-    if (name in currentMcp) {
-      warnings.push(`MCP server "${name}" already exists in ${filePath} — overwriting with stack version`);
+  if (!dryRun) {
+    for (const name of Object.keys(mcpServers)) {
+      if (name in currentMcp) {
+        warnings.push(`MCP server "${name}" already exists in ${filePath} — overwriting with stack version`);
+      }
     }
   }
   config.mcpServers = { ...currentMcp, ...mcpServers };
+  const newContent = JSON.stringify(config, null, 2) + "\n";
 
-  if (dryRun) return null;
-  await writeFileEnsureDir(filePath, JSON.stringify(config, null, 2) + "\n");
-  return filePath;
+  if (dryRun) return { written: null, existed, oldContent: existingRaw ?? undefined, newContent };
+  await writeFileEnsureDir(filePath, newContent);
+  return { written: filePath, existed };
 }
 
 export function rethrowPermissionError(
@@ -114,6 +126,13 @@ export function rethrowPermissionError(
   throw err;
 }
 
+export interface WriteWithMarkersResult {
+  written: string | null;
+  content: string;
+  oldContent: string;
+  existed: boolean;
+}
+
 export async function writeWithMarkers(
   filePath: string,
   content: string,
@@ -121,26 +140,56 @@ export async function writeWithMarkers(
   version: string,
   adapterId: string,
   dryRun?: boolean,
-): Promise<string | null> {
+): Promise<WriteWithMarkersResult> {
   const existing = (await readFileOrNull(filePath)) ?? "";
+  const existed = existing.length > 0;
 
   let updated: string;
   if (hasMarkers(existing, stackName)) {
-    updated = replaceMarkerContent(
-      existing,
-      content,
-      stackName,
-      version,
-      adapterId,
-    );
+    updated = replaceMarkerContent(existing, content, stackName, version, adapterId);
   } else {
     updated = insertMarkers(existing, content, stackName, version, adapterId);
   }
 
   if (dryRun) {
-    return null;
+    return { written: null, content: updated, oldContent: existing, existed };
   }
 
   await writeFileEnsureDir(filePath, updated);
-  return filePath;
+  return { written: filePath, content: updated, oldContent: existing, existed };
+}
+
+// Build a DryRunEntry from a writeWithMarkers result
+export function markersDryRunEntry(
+  filePath: string,
+  result: WriteWithMarkersResult,
+  verbose?: boolean,
+): DryRunEntry {
+  return {
+    file: filePath,
+    action: result.existed ? "modify" : "create",
+    detail: result.existed ? "update marker block" : "insert marker block",
+    ...(verbose && result.existed && {
+      oldContent: result.oldContent,
+      newContent: result.content,
+    }),
+  };
+}
+
+// Build a DryRunEntry from a mergeMcpIntoJson result
+export function mcpDryRunEntry(
+  filePath: string,
+  serverCount: number,
+  mcpResult: MergeMcpResult,
+  verbose?: boolean,
+): DryRunEntry {
+  return {
+    file: filePath,
+    action: mcpResult.existed ? "modify" : "create",
+    detail: `add ${serverCount} MCP server${serverCount !== 1 ? "s" : ""}`,
+    ...(verbose && mcpResult.existed && mcpResult.oldContent != null && {
+      oldContent: mcpResult.oldContent,
+      newContent: mcpResult.newContent,
+    }),
+  };
 }
