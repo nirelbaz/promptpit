@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { collectStack } from "./commands/collect.js";
+import { initCommand } from "./commands/init.js";
 import { installStack } from "./commands/install.js";
 import { statusCommand } from "./commands/status.js";
 import { watchCommand } from "./commands/watch.js";
@@ -13,7 +14,25 @@ program
   .description(
     "Portable AI agent stacks — collect, install, and share across Claude Code, Cursor, and more",
   )
-  .version("0.1.0");
+  .version("0.3.0");
+
+program
+  .command("init")
+  .description("Scaffold a new .promptpit/ stack from scratch")
+  .argument("[dir]", "Project directory to initialize", ".")
+  .option("-o, --output <path>", "Output directory", ".promptpit")
+  .option("--force", "Overwrite existing stack.json")
+  .action(async (dir: string, opts: { output: string; force?: boolean }) => {
+    try {
+      const root = path.resolve(dir);
+      await initCommand(root, opts);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        log.error(err.message);
+      }
+      process.exit(1);
+    }
+  });
 
 program
   .command("collect")
