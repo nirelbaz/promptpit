@@ -158,8 +158,9 @@ export async function installStack(
       for (const { adapter } of detected) {
         const record: AdapterInstallRecord = {};
 
-        // Hash instructions — trim to match what extractMarkerContent returns
-        if (bundle.agentInstructions) {
+        // Hash instructions — only for adapters that write marker-based instruction files.
+        // mcp-standard writes JSON (no instructions), so skip it.
+        if (bundle.agentInstructions && adapter.id !== "mcp-standard") {
           const configPath = adapter.paths.project(target).config;
           if (configPath) {
             record.instructions = { hash: computeHash(bundle.agentInstructions.trim()) };

@@ -235,12 +235,19 @@ function formatLong(result: StatusResult): void {
     }
   }
 
-  // Show drifted files
-  const allDrifted = result.stacks.flatMap((s) =>
-    s.adapters.flatMap((a) =>
-      a.driftedFiles.map((f) => ({ file: f, state: a.state })),
-    ),
-  );
+  // Show drifted files (deduplicated — same file can appear across multiple adapters/stacks)
+  const seenFiles = new Set<string>();
+  const allDrifted: { file: string; state: ArtifactState }[] = [];
+  for (const s of result.stacks) {
+    for (const a of s.adapters) {
+      for (const f of a.driftedFiles) {
+        if (!seenFiles.has(f)) {
+          seenFiles.add(f);
+          allDrifted.push({ file: f, state: a.state });
+        }
+      }
+    }
+  }
 
   if (allDrifted.length > 0) {
     console.log();
