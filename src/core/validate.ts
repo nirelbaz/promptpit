@@ -180,7 +180,7 @@ export function mapAgnixDiagnostic(d: {
 }
 
 async function execAgnix(bin: string, stackDir: string) {
-  return execFileAsync(bin, ["validate", "--format", "json", stackDir], {
+  return execFileAsync(bin, ["--format", "json", "validate", stackDir], {
     timeout: 15_000,
   }).catch((err: { stdout?: string; stderr?: string }) => {
     // agnix exits 1 on validation errors but still outputs JSON to stdout
