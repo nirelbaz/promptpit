@@ -4,6 +4,7 @@ import { initCommand } from "./commands/init.js";
 import { installStack } from "./commands/install.js";
 import { statusCommand } from "./commands/status.js";
 import { watchCommand } from "./commands/watch.js";
+import { validateCommand, ExitError } from "./commands/validate.js";
 import { checkCommand } from "./commands/check.js";
 import path from "node:path";
 import { log } from "./shared/io.js";
@@ -114,6 +115,26 @@ program
       const root = path.resolve(dir);
       await watchCommand(root);
     } catch (err: unknown) {
+      if (err instanceof Error) {
+        log.error(err.message);
+      }
+      process.exit(1);
+    }
+  });
+
+program
+  .command("validate")
+  .description("Check if a stack is well-formed")
+  .argument("[dir]", "Stack directory to validate", ".promptpit")
+  .option("--json", "Output as JSON")
+  .action(async (dir: string, opts: { json?: boolean }) => {
+    try {
+      const stackDir = path.resolve(dir);
+      await validateCommand(stackDir, opts);
+    } catch (err: unknown) {
+      if (err instanceof ExitError) {
+        process.exit(1);
+      }
       if (err instanceof Error) {
         log.error(err.message);
       }

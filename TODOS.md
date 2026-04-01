@@ -37,9 +37,6 @@ Merged agents-md + mcp-standard into a single `standards` adapter that owns AGEN
 ### Dry-run output
 `--dry-run` flags exist but output is half-baked. Collect only shows secret stripping, install skips writes but doesn't report what would change. Need proper preview output: list files that would be created/modified, show diffs for config merges, summarize skills/MCP that would be added.
 
-### Validate command
-`pit validate` — check if a stack.json is valid, skills parse correctly, MCP configs are well-formed. Useful before publishing, and as a CI check for teams maintaining shared stacks. Can integrate with agnix (385 validation rules across 12+ AI tools, npm package with JS API: `await agnix.lint(dir, { target })`). Make agnix an optional peer dependency — detect at runtime, offer validation if present, suggest installing if not. Filter diagnostics by installed adapters (CC-* for Claude, CUR-* for Cursor, etc.).
-
 ## Phase 2 — Stack Composer (v0.3 -> v0.5)
 
 Goal: let teams layer stacks on top of each other. Company base stack + team overrides + personal preferences, all composable.
@@ -127,6 +124,9 @@ Curated list of tested repos in the README. Per entry: repo name + link + stars,
 `pit clean` — remove all AI agent config from a project (not just one stack). Broader than uninstall. Useful for starting fresh or switching stacks entirely.
 
 ## Done
+
+### ~~Validate command~~
+**Completed:** v0.2.7 (2026-04-01). `pit validate` checks stack.json, agent.promptpit.md, skills, mcp.json, and .env.example. Reports all errors at once. `--json` for CI. Optional agnix integration auto-detects the binary for 385+ adapter-specific lint rules.
 
 ### ~~Resolve auto-collect default behavior~~
 Auto-collect runs by default when GitHub repo has no .promptpit/. MCP trust prompt handles consent.
