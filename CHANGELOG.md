@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.9 (2026-04-01)
+
+### Fixed
+
+- HTTP remote MCP servers (url-only, no command) no longer silently break validation. Previously, a single remote server in your mcp.json would cause Zod schema validation to fail, dropping ALL MCP servers from the bundle with no warning. Now stdio and remote servers coexist correctly
+- `pit status` no longer reports false drift for Codex and Copilot MCP immediately after install. Codex TOML files and Copilot's `servers` key + `type` field were causing hash mismatches on every check. Status now reads each adapter's MCP format natively
+- Empty MCP server configs (`{}`) are now rejected by schema validation instead of silently accepted
+
+### Changed
+
+- MCP drift detection uses canonical hashing that ignores adapter-added fields (like Copilot's `type: "stdio"`). Only the fields you defined (command, args, env, url, serverUrl) are hashed, so adapters can transform configs without triggering false drift
+- Each adapter now declares `mcpFormat` ("json" or "toml") and `mcpRootKey` in its capabilities, replacing hardcoded adapter ID checks in the status command. Adding a new adapter with a different MCP format no longer requires modifying status.ts
+
 ## 0.2.8 (2026-04-01)
 
 ### Added

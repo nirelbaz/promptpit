@@ -8,6 +8,7 @@ import {
   upsertInstall,
   computeHash,
   normalizeForHash,
+  computeMcpServerHash,
   emptyManifest,
 } from "../../src/core/manifest.js";
 import type { InstallManifest, InstallEntry } from "../../src/shared/schema.js";
@@ -174,6 +175,52 @@ describe("manifest", () => {
       const a = normalizeForHash("hello\n\nworld");
       const b = normalizeForHash("hello  world");
       expect(a).toBe(b);
+    });
+  });
+
+  describe("computeMcpServerHash", () => {
+    it("produces deterministic hash for canonical fields", () => {
+      const server = { command: "npx", args: ["-y", "pkg"], env: { KEY: "val" } };
+      const hash1 = computeMcpServerHash(server);
+      const hash2 = computeMcpServerHash(server);
+      expect(hash1).toBe(hash2);
+      expect(hash1).toMatch(/^sha256:/);
+    });
+
+    it("ignores adapter-added fields like type", () => {
+      const base = { command: "npx", args: ["-y", "pkg"] };
+      const withType = { type: "stdio", command: "npx", args: ["-y", "pkg"] };
+      expect(computeMcpServerHash(base)).toBe(computeMcpServerHash(withType));
+    });
+
+    it("hashes HTTP remote servers (url only)", () => {
+      const server = { url: "https://api.example.com/mcp" };
+      const hash = computeMcpServerHash(server);
+      expect(hash).toMatch(/^sha256:/);
+    });
+
+    it("distinguishes different server configs", () => {
+      const a = { command: "npx", args: ["-y", "pkg-a"] };
+      const b = { command: "npx", args: ["-y", "pkg-b"] };
+      expect(computeMcpServerHash(a)).not.toBe(computeMcpServerHash(b));
+    });
+
+    it("produces same hash regardless of key order", () => {
+      const a = { command: "npx", env: { K: "v" }, args: ["x"] };
+      const b = { args: ["x"], command: "npx", env: { K: "v" } };
+      expect(computeMcpServerHash(a)).toBe(computeMcpServerHash(b));
+    });
+
+    it("distinguishes different env values", () => {
+      const a = { command: "npx", env: { API_KEY: "key-1" } };
+      const b = { command: "npx", env: { API_KEY: "key-2" } };
+      expect(computeMcpServerHash(a)).not.toBe(computeMcpServerHash(b));
+    });
+
+    it("sorts nested env keys for deterministic hashing", () => {
+      const a = { command: "npx", env: { Z_KEY: "z", A_KEY: "a" } };
+      const b = { command: "npx", env: { A_KEY: "a", Z_KEY: "z" } };
+      expect(computeMcpServerHash(a)).toBe(computeMcpServerHash(b));
     });
   });
 });

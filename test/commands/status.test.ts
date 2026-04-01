@@ -2,9 +2,10 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { statusCommand } from "../../src/commands/status.js";
-import { writeManifest, computeHash } from "../../src/core/manifest.js";
+import { statusCommand, computeStatus } from "../../src/commands/status.js";
+import { writeManifest, computeHash, computeMcpServerHash } from "../../src/core/manifest.js";
 import { insertMarkers } from "../../src/shared/markers.js";
+import { writeMcpToToml } from "../../src/adapters/toml-utils.js";
 import type { InstallManifest } from "../../src/shared/schema.js";
 
 describe("pit status", () => {
@@ -169,7 +170,7 @@ describe("pit status", () => {
         installedAt: new Date().toISOString(),
         adapters: {
           "standards": {
-            mcp: { "my-server": { hash: computeHash(JSON.stringify(mcpConfig.mcpServers["my-server"])) } },
+            mcp: { "my-server": { hash: computeMcpServerHash(mcpConfig.mcpServers["my-server"] as Record<string, unknown>) } },
           },
         },
       }],
@@ -428,7 +429,7 @@ describe("pit status", () => {
               skills: { lint: { hash: computeHash(lintContent) } },
             },
             "standards": {
-              mcp: { "db-server": { hash: computeHash(JSON.stringify(mcpConfig.mcpServers["db-server"])) } },
+              mcp: { "db-server": { hash: computeMcpServerHash(mcpConfig.mcpServers["db-server"] as Record<string, unknown>) } },
             },
           },
         },
@@ -494,7 +495,7 @@ describe("pit status", () => {
             },
           },
           "standards": {
-            mcp: { "ok-server": { hash: computeHash(JSON.stringify(mcpConfig.mcpServers["ok-server"])) } },
+            mcp: { "ok-server": { hash: computeMcpServerHash(mcpConfig.mcpServers["ok-server"] as Record<string, unknown>) } },
           },
         },
       }],
@@ -614,5 +615,162 @@ describe("pit status", () => {
     const line = calls[0]!.join(" ");
     expect(line).toContain("my-stack");
     spy.mockRestore();
+  });
+
+  // --- MCP drift detection per adapter ---
+
+  it("reports synced for Codex TOML MCP immediately after install", async () => {
+    const dir = await makeTmpDir();
+
+    // Write MCP in TOML format (as Codex adapter does)
+    const servers = {
+      context7: { command: "npx", args: ["-y", "@context7/mcp"], env: { API_KEY: "test" } },
+      playwright: { command: "npx", args: ["@playwright/mcp"] },
+    };
+    const tomlContent = writeMcpToToml("", servers);
+    await mkdir(path.join(dir, ".codex"), { recursive: true });
+    await writeFile(path.join(dir, ".codex", "config.toml"), tomlContent);
+
+    // Manifest with canonical hashes (as install.ts now computes them)
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "my-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          codex: {
+            mcp: {
+              context7: { hash: computeMcpServerHash(servers.context7 as unknown as Record<string, unknown>) },
+              playwright: { hash: computeMcpServerHash(servers.playwright as unknown as Record<string, unknown>) },
+            },
+          },
+        },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await computeStatus(dir);
+    const codexAdapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "codex")!;
+    expect(codexAdapter.state).toBe("synced");
+    for (const mcp of codexAdapter.mcpDetails) {
+      expect(mcp.state).toBe("synced");
+    }
+  });
+
+  it("reports synced for Copilot MCP immediately after install", async () => {
+    const dir = await makeTmpDir();
+
+    // Write MCP in Copilot format (servers key + type field)
+    const originalServers = {
+      context7: { command: "npx", args: ["-y", "@context7/mcp"] },
+    };
+    const copilotMcp = {
+      servers: {
+        context7: { type: "stdio", command: "npx", args: ["-y", "@context7/mcp"] },
+      },
+    };
+    await mkdir(path.join(dir, ".vscode"), { recursive: true });
+    await writeFile(path.join(dir, ".vscode", "mcp.json"), JSON.stringify(copilotMcp));
+
+    // Manifest with canonical hashes (from original config, no type field)
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "my-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          copilot: {
+            mcp: {
+              context7: { hash: computeMcpServerHash(originalServers.context7 as unknown as Record<string, unknown>) },
+            },
+          },
+        },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await computeStatus(dir);
+    const copilotAdapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "copilot")!;
+    expect(copilotAdapter.state).toBe("synced");
+    for (const mcp of copilotAdapter.mcpDetails) {
+      expect(mcp.state).toBe("synced");
+    }
+  });
+
+  it("detects real drift in Codex TOML MCP", async () => {
+    const dir = await makeTmpDir();
+
+    const originalServers = {
+      context7: { command: "npx", args: ["-y", "@context7/mcp"] },
+    };
+    // Write modified TOML (different args)
+    const modifiedServers = {
+      context7: { command: "npx", args: ["-y", "@context7/mcp", "--modified"] },
+    };
+    const tomlContent = writeMcpToToml("", modifiedServers);
+    await mkdir(path.join(dir, ".codex"), { recursive: true });
+    await writeFile(path.join(dir, ".codex", "config.toml"), tomlContent);
+
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "my-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          codex: {
+            mcp: {
+              context7: { hash: computeMcpServerHash(originalServers.context7 as unknown as Record<string, unknown>) },
+            },
+          },
+        },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await computeStatus(dir);
+    const codexAdapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "codex")!;
+    expect(codexAdapter.state).toBe("drifted");
+    expect(codexAdapter.mcpDetails[0]!.state).toBe("drifted");
+  });
+
+  it("detects real drift in Copilot MCP", async () => {
+    const dir = await makeTmpDir();
+
+    const originalServers = {
+      context7: { command: "npx", args: ["-y", "@context7/mcp"] },
+    };
+    // Write modified Copilot MCP (different args)
+    const copilotMcp = {
+      servers: {
+        context7: { type: "stdio", command: "npx", args: ["-y", "@context7/mcp", "--modified"] },
+      },
+    };
+    await mkdir(path.join(dir, ".vscode"), { recursive: true });
+    await writeFile(path.join(dir, ".vscode", "mcp.json"), JSON.stringify(copilotMcp));
+
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "my-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          copilot: {
+            mcp: {
+              context7: { hash: computeMcpServerHash(originalServers.context7 as unknown as Record<string, unknown>) },
+            },
+          },
+        },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await computeStatus(dir);
+    const copilotAdapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "copilot")!;
+    expect(copilotAdapter.state).toBe("drifted");
+    expect(copilotAdapter.mcpDetails[0]!.state).toBe("drifted");
   });
 });

@@ -29,6 +29,8 @@ export interface AdapterCapabilities {
   skillFormat: "skill.md" | "mdc" | "md";
   mcpStdio: boolean;
   mcpRemote: boolean;
+  mcpFormat: "json" | "toml";
+  mcpRootKey: string;
   agentsmd: boolean;
   hooks: boolean;
 }

@@ -197,6 +197,8 @@ export const copilotAdapter: PlatformAdapter = {
     skillFormat: "md",
     mcpStdio: true,
     mcpRemote: true,
+    mcpFormat: "json",
+    mcpRootKey: "servers",
     agentsmd: true,
     hooks: false,
   },

@@ -150,6 +150,8 @@ export const cursorAdapter: PlatformAdapter = {
     skillFormat: "mdc",
     mcpStdio: true,
     mcpRemote: false,
+    mcpFormat: "json",
+    mcpRootKey: "mcpServers",
     agentsmd: true,
     hooks: false,
   },

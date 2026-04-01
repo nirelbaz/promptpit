@@ -146,6 +146,8 @@ export const codexAdapter: PlatformAdapter = {
     skillFormat: "skill.md",
     mcpStdio: true,
     mcpRemote: false,
+    mcpFormat: "toml",
+    mcpRootKey: "mcp_servers",
     agentsmd: true,
     hooks: false,
   },
