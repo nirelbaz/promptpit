@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { listAdapters } from "../../src/adapters/registry.js";
 import { readStack } from "../../src/core/stack.js";
-import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { PlatformAdapter } from "../../src/adapters/types.js";
@@ -17,6 +17,13 @@ const ADAPTER_FIXTURES: Record<string, (dir: string) => Promise<void>> = {
   },
   standards: async (dir) => {
     await writeFile(path.join(dir, "AGENTS.md"), "# Test agents");
+  },
+  copilot: async (dir) => {
+    await mkdir(path.join(dir, ".github"), { recursive: true });
+    await writeFile(
+      path.join(dir, ".github", "copilot-instructions.md"),
+      "# Copilot instructions",
+    );
   },
 };
 

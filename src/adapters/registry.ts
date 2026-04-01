@@ -2,8 +2,9 @@ import type { PlatformAdapter, DetectionResult } from "./types.js";
 import { claudeCodeAdapter } from "./claude-code.js";
 import { cursorAdapter } from "./cursor.js";
 import { standardsAdapter } from "./standards.js";
+import { copilotAdapter } from "./copilot.js";
 
-const defaultAdapters: PlatformAdapter[] = [claudeCodeAdapter, cursorAdapter, standardsAdapter];
+const defaultAdapters: PlatformAdapter[] = [claudeCodeAdapter, cursorAdapter, standardsAdapter, copilotAdapter];
 let adapters: PlatformAdapter[] = [...defaultAdapters];
 
 export function getAdapter(id: string): PlatformAdapter {
