@@ -12,7 +12,7 @@ import type {
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
-import { readMcpFromSettings, writeWithMarkers } from "./adapter-utils.js";
+import { readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -120,36 +120,15 @@ async function write(
       }
     }
 
-    if (Object.keys(stack.mcpServers).length > 0) {
-      const existingRaw = await readFileOrNull(p.mcp);
-      let config: Record<string, unknown> = {};
-      if (existingRaw) {
-        try {
-          config = JSON.parse(existingRaw);
-        } catch {
-          warnings.push(`Could not parse existing ${p.mcp}, creating new`);
-        }
-      }
-      config.mcpServers = {
-        ...((config.mcpServers as Record<string, unknown>) ?? {}),
-        ...stack.mcpServers,
-      };
-      if (!opts.dryRun) {
-        await writeFileEnsureDir(p.mcp, JSON.stringify(config, null, 2));
-        filesWritten.push(p.mcp);
-      }
-    }
+    const mcpWritten = await mergeMcpIntoJson(
+      p.mcp,
+      stack.mcpServers,
+      warnings,
+      opts.dryRun,
+    );
+    if (mcpWritten) filesWritten.push(mcpWritten);
   } catch (err: unknown) {
-    if (err instanceof Error && "code" in err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === "EACCES" || code === "EPERM") {
-        const target = opts.global ? "user-level" : "project-level";
-        throw new Error(
-          `Cannot write to ${target} Cursor paths. Check file permissions.`,
-        );
-      }
-    }
-    throw err;
+    rethrowPermissionError(err, !!opts.global, "Cursor paths");
   }
 
   return { filesWritten, filesSkipped: [], warnings };
