@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.2.6 (2026-04-01)
+
+### Added
+
+- `pit check` verifies your AI config is fresh and in sync, designed for CI pipelines. Two-phase check: freshness compares `.promptpit/stack.json` against `installed.json` (catches forgotten installs, version mismatches, missing skills/MCP servers), drift compares installed files on disk against their recorded hashes (catches hand-edits and deletions). Exits non-zero on any problem. Supports `--json` for machine-readable output. Add `npx promptpit check` to your CI pipeline and never ship stale AI config again
+
+### Changed
+
+- `tryReadStackManifest()` and `tryReadMcpConfig()` extracted as shared helpers in `stack.ts`, eliminating duplication between `readStack()` and the new check command
+- `computeStatus()` and its supporting types now exported from `status.ts` for reuse by the check command
+
+## 0.2.5 (2026-04-01)
+
+### Added
+
+- Codex CLI adapter. `pit install` now detects Codex CLI projects and writes instructions to AGENTS.md, symlinks skills to `.codex/skills/`, and merges MCP servers into `.codex/config.toml` (TOML format). Codex joins Claude Code, Cursor, and Copilot as a Tier 1 adapter
+- TOML config support via `smol-toml`. Reads existing `config.toml` settings (model, approval policy, etc.) and preserves them when merging MCP servers. Codex-specific fields like `enabled_tools` and `startup_timeout_sec` are stripped during collect so stacks stay portable
+
+## 0.2.4 (2026-04-01)
+
+### Added
+
+- `pit init` scaffolds a new `.promptpit/` stack from scratch with interactive prompts. Asks for stack name, version, description, and author, then optionally creates agent instructions, MCP config, and .env.example files. Validates input against the stack schema before writing. Use `--force` to overwrite an existing stack, `--output` to target a custom directory
+- Default stack name auto-sanitized from the directory name (strips invalid characters, falls back to `my-stack`)
+- Agent instructions frontmatter now generated via `js-yaml` for correctness with special characters
+
+## 0.2.3 (2026-04-01)
+
+### Added
+
+- GitHub Copilot adapter (Tier 1). `pit install` now writes to Copilot's native config paths: instructions to `.github/copilot-instructions.md`, skills translated to `.github/instructions/*.instructions.md` with `applyTo` glob frontmatter, and MCP servers to `.vscode/mcp.json` with the correct `servers` root key and required `type` field per entry
+- `pit collect` now detects Copilot projects via `.github/copilot-instructions.md` and `.vscode/mcp.json`, and reads scoped instructions as rules
+- `pit watch` automatically re-translates skills for Copilot when `.agents/skills/` files change (same translate-copy strategy as Cursor)
+- Error message in `pit collect` now lists Copilot paths so users know what's detected
+
+### Changed
+
+- The separate `agents-md` and `mcp-standard` adapters are now a single `standards` adapter that owns all cross-tool conventions (AGENTS.md, .mcp.json, .agents/skills/). `pit install` writes both files in one pass instead of coordinating two adapters
+- MCP JSON merge logic and permission error handling extracted into shared utilities (`mergeMcpIntoJson`, `rethrowPermissionError`), reducing ~60 lines of duplication across claude-code, cursor, and standards adapters
+- All adapters that write MCP config now emit overwrite warnings when replacing existing servers, not just some of them
+- `pit collect` dedup logic simplified: reads all adapters, then clears MCP from standards when other MCP-capable adapters are present (instead of pre-filtering the read set)
+- `pit install` always-include logic consolidated from two separate blocks into one
+
 ## 0.2.2 (2026-04-01)
 
 ### Added

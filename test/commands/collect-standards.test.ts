@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { collectStack } from "../../src/commands/collect.js";
 
-describe("collect: agents-md fallback logic", () => {
+describe("collect: standards fallback logic", () => {
   let tmpDir: string;
   let outputDir: string;
 

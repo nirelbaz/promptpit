@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { listAdapters } from "../../src/adapters/registry.js";
 import { readStack } from "../../src/core/stack.js";
-import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { PlatformAdapter } from "../../src/adapters/types.js";
@@ -15,19 +15,20 @@ const ADAPTER_FIXTURES: Record<string, (dir: string) => Promise<void>> = {
   cursor: async (dir) => {
     await writeFile(path.join(dir, ".cursorrules"), "Test rules");
   },
-  "agents-md": async (dir) => {
+  codex: async (dir) => {
+    await writeFile(path.join(dir, "AGENTS.md"), "# Codex instructions");
+  },
+  standards: async (dir) => {
     await writeFile(path.join(dir, "AGENTS.md"), "# Test agents");
   },
-  "mcp-standard": async (dir) => {
+  copilot: async (dir) => {
+    await mkdir(path.join(dir, ".github"), { recursive: true });
     await writeFile(
-      path.join(dir, ".mcp.json"),
-      JSON.stringify({ mcpServers: {} }, null, 2),
+      path.join(dir, ".github", "copilot-instructions.md"),
+      "# Copilot instructions",
     );
   },
 };
-
-// Adapters that write JSON instead of marker-based text files
-const NON_MARKER_ADAPTERS = new Set(["mcp-standard"]);
 
 describe.each(listAdapters().map((a) => [a.id, a] as const))(
   "Adapter contract: %s",
@@ -69,7 +70,7 @@ describe.each(listAdapters().map((a) => [a.id, a] as const))(
 
     // 4. write() produces files with markers (marker-based adapters only)
     it("write() produces files with correct markers", async () => {
-      if (NON_MARKER_ADAPTERS.has(id)) return; // JSON adapters don't use markers
+
       const setup = ADAPTER_FIXTURES[id];
       if (setup) await setup(tmpDir);
       const bundle = await readStack(VALID_STACK);
@@ -84,7 +85,7 @@ describe.each(listAdapters().map((a) => [a.id, a] as const))(
 
     // 5. write() is idempotent
     it("write() is idempotent (run twice, same result)", async () => {
-      if (NON_MARKER_ADAPTERS.has(id)) return; // JSON adapters tested differently
+
       const setup = ADAPTER_FIXTURES[id];
       if (setup) await setup(tmpDir);
       const bundle = await readStack(VALID_STACK);
@@ -109,7 +110,7 @@ describe.each(listAdapters().map((a) => [a.id, a] as const))(
 
     // 7. write() preserves existing content outside markers (marker-based adapters only)
     it("write() preserves existing content outside markers", async () => {
-      if (NON_MARKER_ADAPTERS.has(id)) return; // JSON adapters merge, not marker-based
+
       const setup = ADAPTER_FIXTURES[id];
       if (setup) await setup(tmpDir);
 

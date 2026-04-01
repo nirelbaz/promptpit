@@ -5,11 +5,43 @@ import {
   stackManifestSchema,
   mcpConfigSchema,
   type StackBundle,
+  type StackManifest,
   type McpConfig,
 } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir } from "../shared/utils.js";
 import { readSkillsFromDir } from "../adapters/adapter-utils.js";
-import { log } from "../shared/io.js";
+
+
+/** Non-throwing read of stack.json — returns null if missing or invalid */
+export async function tryReadStackManifest(stackDir: string): Promise<StackManifest | null> {
+  const manifestPath = path.join(stackDir, "stack.json");
+  const raw = await readFileOrNull(manifestPath);
+  if (!raw) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  const result = stackManifestSchema.safeParse(parsed);
+  return result.success ? result.data : null;
+}
+
+/** Non-throwing read of mcp.json — returns empty config if missing or invalid */
+export async function tryReadMcpConfig(filePath: string): Promise<McpConfig> {
+  const raw = await readFileOrNull(filePath);
+  if (!raw) return {};
+
+  try {
+    const parsed = JSON.parse(raw);
+    const result = mcpConfigSchema.safeParse(parsed);
+    return result.success ? result.data : {};
+  } catch {
+    return {};
+  }
+}
 
 export async function readStack(stackDir: string): Promise<StackBundle> {
   const manifestPath = path.join(stackDir, "stack.json");
@@ -45,19 +77,7 @@ export async function readStack(stackDir: string): Promise<StackBundle> {
   const skills = await readSkillsFromDir(skillsDir);
 
   const mcpPath = path.join(stackDir, "mcp.json");
-  const mcpRaw = await readFileOrNull(mcpPath);
-  let mcpServers: McpConfig = {};
-  if (mcpRaw) {
-    try {
-      const parsed = JSON.parse(mcpRaw);
-      const mcpResult = mcpConfigSchema.safeParse(parsed);
-      if (mcpResult.success) {
-        mcpServers = mcpResult.data;
-      }
-    } catch {
-      log.warn(`Could not parse ${mcpPath}, skipping MCP config`);
-    }
-  }
+  const mcpServers = await tryReadMcpConfig(mcpPath);
 
   const envPath = path.join(stackDir, ".env.example");
   const envRaw = await readFileOrNull(envPath);
