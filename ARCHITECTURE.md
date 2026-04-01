@@ -31,8 +31,7 @@ src/adapters/
 ├── adapter-utils.ts  # Shared read/write helpers (readSkillsFromDir, writeWithMarkers, etc.)
 ├── claude-code.ts    # Claude Code: CLAUDE.md, .claude/skills/ (symlinked), .claude/settings.json
 ├── cursor.ts         # Cursor: .cursorrules, .cursor/rules/ (.mdc, translated copies), .cursor/mcp.json
-├── agents-md.ts      # AGENTS.md: universal cross-tool output, fallback-only read during collect
-└── mcp-standard.ts   # .mcp.json: project-level MCP config (emerging cross-tool standard)
+└── standards.ts      # Cross-tool standards: AGENTS.md (instructions), .mcp.json (MCP servers), .agents/skills/
 ```
 
 Adding a tool means one file plus one registry entry. The contract tests in `test/adapters/contract.test.ts` automatically validate any registered adapter against 7 checks.
