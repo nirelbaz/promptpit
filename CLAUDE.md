@@ -21,7 +21,7 @@ Adapter pattern with composition. Each AI tool is a plain object implementing `P
 src/
 ├── cli.ts              # Commander.js entry point
 ├── commands/           # init.ts, collect.ts, install.ts, status.ts, watch.ts
-├── adapters/           # claude-code.ts, cursor.ts, standards.ts, registry.ts, types.ts, adapter-utils.ts
+├── adapters/           # claude-code.ts, cursor.ts, codex.ts, standards.ts, copilot.ts, registry.ts, types.ts, adapter-utils.ts, toml-utils.ts
 ├── core/               # stack.ts, skill-store.ts, manifest.ts, merger.ts, security.ts
 ├── sources/            # github.ts (clone + auto-collect)
 └── shared/             # schema.ts (Zod + types), markers.ts, utils.ts, io.ts
