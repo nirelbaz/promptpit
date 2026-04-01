@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.6 (2026-04-01)
+
+### Added
+
+- `pit check` verifies your AI config is fresh and in sync, designed for CI pipelines. Two-phase check: freshness compares `.promptpit/stack.json` against `installed.json` (catches forgotten installs, version mismatches, missing skills/MCP servers), drift compares installed files on disk against their recorded hashes (catches hand-edits and deletions). Exits non-zero on any problem. Supports `--json` for machine-readable output. Add `npx promptpit check` to your CI pipeline and never ship stale AI config again
+
+### Changed
+
+- `tryReadStackManifest()` and `tryReadMcpConfig()` extracted as shared helpers in `stack.ts`, eliminating duplication between `readStack()` and the new check command
+- `computeStatus()` and its supporting types now exported from `status.ts` for reuse by the check command
+
 ## 0.2.5 (2026-04-01)
 
 ### Added
