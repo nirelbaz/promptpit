@@ -14,7 +14,7 @@ export interface StatusOptions {
 }
 
 // Reconciliation states per the design doc
-type ArtifactState = "synced" | "drifted" | "deleted" | "removed-by-user" | "untracked";
+export type ArtifactState = "synced" | "drifted" | "deleted" | "removed-by-user" | "untracked";
 
 // Priority: deleted > removed-by-user > drifted > untracked > synced
 const STATE_SEVERITY: Record<ArtifactState, number> = {
@@ -25,13 +25,13 @@ function escalateState(current: ArtifactState, next: ArtifactState): ArtifactSta
   return STATE_SEVERITY[next] > STATE_SEVERITY[current] ? next : current;
 }
 
-interface ArtifactDetail {
+export interface ArtifactDetail {
   name: string;
   path: string;
   state: ArtifactState;
 }
 
-interface AdapterStatus {
+export interface AdapterStatus {
   adapterId: string;
   skillCount: number;
   mcpCount: number;
@@ -44,7 +44,7 @@ interface AdapterStatus {
   mcpDetails: ArtifactDetail[];
 }
 
-interface StackStatus {
+export interface StackStatus {
   stack: string;
   version: string;
   source?: string;
@@ -52,7 +52,7 @@ interface StackStatus {
   overallState: ArtifactState;
 }
 
-interface StatusResult {
+export interface StatusResult {
   stacks: StackStatus[];
   hasManifest: boolean;
 }
@@ -186,7 +186,7 @@ async function checkAdapterStatus(
   };
 }
 
-async function computeStatus(root: string): Promise<StatusResult> {
+export async function computeStatus(root: string): Promise<StatusResult> {
   let manifest: InstallManifest;
   try {
     manifest = await readManifest(root);
