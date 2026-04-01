@@ -1,10 +1,14 @@
 # Changelog
 
-## 0.3.1 (2026-04-01)
+## 0.3.2 (2026-04-01)
 
 ### Changed
 
 - `pit validate` now finds agnix when installed globally (e.g., `npm i -g agnix`), not just as a local dev dependency. Local installs are still preferred when present.
+
+### Fixed
+
+- `pit collect` no longer skips skills that use a single string for `allowed-tools` or `context` in SKILL.md frontmatter (e.g., `allowed-tools: Read`). YAML parses these as strings, not arrays. The schema now coerces both forms automatically.
 
 ## 0.3.0 (2026-04-01) — Phase 1: Team Platform
 
