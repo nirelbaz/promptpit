@@ -70,6 +70,8 @@ export function agentToGitHubAgent(agentContent: string): string {
   return `---\n${yamlStr}\n---\n\n${parsed.content.trim()}\n`;
 }
 
+// Content retains Copilot-native format (same as how skill content works).
+// Translation happens at write time via agentToGitHubAgent.
 async function readCopilotAgents(agentsDir: string): Promise<AgentEntry[]> {
   const agentFiles = await fg("*.agent.md", {
     cwd: agentsDir,
