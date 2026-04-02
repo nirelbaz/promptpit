@@ -1,6 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { cursorAdapter, skillToMdc } from "../../src/adapters/cursor.js";
+import { describe, it, expect, afterEach } from "vitest";
+import { cursorAdapter, skillToMdc, ruleToMdc } from "../../src/adapters/cursor.js";
 import path from "node:path";
+import { mkdtemp, rm, readFile, writeFile, mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { readStack } from "../../src/core/stack.js";
 
 const FIXTURE_DIR = path.resolve("test/__fixtures__/cursor-project");
 const EMPTY_DIR = path.resolve("test/__fixtures__/bare-minimum");
@@ -32,6 +35,71 @@ describe("cursorAdapter", () => {
     it("reads MCP config", async () => {
       const config = await cursorAdapter.read(FIXTURE_DIR);
       expect(config.mcpServers).toHaveProperty("filesystem");
+    });
+
+    it("reads .mdc rules into RuleEntry format", async () => {
+      const config = await cursorAdapter.read(FIXTURE_DIR);
+      expect(config.rules).toHaveLength(1);
+      expect(config.rules[0].name).toBe("testing");
+      expect(config.rules[0].frontmatter.description).toBe("Testing rules");
+    });
+  });
+
+  describe("write rules", () => {
+    const tmpDirs: string[] = [];
+    afterEach(async () => {
+      for (const d of tmpDirs) await rm(d, { recursive: true, force: true });
+      tmpDirs.length = 0;
+    });
+
+    it("writes rules with rule- prefix to avoid skill collision", async () => {
+      const target = await mkdtemp(path.join(tmpdir(), "pit-cursor-rules-"));
+      tmpDirs.push(target);
+      await writeFile(path.join(target, ".cursorrules"), "");
+      await mkdir(path.join(target, ".cursor", "rules"), { recursive: true });
+
+      const bundle = await readStack(
+        path.resolve("test/__fixtures__/stacks/valid-stack"),
+      );
+
+      await cursorAdapter.write(target, bundle, {});
+
+      const testingRule = await readFile(
+        path.join(target, ".cursor", "rules", "rule-testing.mdc"), "utf-8",
+      );
+      expect(testingRule).toContain("description: Testing conventions");
+      expect(testingRule).toContain("globs:");
+      expect(testingRule).toContain("vitest");
+
+      const securityRule = await readFile(
+        path.join(target, ".cursor", "rules", "rule-security.mdc"), "utf-8",
+      );
+      expect(securityRule).toContain("description: Security guidelines");
+    });
+
+    it("does not double-prefix rule names that already have rule-", async () => {
+      const target = await mkdtemp(path.join(tmpdir(), "pit-cursor-nodup-"));
+      tmpDirs.push(target);
+      await writeFile(path.join(target, ".cursorrules"), "");
+      await mkdir(path.join(target, ".cursor", "rules"), { recursive: true });
+
+      const bundle = await readStack(
+        path.resolve("test/__fixtures__/stacks/valid-stack"),
+      );
+      // Simulate a rule that already has the prefix
+      bundle.rules = [{
+        name: "rule-already-prefixed",
+        path: "rules/rule-already-prefixed",
+        frontmatter: { name: "rule-already-prefixed", description: "Already prefixed" },
+        content: "---\nname: rule-already-prefixed\ndescription: Already prefixed\n---\n\nContent.\n",
+      }];
+
+      await cursorAdapter.write(target, bundle, {});
+
+      const content = await readFile(
+        path.join(target, ".cursor", "rules", "rule-already-prefixed.mdc"), "utf-8",
+      );
+      expect(content).toContain("Already prefixed");
     });
   });
 });
