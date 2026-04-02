@@ -140,6 +140,66 @@ describe("Codex CLI adapter", () => {
     });
   });
 
+  describe("inline agent writing", () => {
+    it("includes agents in marker block when writing instructions", async () => {
+      const bundle = await readStack(VALID_STACK);
+      await writeFile(path.join(tmpDir, "AGENTS.md"), "");
+      await codexAdapter.write(tmpDir, bundle, {});
+      const content = await readFile(path.join(tmpDir, "AGENTS.md"), "utf-8");
+      expect(content).toContain("## Custom Agents");
+      expect(content).toContain("### reviewer");
+      expect(content).toContain("security-focused code reviewer");
+    });
+
+    it("does not include agents section when bundle has no agents", async () => {
+      const dir = await mkdtemp(path.join(tmpdir(), "pit-codex-"));
+      await writeFile(
+        path.join(dir, "stack.json"),
+        JSON.stringify({ name: "no-agents", version: "1.0.0" }),
+      );
+      await writeFile(
+        path.join(dir, "agent.promptpit.md"),
+        "---\nname: no-agents\n---\n\nTest instructions.\n",
+      );
+      const bundle = await readStack(dir);
+      const target = await mkdtemp(path.join(tmpdir(), "pit-codex-target-"));
+      await writeFile(path.join(target, "AGENTS.md"), "");
+      await codexAdapter.write(target, bundle, {});
+      const content = await readFile(path.join(target, "AGENTS.md"), "utf-8");
+      expect(content).not.toContain("## Custom Agents");
+      await rm(dir, { recursive: true });
+      await rm(target, { recursive: true });
+    });
+
+    it("writes agents section when agentInstructions is empty but agents exist (else branch)", async () => {
+      // This exercises the buildInlineContent else branch:
+      // agentInstructions is "" → content starts "" → replaced by agentSection alone
+      const target = await mkdtemp(path.join(tmpdir(), "pit-codex-agents-only-"));
+      const bundle = {
+        manifest: { name: "agents-only", version: "1.0.0", skills: [], compatibility: [] },
+        agentInstructions: "",
+        skills: [],
+        agents: [
+          {
+            name: "helper",
+            path: "agents/helper",
+            frontmatter: { name: "helper", description: "General helper" },
+            content: "---\nname: helper\ndescription: General helper\n---\n\nHelp with tasks.\n",
+          },
+        ],
+        rules: [],
+        mcpServers: {},
+        envExample: {},
+      };
+      await codexAdapter.write(target, bundle, {});
+      const content = await readFile(path.join(target, "AGENTS.md"), "utf-8");
+      expect(content).toContain("## Custom Agents");
+      expect(content).toContain("### helper");
+      expect(content).toContain("Help with tasks.");
+      await rm(target, { recursive: true });
+    });
+  });
+
   describe("capabilities", () => {
     it("uses symlink strategy for skills", () => {
       expect(codexAdapter.capabilities.skillLinkStrategy).toBe("symlink");

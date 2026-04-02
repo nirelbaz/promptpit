@@ -74,6 +74,51 @@ describe("validateStack", () => {
     }
   });
 
+  it("reports error for agent with invalid frontmatter", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-validate-"));
+    try {
+      await writeFile(path.join(dir, "stack.json"), JSON.stringify({ name: "test", version: "1.0.0" }));
+      await mkdir(path.join(dir, "agents"), { recursive: true });
+      await writeFile(
+        path.join(dir, "agents", "bad.md"),
+        "---\nname: bad\n---\n\nMissing description.\n",
+      );
+      const result = await validateStack(dir);
+      const agentDiags = result.diagnostics.filter((d) => d.file.includes("agents/"));
+      expect(agentDiags.length).toBeGreaterThan(0);
+      expect(agentDiags[0]!.level).toBe("error");
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  it("passes validation for valid agents", async () => {
+    const result = await validateStack(VALID_STACK);
+    const agentDiags = result.diagnostics.filter((d) => d.file.includes("agents/"));
+    expect(agentDiags).toHaveLength(0);
+  });
+
+  it("reports error for agent with malformed YAML that throws during parse", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-validate-agent-malformed-"));
+    try {
+      await writeFile(path.join(dir, "stack.json"), JSON.stringify({ name: "test", version: "1.0.0" }));
+      await mkdir(path.join(dir, "agents"), { recursive: true });
+      // This YAML is structurally invalid (unclosed flow sequence) — gray-matter will throw
+      await writeFile(
+        path.join(dir, "agents", "broken.md"),
+        "---\nname: broken\ndescription: test\ntools: [\n---\n\nBody text.\n",
+      );
+      const result = await validateStack(dir);
+      const agentDiags = result.diagnostics.filter((d) => d.file.includes("agents/"));
+      expect(agentDiags.length).toBeGreaterThan(0);
+      expect(agentDiags[0]!.level).toBe("error");
+      // Should hit the catch branch and report "Invalid frontmatter"
+      expect(agentDiags[0]!.message).toContain("Invalid frontmatter");
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
   it("validates rules with valid frontmatter", async () => {
     const result = await validateStack(VALID_STACK);
     expect(result.valid).toBe(true);

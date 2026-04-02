@@ -207,4 +207,26 @@ describe("installStack", () => {
     const claudeMd = await readFile(path.join(target, "CLAUDE.md"), "utf-8");
     expect(claudeMd).toBe("# Existing\n");
   });
+
+  it("records agent hashes in install manifest after install", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-agents-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    await installStack(VALID_STACK, target, {});
+
+    const { readManifest } = await import("../../src/core/manifest.js");
+    const manifest = await readManifest(target);
+
+    expect(manifest.installs).toHaveLength(1);
+    const entry = manifest.installs[0]!;
+
+    // At least one adapter should have an agents record with the reviewer hash
+    const adapterWithAgents = Object.values(entry.adapters).find(
+      (record) => record.agents && Object.keys(record.agents).length > 0,
+    );
+    expect(adapterWithAgents).toBeDefined();
+    expect(adapterWithAgents!.agents).toHaveProperty("reviewer");
+    expect(adapterWithAgents!.agents!["reviewer"]!.hash).toMatch(/^sha256:/);
+  });
 });

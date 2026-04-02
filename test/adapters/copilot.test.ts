@@ -1,9 +1,21 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { copilotAdapter, skillToInstructionsMd, ruleToInstructionsMd } from "../../src/adapters/copilot.js";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdir, writeFile, readFile, rm, mkdtemp } from "node:fs/promises";
 import path from "node:path";
-import { mkdtemp, rm, readFile, writeFile, mkdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import os, { tmpdir } from "node:os";
+import { copilotAdapter, skillToInstructionsMd, agentToGitHubAgent, ruleToInstructionsMd } from "../../src/adapters/copilot.js";
 import { readStack } from "../../src/core/stack.js";
+
+const VALID_STACK = path.join(import.meta.dirname, "../__fixtures__/stacks/valid-stack");
+
+let tmpDir: string;
+
+beforeEach(async () => {
+  tmpDir = await mkdtemp(path.join(os.tmpdir(), "copilot-test-"));
+});
+
+afterEach(async () => {
+  await rm(tmpDir, { recursive: true, force: true });
+});
 
 describe("copilotAdapter", () => {
   it("has correct id and displayName", () => {
@@ -68,6 +80,88 @@ Content here.`;
     expect(result).not.toContain("allowed-tools");
     expect(result).not.toContain("Read");
     expect(result).toContain("Content here.");
+  });
+});
+
+describe("agent translation", () => {
+  it("translates portable agent to GitHub .agent.md format", () => {
+    const content = "---\nname: reviewer\ndescription: Security reviewer\ntools:\n  - Read\n  - Grep\n---\n\nReview code.\n";
+    const result = agentToGitHubAgent(content);
+    expect(result).toContain("name: reviewer");
+    expect(result).toContain("description: Security reviewer");
+    expect(result).toContain("tools:");
+    expect(result).toContain("- Read");
+    expect(result).not.toContain("model:");
+    expect(result).toContain("Review code.");
+  });
+
+  it("drops the model field when translating to GitHub .agent.md", () => {
+    const content = "---\nname: coder\ndescription: Coding agent\nmodel: claude-opus-4-5\ntools:\n  - Write\n---\n\nWrite code.\n";
+    const result = agentToGitHubAgent(content);
+    expect(result).toContain("name: coder");
+    expect(result).toContain("description: Coding agent");
+    // model must be stripped — Copilot doesn't support per-agent model selection
+    expect(result).not.toContain("model:");
+    expect(result).not.toContain("claude-opus");
+    expect(result).toContain("Write code.");
+  });
+});
+
+describe("agent read/write", () => {
+  it("reads agents from .github/agents/", async () => {
+    const agentsDir = path.join(tmpDir, ".github", "agents");
+    await mkdir(agentsDir, { recursive: true });
+    await writeFile(
+      path.join(agentsDir, "reviewer.agent.md"),
+      "---\nname: reviewer\ndescription: Security reviewer\ntools:\n  - Read\n---\n\nReview code.\n",
+    );
+    const config = await copilotAdapter.read(tmpDir);
+    expect(config.agents).toHaveLength(1);
+    expect(config.agents[0]!.name).toBe("reviewer");
+  });
+
+  it("writes agents to .github/agents/ with .agent.md extension", async () => {
+    const bundle = await readStack(VALID_STACK);
+    await mkdir(path.join(tmpDir, ".github"), { recursive: true });
+    await writeFile(path.join(tmpDir, ".github", "copilot-instructions.md"), "# Test");
+    await copilotAdapter.write(tmpDir, bundle, {});
+    const content = await readFile(
+      path.join(tmpDir, ".github", "agents", "reviewer.agent.md"),
+      "utf-8",
+    );
+    expect(content).toContain("reviewer");
+    expect(content).toContain("security-focused code reviewer");
+  });
+
+  it("returns empty agents when no .github/agents/ exists", async () => {
+    await mkdir(path.join(tmpDir, ".github"), { recursive: true });
+    await writeFile(path.join(tmpDir, ".github", "copilot-instructions.md"), "# Test");
+    const config = await copilotAdapter.read(tmpDir);
+    expect(config.agents).toEqual([]);
+  });
+
+  it("dry-run write returns dryRunEntries for agents, not actual files", async () => {
+    const bundle = await readStack(VALID_STACK);
+    // Ensure the bundle has the reviewer agent from the valid-stack fixture
+    expect(bundle.agents.length).toBeGreaterThan(0);
+
+    await mkdir(path.join(tmpDir, ".github"), { recursive: true });
+    await writeFile(path.join(tmpDir, ".github", "copilot-instructions.md"), "# Test");
+
+    const result = await copilotAdapter.write(tmpDir, bundle, { dryRun: true });
+
+    // No files should have been written
+    expect(result.filesWritten).toHaveLength(0);
+    // dry-run entries must be present
+    expect(result.dryRunEntries).toBeDefined();
+    // There should be an entry for the agent file
+    const agentEntry = result.dryRunEntries!.find((e) => e.file.includes(".agent.md"));
+    expect(agentEntry).toBeDefined();
+    expect(agentEntry!.action).toMatch(/create|modify/);
+
+    // Verify no agent file was actually created on disk
+    const { existsSync } = await import("node:fs");
+    expect(existsSync(path.join(tmpDir, ".github", "agents", "reviewer.agent.md"))).toBe(false);
   });
 });
 

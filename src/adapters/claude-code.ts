@@ -11,13 +11,14 @@ import type {
 import matter from "gray-matter";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists, removeFileOrSymlink, symlinkOrCopy } from "../shared/utils.js";
-import { SAFE_MATTER_OPTIONS, readSkillsFromDir, readRulesFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry } from "./adapter-utils.js";
+import { SAFE_MATTER_OPTIONS, readSkillsFromDir, readAgentsFromDir, readRulesFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
     config: path.join(root, "CLAUDE.md"),
     skills: path.join(root, ".claude", "skills"),
     mcp: path.join(root, ".claude", "settings.json"),
+    agents: path.join(root, ".claude", "agents"),
     rules: path.join(root, ".claude", "rules"),
   };
 }
@@ -28,6 +29,7 @@ function userPaths() {
     config: path.join(home, ".claude", "CLAUDE.md"),
     skills: path.join(home, ".claude", "skills"),
     mcp: path.join(home, ".claude", "settings.json"),
+    agents: path.join(home, ".claude", "agents"),
     rules: path.join(home, ".claude", "rules"),
   };
 }
@@ -77,12 +79,14 @@ async function read(root: string): Promise<PlatformConfig> {
     }
   }
   const mcpServers = await readMcpFromSettings(p.mcp);
-  const rules = await readRulesFromDir(p.rules);
+  const agents = await readAgentsFromDir(p.agents!);
+  const rules = await readRulesFromDir(p.rules!);
 
   return {
     adapterId: "claude-code",
     agentInstructions,
     skills,
+    agents,
     mcpServers,
     rules,
   };
@@ -135,8 +139,20 @@ async function write(
       }
     }
 
+    // Write agents to .claude/agents/
+    for (const agent of stack.agents) {
+      const dest = path.join(p.agents!, agent.name + ".md");
+      if (opts.dryRun) {
+        dryRunEntries.push(fileDryRunEntry(dest, await exists(dest)));
+      } else {
+        await writeFileEnsureDir(dest, agent.content);
+        filesWritten.push(dest);
+      }
+    }
+
+    // Write rules to .claude/rules/
     for (const rule of stack.rules) {
-      const dest = path.join(p.rules, `${rule.name}.md`);
+      const dest = path.join(p.rules!, `${rule.name}.md`);
       if (opts.dryRun) {
         dryRunEntries.push(fileDryRunEntry(dest, await exists(dest), "translate to Claude rules"));
       } else {
@@ -174,6 +190,7 @@ export const claudeCodeAdapter: PlatformAdapter = {
     mcpRootKey: "mcpServers",
     agentsmd: false,
     hooks: true,
+    agents: "native",
   },
   detect,
   read,

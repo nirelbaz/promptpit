@@ -2,8 +2,8 @@ import path from "node:path";
 import fg from "fast-glob";
 import matter from "gray-matter";
 import yaml from "js-yaml";
-import type { SkillEntry, RuleEntry, McpConfig } from "../shared/schema.js";
-import { skillFrontmatterSchema, ruleFrontmatterSchema } from "../shared/schema.js";
+import type { SkillEntry, RuleEntry, McpConfig, AgentEntry } from "../shared/schema.js";
+import { skillFrontmatterSchema, ruleFrontmatterSchema, agentFrontmatterSchema } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir } from "../shared/utils.js";
 import { log } from "../shared/io.js";
 import { hasMarkers, insertMarkers, replaceMarkerContent } from "../shared/markers.js";
@@ -51,6 +51,42 @@ export async function readSkillsFromDir(
   return skills;
 }
 
+export async function readAgentsFromDir(
+  agentsDir: string,
+  opts: { glob?: string; ext?: string } = {},
+): Promise<AgentEntry[]> {
+  const pattern = opts.glob ?? "*.md";
+  const ext = opts.ext ?? ".md";
+
+  const agentFiles = await fg(pattern, {
+    cwd: agentsDir,
+    absolute: true,
+  }).catch(() => [] as string[]);
+
+  const agents: AgentEntry[] = [];
+  for (const file of agentFiles) {
+    const raw = await readFileOrNull(file);
+    if (!raw) continue;
+
+    const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
+    const validation = agentFrontmatterSchema.safeParse(parsed.data);
+    if (!validation.success) {
+      const reasons = validation.error.errors.map((e) => e.message).join(", ");
+      log.warn(`Skipping ${file}: invalid agent frontmatter (${reasons})`);
+      continue;
+    }
+
+    const agentName = path.basename(file, ext);
+    agents.push({
+      name: agentName,
+      path: `agents/${agentName}`,
+      frontmatter: validation.data,
+      content: raw,
+    });
+  }
+  return agents;
+}
+
 export async function readRulesFromDir(
   rulesDir: string,
 ): Promise<RuleEntry[]> {
@@ -81,6 +117,41 @@ export async function readRulesFromDir(
     });
   }
   return rules;
+}
+
+// Strip YAML frontmatter fences without re-parsing through gray-matter
+function stripFrontmatter(raw: string): string {
+  const match = raw.match(/^---\n[\s\S]*?\n---\n*/);
+  return match ? raw.slice(match[0].length).trim() : raw.trim();
+}
+
+export function formatAgentsInlineSection(agents: AgentEntry[]): string {
+  if (agents.length === 0) return "";
+
+  const sections = agents.map((agent) => {
+    const fm = agent.frontmatter;
+    const body = stripFrontmatter(agent.content);
+
+    let header = `### ${fm.name}\n> ${fm.description}`;
+    if (fm.tools && fm.tools.length > 0) {
+      header += `\n> Tools: ${fm.tools.join(", ")}`;
+    }
+
+    return `${header}\n\n${body}`;
+  });
+
+  return `## Custom Agents\n\n${sections.join("\n\n")}`;
+}
+
+// Build marker content with optional inline agents section
+export function buildInlineContent(agentInstructions: string, agents: AgentEntry[]): string | null {
+  if (!agentInstructions && agents.length === 0) return null;
+  let content = agentInstructions || "";
+  const agentSection = formatAgentsInlineSection(agents);
+  if (agentSection) {
+    content = content ? `${content}\n\n${agentSection}` : agentSection;
+  }
+  return content;
 }
 
 export async function readMcpFromSettings(

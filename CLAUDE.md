@@ -43,6 +43,8 @@ src/
 - `computeMcpServerHash()` in `manifest.ts` hashes only canonical MCP fields (command, args, env, url, serverUrl) with recursive key sorting, ignoring adapter-added fields like Copilot's `type`
 - Rules in `.promptpit/rules/*.md` use portable YAML frontmatter (`name`, `description`, `globs`, `alwaysApply`), translated per-adapter: Claude Code (`paths`), Cursor (`.mdc` with `rule-` prefix), Copilot (`.instructions.md` with `rule-` prefix and `applyTo`)
 - Install manifest hashes translated (post-adapter) rule content so `pit status` drift detection compares apples to apples
+- `AdapterCapabilities.agents` (`"native"` | `"inline"` | `"none"`) declares each adapter's agent handling: native adapters write per-file (Claude Code `.claude/agents/*.md`, Copilot `.github/agents/*.agent.md`), inline adapters embed agents in the instructions marker block via `buildInlineContent`
+- Copilot agent translation strips `model` field and uses `.agent.md` extension; `readAgentsFromDir` accepts `glob`/`ext` options for adapter-specific file patterns
 
 ## Testing
 

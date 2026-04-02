@@ -1,4 +1,4 @@
-import type { StackBundle, McpConfig, SkillEntry, RuleEntry } from "../shared/schema.js";
+import type { StackBundle, McpConfig, SkillEntry, AgentEntry, RuleEntry } from "../shared/schema.js";
 
 // --- Path Sets ---
 
@@ -7,6 +7,7 @@ export interface PathSet {
   skills: string;
   mcp: string;
   rules?: string;
+  agents?: string;
 }
 
 export interface AdapterPaths {
@@ -33,6 +34,7 @@ export interface AdapterCapabilities {
   mcpRootKey: string;
   agentsmd: boolean;
   hooks: boolean;
+  agents: "native" | "inline" | "none";
 }
 
 // --- Platform Config (read from a single adapter) ---
@@ -41,6 +43,7 @@ export interface PlatformConfig {
   adapterId: string;
   agentInstructions: string;
   skills: SkillEntry[];
+  agents: AgentEntry[];
   mcpServers: McpConfig;
   rules: RuleEntry[];
 }

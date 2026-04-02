@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.6 (2026-04-02)
+
+### Added
+
+- Portable custom agents in `.promptpit/agents/*.md` with YAML frontmatter (`name`, `description`, `tools`, `model`). Agents are written natively to Claude Code (`.claude/agents/`) and Copilot (`.github/agents/*.agent.md`), and inlined into instructions for tools without native agent support (Codex, Cursor, Standards/AGENTS.md).
+- `pit collect` now reads agents from Claude Code and Copilot projects and includes them in the bundle.
+- `pit install` writes agents to all detected tools with format translation (Copilot drops `model` field, uses `.agent.md` extension).
+- `pit validate` checks agent frontmatter for errors.
+- `pit status` detects agent drift for native adapters (hash comparison against install manifest).
+- `pit check` verifies agent freshness and drift in CI.
+- `pit init` scaffolds an `agents/` directory alongside `skills/` and `rules/`.
+- Free-ride agent coverage for Windsurf, Zed, Cline, and Aider via the Standards adapter's AGENTS.md inline section.
+
+### Fixed
+
+- `pit check` now detects rule drift and freshness (was silently skipping rules despite install manifest tracking them).
+
 ## 0.3.5 (2026-04-02)
 
 ### Added

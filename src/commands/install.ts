@@ -244,6 +244,18 @@ export async function installStack(
           }
         }
 
+        // Hash agents from in-memory content
+        if (bundle.agents.length > 0) {
+          const agents: Record<string, { hash: string }> = {};
+          for (const agent of bundle.agents) {
+            agents[agent.name] = { hash: computeHash(agent.content) };
+          }
+          if (Object.keys(agents).length > 0) {
+            record.agents = agents;
+          }
+        }
+
+        // Hash rules (translated content per adapter)
         if (bundle.rules.length > 0 && adapter.capabilities.rules) {
           const rules: Record<string, { hash: string }> = {};
           for (const rule of bundle.rules) {
@@ -268,7 +280,7 @@ export async function installStack(
           record.mcp = mcp;
         }
 
-        if (record.instructions || record.skills || record.rules || record.mcp) {
+        if (record.instructions || record.skills || record.agents || record.rules || record.mcp) {
           adapterRecords[adapter.id] = record;
         }
       }

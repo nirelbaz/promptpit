@@ -1,10 +1,11 @@
 import type { PlatformConfig } from "../adapters/types.js";
-import type { SkillEntry, RuleEntry, McpConfig } from "../shared/schema.js";
+import type { SkillEntry, RuleEntry, McpConfig, AgentEntry } from "../shared/schema.js";
 import { computeHash, normalizeForHash } from "./manifest.js";
 
 export interface MergedStack {
   agentInstructions: string;
   skills: SkillEntry[];
+  agents: AgentEntry[];
   mcpServers: McpConfig;
   rules: RuleEntry[];
 }
@@ -15,13 +16,14 @@ export function mergeConfigs(
   configs: PlatformConfig[],
 ): MergeResult {
   if (configs.length === 0) {
-    return { agentInstructions: "", skills: [], mcpServers: {}, rules: [] as RuleEntry[], warnings: [] };
+    return { agentInstructions: "", skills: [], agents: [], mcpServers: {}, rules: [], warnings: [] };
   }
   if (configs.length === 1) {
     const c = configs[0]!;
     return {
       agentInstructions: c.agentInstructions,
       skills: c.skills,
+      agents: c.agents,
       mcpServers: c.mcpServers,
       rules: c.rules,
       warnings: [],
@@ -69,6 +71,15 @@ export function mergeConfigs(
     }
   }
 
+  const seenAgents = new Map<string, AgentEntry>();
+  for (const config of configs) {
+    for (const agent of (config.agents ?? [])) {
+      if (!seenAgents.has(agent.name)) {
+        seenAgents.set(agent.name, agent);
+      }
+    }
+  }
+
   const seenRules = new Map<string, RuleEntry>();
   for (const config of configs) {
     for (const rule of config.rules) {
@@ -81,6 +92,7 @@ export function mergeConfigs(
   return {
     agentInstructions: instructions,
     skills: [...seenSkills.values()],
+    agents: [...seenAgents.values()],
     mcpServers: seenMcp,
     rules: [...seenRules.values()],
     warnings,

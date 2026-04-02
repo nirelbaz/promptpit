@@ -16,7 +16,7 @@ import {
   removeFileOrSymlink,
   symlinkOrCopy,
 } from "../shared/utils.js";
-import { readSkillsFromDir, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, fileDryRunEntry } from "./adapter-utils.js";
+import { readSkillsFromDir, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, fileDryRunEntry, buildInlineContent } from "./adapter-utils.js";
 import { readMcpFromToml, writeMcpToToml } from "./toml-utils.js";
 
 function projectPaths(root: string) {
@@ -67,6 +67,7 @@ async function read(root: string): Promise<PlatformConfig> {
     adapterId: "codex",
     agentInstructions,
     skills,
+    agents: [],
     mcpServers,
     rules: [],
   };
@@ -85,10 +86,11 @@ async function write(
   const version = stack.manifest.version;
 
   try {
-    if (stack.agentInstructions) {
+    const content = buildInlineContent(stack.agentInstructions, stack.agents);
+    if (content) {
       const result = await writeWithMarkers(
         p.config,
-        stack.agentInstructions,
+        content,
         stackName,
         version,
         "codex",
@@ -150,6 +152,7 @@ export const codexAdapter: PlatformAdapter = {
     mcpRootKey: "mcp_servers",
     agentsmd: true,
     hooks: false,
+    agents: "inline",
   },
   detect,
   read,

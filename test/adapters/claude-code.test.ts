@@ -118,6 +118,51 @@ describe("claudeCodeAdapter", () => {
     });
   });
 
+  describe("agent read/write", () => {
+    const tmpDirs: string[] = [];
+
+    afterEach(async () => {
+      for (const dir of tmpDirs) {
+        await rm(dir, { recursive: true, force: true });
+      }
+      tmpDirs.length = 0;
+    });
+
+    it("reads agents from .claude/agents/", async () => {
+      const tmpDir = await mkdtemp(path.join(tmpdir(), "pit-cc-agents-read-"));
+      tmpDirs.push(tmpDir);
+      const agentsDir = path.join(tmpDir, ".claude", "agents");
+      await mkdir(agentsDir, { recursive: true });
+      await writeFile(
+        path.join(agentsDir, "reviewer.md"),
+        "---\nname: reviewer\ndescription: Security reviewer\ntools:\n  - Read\n---\n\nReview code.\n",
+      );
+      const config = await claudeCodeAdapter.read(tmpDir);
+      expect(config.agents).toHaveLength(1);
+      expect(config.agents[0]!.name).toBe("reviewer");
+    });
+
+    it("writes agents to .claude/agents/", async () => {
+      const tmpDir = await mkdtemp(path.join(tmpdir(), "pit-cc-agents-write-"));
+      tmpDirs.push(tmpDir);
+      const bundle = await readStack(path.resolve("test/__fixtures__/stacks/valid-stack"));
+      await claudeCodeAdapter.write(tmpDir, bundle, {});
+      const content = await readFile(
+        path.join(tmpDir, ".claude", "agents", "reviewer.md"),
+        "utf-8",
+      );
+      expect(content).toContain("security-focused code reviewer");
+    });
+
+    it("returns empty agents when no .claude/agents/ exists", async () => {
+      const tmpDir = await mkdtemp(path.join(tmpdir(), "pit-cc-agents-empty-"));
+      tmpDirs.push(tmpDir);
+      await writeFile(path.join(tmpDir, "CLAUDE.md"), "# Test");
+      const config = await claudeCodeAdapter.read(tmpDir);
+      expect(config.agents).toEqual([]);
+    });
+  });
+
   describe("rules", () => {
     const tmpDirs: string[] = [];
 

@@ -50,6 +50,24 @@ describe("readStack", () => {
     await expect(readStack(dir)).rejects.toThrow();
     await rm(dir, { recursive: true });
   });
+
+  it("reads agents from agents/ directory", async () => {
+    const bundle = await readStack(VALID_STACK);
+    expect(bundle.agents).toHaveLength(1);
+    expect(bundle.agents[0]!.name).toBe("reviewer");
+    expect(bundle.agents[0]!.frontmatter.tools).toEqual(["Read", "Grep", "Glob"]);
+  });
+
+  it("returns empty agents array when no agents directory", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-test-"));
+    await writeFile(
+      path.join(dir, "stack.json"),
+      JSON.stringify({ name: "test", version: "1.0.0" }),
+    );
+    const bundle = await readStack(dir);
+    expect(bundle.agents).toEqual([]);
+    await rm(dir, { recursive: true });
+  });
 });
 
 describe("writeStack", () => {
@@ -70,6 +88,21 @@ describe("writeStack", () => {
       "utf-8",
     );
     expect(skillContent).toContain("browse");
+
+    await rm(dir, { recursive: true });
+  });
+
+  it("writes agents to agents/ directory", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-write-"));
+    const outputDir = path.join(dir, ".promptpit");
+    const bundle = await readStack(VALID_STACK);
+    await writeStack(outputDir, bundle);
+
+    const agentContent = await readFile(
+      path.join(outputDir, "agents", "reviewer.md"),
+      "utf-8",
+    );
+    expect(agentContent).toContain("security-focused code reviewer");
 
     await rm(dir, { recursive: true });
   });

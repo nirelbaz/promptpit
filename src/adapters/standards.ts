@@ -10,7 +10,7 @@ import type {
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, exists } from "../shared/utils.js";
-import { writeWithMarkers, readMcpFromSettings, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry } from "./adapter-utils.js";
+import { writeWithMarkers, readMcpFromSettings, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, buildInlineContent } from "./adapter-utils.js";
 
 const MCP_FILE = ".mcp.json";
 
@@ -51,6 +51,7 @@ async function read(root: string): Promise<PlatformConfig> {
     adapterId: "standards",
     agentInstructions,
     skills: [],
+    agents: [],
     mcpServers,
     rules: [],
   };
@@ -69,10 +70,11 @@ async function write(
   const version = stack.manifest.version;
 
   try {
-    if (stack.agentInstructions) {
+    const content = buildInlineContent(stack.agentInstructions, stack.agents);
+    if (content) {
       const result = await writeWithMarkers(
         p.config,
-        stack.agentInstructions,
+        content,
         stackName,
         version,
         "standards",
@@ -113,6 +115,7 @@ export const standardsAdapter: PlatformAdapter = {
     mcpRootKey: "mcpServers",
     agentsmd: true,
     hooks: false,
+    agents: "inline",
   },
   detect,
   read,

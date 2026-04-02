@@ -13,7 +13,7 @@ import type {
 } from "./types.js";
 import type { StackBundle, RuleEntry, RuleFrontmatter } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
-import { readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry } from "./adapter-utils.js";
+import { readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry, buildInlineContent } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -126,6 +126,7 @@ async function read(root: string): Promise<PlatformConfig> {
     adapterId: "cursor",
     agentInstructions,
     skills: [],
+    agents: [],
     mcpServers,
     rules,
   };
@@ -144,10 +145,11 @@ async function write(
   const version = stack.manifest.version;
 
   try {
-    if (stack.agentInstructions) {
+    const content = buildInlineContent(stack.agentInstructions, stack.agents);
+    if (content) {
       const result = await writeWithMarkers(
         p.config,
-        stack.agentInstructions,
+        content,
         stackName,
         version,
         "cursor",
@@ -209,6 +211,7 @@ export const cursorAdapter: PlatformAdapter = {
     mcpRootKey: "mcpServers",
     agentsmd: true,
     hooks: false,
+    agents: "inline",
   },
   detect,
   read,
