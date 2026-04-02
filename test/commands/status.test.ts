@@ -938,4 +938,65 @@ describe("pit status", () => {
     expect(copilotAdapter.state).toBe("drifted");
     expect(copilotAdapter.mcpDetails[0]!.state).toBe("drifted");
   });
+
+  it("detects synced copilot agent using .agent.md extension", async () => {
+    const dir = await makeTmpDir();
+    const agentContent = "---\nname: reviewer\ndescription: Security reviewer\ntools:\n  - Read\n---\n\nReview code.\n";
+
+    // Write the agent file at the Copilot-native path
+    const agentsDir = path.join(dir, ".github", "agents");
+    await mkdir(agentsDir, { recursive: true });
+    await writeFile(path.join(agentsDir, "reviewer.agent.md"), agentContent);
+
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "my-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          copilot: {
+            agents: { reviewer: { hash: computeHash(agentContent) } },
+          },
+        },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await computeStatus(dir);
+    const copilotAdapterStatus = result.stacks[0]!.adapters.find((a) => a.adapterId === "copilot")!;
+    expect(copilotAdapterStatus.agentDetails).toHaveLength(1);
+    expect(copilotAdapterStatus.agentDetails[0]!.state).toBe("synced");
+    expect(copilotAdapterStatus.agentDetails[0]!.path).toContain(".agent.md");
+  });
+
+  it("detects drifted copilot agent when .agent.md content changes", async () => {
+    const dir = await makeTmpDir();
+    const originalContent = "---\nname: reviewer\ndescription: Security reviewer\ntools:\n  - Read\n---\n\nOriginal body.\n";
+    const modifiedContent = "---\nname: reviewer\ndescription: Security reviewer\ntools:\n  - Read\n---\n\nModified body.\n";
+
+    const agentsDir = path.join(dir, ".github", "agents");
+    await mkdir(agentsDir, { recursive: true });
+    // Write modified content on disk but record the original hash
+    await writeFile(path.join(agentsDir, "reviewer.agent.md"), modifiedContent);
+
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "my-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          copilot: {
+            agents: { reviewer: { hash: computeHash(originalContent) } },
+          },
+        },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await computeStatus(dir);
+    const copilotAdapterStatus = result.stacks[0]!.adapters.find((a) => a.adapterId === "copilot")!;
+    expect(copilotAdapterStatus.agentDetails[0]!.state).toBe("drifted");
+  });
 });

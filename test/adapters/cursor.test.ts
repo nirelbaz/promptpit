@@ -104,6 +104,45 @@ describe("cursorAdapter", () => {
   });
 });
 
+describe("cursor inline agent writing", () => {
+  const tmpDirs: string[] = [];
+  afterEach(async () => {
+    for (const d of tmpDirs) await rm(d, { recursive: true, force: true });
+    tmpDirs.length = 0;
+  });
+
+  it("includes agents section when bundle has agents but empty agentInstructions", async () => {
+    // This exercises the buildInlineContent else branch:
+    // agentInstructions is "" so content starts as "" and is replaced by agentSection alone.
+    const target = await mkdtemp(path.join(tmpdir(), "pit-cursor-agents-only-"));
+    tmpDirs.push(target);
+
+    const bundle = {
+      manifest: { name: "agents-only", version: "1.0.0", skills: [], compatibility: [] },
+      agentInstructions: "",
+      skills: [],
+      agents: [
+        {
+          name: "helper",
+          path: "agents/helper",
+          frontmatter: { name: "helper", description: "General helper" },
+          content: "---\nname: helper\ndescription: General helper\n---\n\nHelp with tasks.\n",
+        },
+      ],
+      rules: [],
+      mcpServers: {},
+      envExample: {},
+    };
+
+    await cursorAdapter.write(target, bundle, {});
+
+    const cursorrules = await readFile(path.join(target, ".cursorrules"), "utf-8");
+    expect(cursorrules).toContain("## Custom Agents");
+    expect(cursorrules).toContain("### helper");
+    expect(cursorrules).toContain("Help with tasks.");
+  });
+});
+
 describe("skillToMdc", () => {
   it("converts SKILL.md content to .mdc format", () => {
     const skillMd = `---

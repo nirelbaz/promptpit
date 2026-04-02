@@ -61,6 +61,13 @@ describe("pit check", () => {
     await writeFile(path.join(stackDir, "mcp.json"), JSON.stringify(servers));
   }
 
+  /** Helper: write a rule into the .promptpit bundle */
+  async function writeStackRule(dir: string, name: string, content: string): Promise<void> {
+    const rulesDir = path.join(dir, ".promptpit", "rules");
+    await mkdir(rulesDir, { recursive: true });
+    await writeFile(path.join(rulesDir, `${name}.md`), content);
+  }
+
   // --- Exit code tests ---
 
   it("exits 0 when no stack.json and no manifest (nothing to check)", async () => {
@@ -188,6 +195,31 @@ describe("pit check", () => {
     expect(result.pass).toBe(false);
     expect(result.freshness.pass).toBe(false);
     expect(result.freshness.issues.some((i) => i.message.includes("reviewer"))).toBe(true);
+  });
+
+  it("fails when stack has a rule not in installed.json", async () => {
+    const dir = await makeTmpDir();
+    const ruleContent = "---\nname: linting\ndescription: Linting rules\nalwaysApply: true\n---\n\nNo unused vars.";
+
+    await writeStackJson(dir);
+    await writeStackRule(dir, "linting", ruleContent);
+
+    // Manifest exists but has no rules recorded
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "test-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: { "claude-code": {} },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await checkCommand(dir, {});
+    expect(result.pass).toBe(false);
+    expect(result.freshness.pass).toBe(false);
+    expect(result.freshness.issues.some((i) => i.message.includes("linting"))).toBe(true);
   });
 
   it("fails when stack has MCP server not in installed.json", async () => {

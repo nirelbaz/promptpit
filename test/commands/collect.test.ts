@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { collectStack } from "../../src/commands/collect.js";
 import path from "node:path";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 const CLAUDE_PROJECT = path.resolve("test/__fixtures__/claude-project");
@@ -59,5 +59,37 @@ describe("collectStack", () => {
     );
 
     await rm(emptyDir, { recursive: true });
+  });
+
+  it("dry-run with agents lists agent files in report", async () => {
+    // Build a minimal project with a Claude config and an agent file so collect
+    // detects agents and includes them in the dry-run entry list.
+    const projectDir = await mkdtemp(path.join(tmpdir(), "pit-collect-agents-"));
+    const outDir = path.join(projectDir, ".promptpit");
+
+    // Minimal CLAUDE.md so Claude Code adapter is detected
+    await writeFile(path.join(projectDir, "CLAUDE.md"), "# Instructions\n");
+    // An agent in the canonical .agents/skills-adjacent location that collect reads
+    const agentsDir = path.join(projectDir, ".claude", "agents");
+    await mkdir(agentsDir, { recursive: true });
+    await writeFile(
+      path.join(agentsDir, "reviewer.md"),
+      "---\nname: reviewer\ndescription: Security reviewer\ntools:\n  - Read\n---\n\nReview code.\n",
+    );
+
+    // Spy on console.log so we can assert the dry-run summary line
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await collectStack(projectDir, outDir, { dryRun: true });
+    } finally {
+      spy.mockRestore();
+    }
+
+    // Output dir must not have been created (dry-run)
+    const { existsSync } = await import("node:fs");
+    expect(existsSync(path.join(outDir, "stack.json"))).toBe(false);
+
+    await rm(projectDir, { recursive: true });
   });
 });

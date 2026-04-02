@@ -170,6 +170,34 @@ describe("Codex CLI adapter", () => {
       await rm(dir, { recursive: true });
       await rm(target, { recursive: true });
     });
+
+    it("writes agents section when agentInstructions is empty but agents exist (else branch)", async () => {
+      // This exercises the buildInlineContent else branch:
+      // agentInstructions is "" → content starts "" → replaced by agentSection alone
+      const target = await mkdtemp(path.join(tmpdir(), "pit-codex-agents-only-"));
+      const bundle = {
+        manifest: { name: "agents-only", version: "1.0.0", skills: [], compatibility: [] },
+        agentInstructions: "",
+        skills: [],
+        agents: [
+          {
+            name: "helper",
+            path: "agents/helper",
+            frontmatter: { name: "helper", description: "General helper" },
+            content: "---\nname: helper\ndescription: General helper\n---\n\nHelp with tasks.\n",
+          },
+        ],
+        rules: [],
+        mcpServers: {},
+        envExample: {},
+      };
+      await codexAdapter.write(target, bundle, {});
+      const content = await readFile(path.join(target, "AGENTS.md"), "utf-8");
+      expect(content).toContain("## Custom Agents");
+      expect(content).toContain("### helper");
+      expect(content).toContain("Help with tasks.");
+      await rm(target, { recursive: true });
+    });
   });
 
   describe("capabilities", () => {
