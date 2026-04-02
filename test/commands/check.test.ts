@@ -162,6 +162,34 @@ describe("pit check", () => {
     expect(result.freshness.issues[0]!.message).toContain("never been installed");
   });
 
+  it("fails when stack has an agent not in installed.json", async () => {
+    const dir = await makeTmpDir();
+    const agentContent = "---\nname: reviewer\ndescription: Reviews code carefully\n---\nReview code.";
+
+    await writeStackJson(dir);
+    // Write agent into the stack bundle at .promptpit/agents/reviewer.md
+    const agentDir = path.join(dir, ".promptpit", "agents");
+    await mkdir(agentDir, { recursive: true });
+    await writeFile(path.join(agentDir, "reviewer.md"), agentContent);
+
+    // Manifest exists but has no agents
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "test-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: { "claude-code": {} },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await checkCommand(dir, {});
+    expect(result.pass).toBe(false);
+    expect(result.freshness.pass).toBe(false);
+    expect(result.freshness.issues.some((i) => i.message.includes("reviewer"))).toBe(true);
+  });
+
   it("fails when stack has MCP server not in installed.json", async () => {
     const dir = await makeTmpDir();
     const mcpServers = { "my-server": { command: "node", args: ["s.js"] } };

@@ -736,6 +736,171 @@ describe("pit status", () => {
     expect(codexAdapter.mcpDetails[0]!.state).toBe("drifted");
   });
 
+  // --- Agent drift detection ---
+
+  it("reports synced when agent hash matches", async () => {
+    const dir = await makeTmpDir();
+    const agentDir = path.join(dir, ".claude", "agents");
+    await mkdir(agentDir, { recursive: true });
+    const agentContent = "---\nname: reviewer\ndescription: code reviewer\n---\nReview code carefully.";
+    await writeFile(path.join(agentDir, "reviewer.md"), agentContent);
+
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "my-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          "claude-code": {
+            agents: { reviewer: { hash: computeHash(agentContent) } },
+          },
+        },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await computeStatus(dir);
+    const adapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "claude-code")!;
+    expect(adapter.state).toBe("synced");
+    expect(adapter.agentDetails[0]!.state).toBe("synced");
+    expect(adapter.agentCount).toBe(1);
+  });
+
+  it("reports drifted when agent file is modified on disk", async () => {
+    const dir = await makeTmpDir();
+    const agentDir = path.join(dir, ".claude", "agents");
+    await mkdir(agentDir, { recursive: true });
+    await writeFile(path.join(agentDir, "reviewer.md"), "modified agent content");
+
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "my-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          "claude-code": {
+            agents: { reviewer: { hash: "sha256:original-hash" } },
+          },
+        },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await computeStatus(dir);
+    const adapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "claude-code")!;
+    expect(adapter.state).toBe("drifted");
+    expect(adapter.agentDetails[0]!.state).toBe("drifted");
+  });
+
+  it("reports deleted when agent file is missing from disk", async () => {
+    const dir = await makeTmpDir();
+    // No .claude/agents/ directory — agent file does not exist
+
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "my-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          "claude-code": {
+            agents: { reviewer: { hash: "sha256:abc" } },
+          },
+        },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await computeStatus(dir);
+    const adapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "claude-code")!;
+    expect(adapter.state).toBe("deleted");
+    expect(adapter.agentDetails[0]!.state).toBe("deleted");
+  });
+
+  it("reports synced for Copilot agent using .agent.md extension", async () => {
+    const dir = await makeTmpDir();
+    const agentDir = path.join(dir, ".github", "agents");
+    await mkdir(agentDir, { recursive: true });
+    const agentContent = "---\nname: reviewer\n---\nReview code.";
+    await writeFile(path.join(agentDir, "reviewer.agent.md"), agentContent);
+
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "my-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          copilot: {
+            agents: { reviewer: { hash: computeHash(agentContent) } },
+          },
+        },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await computeStatus(dir);
+    const adapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "copilot")!;
+    expect(adapter.state).toBe("synced");
+    expect(adapter.agentDetails[0]!.state).toBe("synced");
+  });
+
+  it("--verbose shows agent names and paths", async () => {
+    const dir = await makeTmpDir();
+    const agentDir = path.join(dir, ".claude", "agents");
+    await mkdir(agentDir, { recursive: true });
+    const agentContent = "---\nname: tester\n---\nRun tests.";
+    await writeFile(path.join(agentDir, "tester.md"), agentContent);
+
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "my-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          "claude-code": {
+            agents: { tester: { hash: computeHash(agentContent) } },
+          },
+        },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const output = await captureOutput(() => statusCommand(dir, { verbose: true }));
+    expect(output).toContain("tester");
+    expect(output).toContain("agent");
+    expect(output).toContain(".claude/agents/tester.md");
+  });
+
+  it("inline adapters do not report agent drift separately (codex)", async () => {
+    const dir = await makeTmpDir();
+    // Codex is an inline adapter — agents are embedded in instructions, no per-file check
+
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "my-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          codex: {
+            agents: { reviewer: { hash: "sha256:abc" } },
+          },
+        },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await computeStatus(dir);
+    const adapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "codex")!;
+    // No per-file agent checks for inline adapters — agentDetails stays empty
+    expect(adapter.agentDetails).toHaveLength(0);
+    expect(adapter.state).toBe("synced");
+  });
+
   it("detects real drift in Copilot MCP", async () => {
     const dir = await makeTmpDir();
 

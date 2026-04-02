@@ -36,6 +36,7 @@ export interface AdapterStatus {
   adapterId: string;
   skillCount: number;
   mcpCount: number;
+  agentCount: number;
   hasInstructions: boolean;
   state: ArtifactState;
   driftedFiles: string[];
@@ -43,6 +44,7 @@ export interface AdapterStatus {
   instructionDetail?: ArtifactDetail;
   skillDetails: ArtifactDetail[];
   mcpDetails: ArtifactDetail[];
+  agentDetails: ArtifactDetail[];
 }
 
 export interface StackStatus {
@@ -124,6 +126,34 @@ async function checkAdapterStatus(
     skillDetails.push({ name: skillName, path: skillPath, state: skillState });
   }
 
+  // Check agents — native adapters write per-file agents; inline adapters embed them in instructions
+  const agentEntries = record.agents ?? {};
+  const agentDetails: ArtifactDetail[] = [];
+  if (Object.keys(agentEntries).length > 0 && adapter?.capabilities.agents === "native") {
+    const agentsDir = adapter.paths.project(root).agents;
+    if (agentsDir) {
+      for (const [agentName, agentRecord] of Object.entries(agentEntries)) {
+        // Claude Code uses <name>.md, Copilot uses <name>.agent.md
+        const ext = adapterId === "copilot" ? ".agent.md" : ".md";
+        const agentPath = path.join(agentsDir, `${agentName}${ext}`);
+        let agentState: ArtifactState = "synced";
+        const content = await readFileOrNull(agentPath);
+        if (content == null) {
+          agentState = "deleted";
+          driftedFiles.push(agentPath);
+        } else {
+          const currentHash = computeHash(content);
+          if (currentHash !== agentRecord.hash) {
+            agentState = "drifted";
+            driftedFiles.push(agentPath);
+          }
+        }
+        worstState = escalateState(worstState, agentState);
+        agentDetails.push({ name: agentName, path: agentPath, state: agentState });
+      }
+    }
+  }
+
   // Check MCP — read file once, check each server's hash
   const mcpEntries = record.mcp ?? {};
   const mcpDetails: ArtifactDetail[] = [];
@@ -179,12 +209,14 @@ async function checkAdapterStatus(
     adapterId,
     skillCount: Object.keys(skillEntries).length,
     mcpCount: Object.keys(mcpEntries).length,
+    agentCount: Object.keys(agentEntries).length,
     hasInstructions: !!record.instructions,
     state: worstState,
     driftedFiles,
     instructionDetail,
     skillDetails,
     mcpDetails,
+    agentDetails,
   };
 }
 
@@ -250,6 +282,7 @@ function formatAdapterSummary(a: AdapterStatus): string {
   const parts: string[] = [];
   if (a.hasInstructions) parts.push("instructions");
   if (a.skillCount > 0) parts.push(`${a.skillCount} skill${a.skillCount === 1 ? "" : "s"}`);
+  if (a.agentCount > 0) parts.push(`${a.agentCount} agent${a.agentCount === 1 ? "" : "s"}`);
   if (a.mcpCount > 0) parts.push(`${a.mcpCount} MCP`);
   return parts.join(", ");
 }
@@ -287,6 +320,9 @@ function formatDetailed(result: StatusResult, root: string, verbose: boolean): v
         for (const d of adapter.skillDetails) {
           printDetailLine(d, "skill", root);
         }
+        for (const d of adapter.agentDetails) {
+          printDetailLine(d, "agent", root);
+        }
         for (const d of adapter.mcpDetails) {
           printDetailLine(d, "mcp", root);
         }
@@ -302,6 +338,7 @@ function formatDetailed(result: StatusResult, root: string, verbose: boolean): v
         const details = [
           ...(a.instructionDetail ? [a.instructionDetail] : []),
           ...a.skillDetails,
+          ...a.agentDetails,
           ...a.mcpDetails,
         ];
         for (const d of details) {

@@ -3,7 +3,7 @@ import chalk from "chalk";
 import { readManifest } from "../core/manifest.js";
 import { tryReadStackManifest, tryReadMcpConfig } from "../core/stack.js";
 import type { InstallManifest, InstallEntry } from "../shared/schema.js";
-import { readSkillsFromDir } from "../adapters/adapter-utils.js";
+import { readSkillsFromDir, readAgentsFromDir } from "../adapters/adapter-utils.js";
 import { computeStatus } from "./status.js";
 import type { ArtifactState, StatusResult } from "./status.js";
 import { log } from "../shared/io.js";
@@ -40,7 +40,7 @@ export interface CheckResult {
 /** Collect all installed names for a given artifact key across all adapters */
 function collectInstalledNames(
   entry: InstallEntry,
-  key: "skills" | "mcp",
+  key: "skills" | "mcp" | "agents",
 ): Set<string> {
   const names = new Set<string>();
   for (const record of Object.values(entry.adapters)) {
@@ -108,6 +108,19 @@ async function checkFreshness(
     }
   }
 
+  // Check agents
+  const agentsDir = path.join(stackDir, "agents");
+  const stackAgents = await readAgentsFromDir(agentsDir);
+  const installedAgentNames = collectInstalledNames(entry, "agents");
+
+  for (const agent of stackAgents) {
+    if (!installedAgentNames.has(agent.name)) {
+      issues.push({
+        message: `Agent "${agent.name}" is in the stack but not installed.`,
+      });
+    }
+  }
+
   return { pass: issues.length === 0, issues };
 }
 
@@ -122,6 +135,7 @@ function checkDrift(statusResult: StatusResult): CheckResult["drift"] {
           ? [{ detail: adapter.instructionDetail, artifact: "instructions" }]
           : []),
         ...adapter.skillDetails.map((d) => ({ detail: d, artifact: "skill" })),
+        ...adapter.agentDetails.map((d) => ({ detail: d, artifact: "agent" })),
         ...adapter.mcpDetails.map((d) => ({ detail: d, artifact: "mcp" })),
       ];
 
