@@ -9,6 +9,8 @@ import { checkCommand } from "./commands/check.js";
 import path from "node:path";
 import { log } from "./shared/io.js";
 
+declare const __APP_VERSION__: string;
+
 const program = new Command();
 
 program
@@ -16,7 +18,7 @@ program
   .description(
     "Portable AI agent stacks — collect, install, and share across Claude Code, Cursor, and more",
   )
-  .version("0.3.0");
+  .version(__APP_VERSION__);
 
 program
   .command("init")
