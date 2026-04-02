@@ -35,6 +35,7 @@ export interface ArtifactDetail {
 export interface AdapterStatus {
   adapterId: string;
   skillCount: number;
+  ruleCount: number;
   mcpCount: number;
   hasInstructions: boolean;
   state: ArtifactState;
@@ -42,6 +43,7 @@ export interface AdapterStatus {
   // Verbose details
   instructionDetail?: ArtifactDetail;
   skillDetails: ArtifactDetail[];
+  ruleDetails: ArtifactDetail[];
   mcpDetails: ArtifactDetail[];
 }
 
@@ -124,6 +126,40 @@ async function checkAdapterStatus(
     skillDetails.push({ name: skillName, path: skillPath, state: skillState });
   }
 
+  // Check rules — use adapter's rules path
+  const ruleEntries = record.rules ?? {};
+  const ruleDetails: ArtifactDetail[] = [];
+  if (Object.keys(ruleEntries).length > 0) {
+    const rulesPath = adapter?.paths.project(root).rules;
+    for (const [ruleName, ruleRecord] of Object.entries(ruleEntries)) {
+      let ruleFile: string;
+      if (adapterId === "cursor") {
+        const prefixed = ruleName.startsWith("rule-") ? ruleName : `rule-${ruleName}`;
+        ruleFile = path.join(rulesPath ?? root, `${prefixed}.mdc`);
+      } else if (adapterId === "copilot") {
+        const prefixed = ruleName.startsWith("rule-") ? ruleName : `rule-${ruleName}`;
+        ruleFile = path.join(rulesPath ?? root, `${prefixed}.instructions.md`);
+      } else {
+        ruleFile = path.join(rulesPath ?? root, `${ruleName}.md`);
+      }
+
+      let ruleState: ArtifactState = "synced";
+      const content = await readFileOrNull(ruleFile);
+      if (content == null) {
+        ruleState = "deleted";
+        driftedFiles.push(ruleFile);
+      } else {
+        const currentHash = computeHash(content);
+        if (currentHash !== ruleRecord.hash) {
+          ruleState = "drifted";
+          driftedFiles.push(ruleFile);
+        }
+      }
+      worstState = escalateState(worstState, ruleState);
+      ruleDetails.push({ name: ruleName, path: ruleFile, state: ruleState });
+    }
+  }
+
   // Check MCP — read file once, check each server's hash
   const mcpEntries = record.mcp ?? {};
   const mcpDetails: ArtifactDetail[] = [];
@@ -178,12 +214,14 @@ async function checkAdapterStatus(
   return {
     adapterId,
     skillCount: Object.keys(skillEntries).length,
+    ruleCount: Object.keys(ruleEntries).length,
     mcpCount: Object.keys(mcpEntries).length,
     hasInstructions: !!record.instructions,
     state: worstState,
     driftedFiles,
     instructionDetail,
     skillDetails,
+    ruleDetails,
     mcpDetails,
   };
 }
@@ -250,6 +288,7 @@ function formatAdapterSummary(a: AdapterStatus): string {
   const parts: string[] = [];
   if (a.hasInstructions) parts.push("instructions");
   if (a.skillCount > 0) parts.push(`${a.skillCount} skill${a.skillCount === 1 ? "" : "s"}`);
+  if (a.ruleCount > 0) parts.push(`${a.ruleCount} rule${a.ruleCount === 1 ? "" : "s"}`);
   if (a.mcpCount > 0) parts.push(`${a.mcpCount} MCP`);
   return parts.join(", ");
 }
@@ -287,6 +326,9 @@ function formatDetailed(result: StatusResult, root: string, verbose: boolean): v
         for (const d of adapter.skillDetails) {
           printDetailLine(d, "skill", root);
         }
+        for (const d of adapter.ruleDetails) {
+          printDetailLine(d, "rule", root);
+        }
         for (const d of adapter.mcpDetails) {
           printDetailLine(d, "mcp", root);
         }
@@ -302,6 +344,7 @@ function formatDetailed(result: StatusResult, root: string, verbose: boolean): v
         const details = [
           ...(a.instructionDetail ? [a.instructionDetail] : []),
           ...a.skillDetails,
+          ...a.ruleDetails,
           ...a.mcpDetails,
         ];
         for (const d of details) {

@@ -7,6 +7,9 @@ import { validateEnvNames } from "../core/security.js";
 import { writeFileEnsureDir, removeDir, readFileOrNull, exists } from "../shared/utils.js";
 import { log, spinner, printDryRunReport } from "../shared/io.js";
 import { parseGitHubSource, cloneAndResolve } from "../sources/github.js";
+import { ruleToClaudeFormat } from "../adapters/claude-code.js";
+import { ruleToMdc } from "../adapters/cursor.js";
+import { ruleToInstructionsMd } from "../adapters/copilot.js";
 import type { WriteOptions, DryRunEntry } from "../adapters/types.js";
 import type { DryRunSection } from "../shared/io.js";
 import type { InstallEntry, AdapterInstallRecord } from "../shared/schema.js";
@@ -241,6 +244,21 @@ export async function installStack(
           }
         }
 
+        if (bundle.rules.length > 0 && adapter.capabilities.rules) {
+          const rules: Record<string, { hash: string }> = {};
+          for (const rule of bundle.rules) {
+            // Hash the translated content (what's actually written to disk)
+            let translated = rule.content;
+            if (adapter.id === "claude-code") translated = ruleToClaudeFormat(rule.content);
+            else if (adapter.id === "cursor") translated = ruleToMdc(rule.content);
+            else if (adapter.id === "copilot") translated = ruleToInstructionsMd(rule.content);
+            rules[rule.name] = { hash: computeHash(translated) };
+          }
+          if (Object.keys(rules).length > 0) {
+            record.rules = rules;
+          }
+        }
+
         // Hash MCP for any adapter that supports it
         if (adapter.capabilities.mcpStdio && Object.keys(bundle.mcpServers).length > 0) {
           const mcp: Record<string, { hash: string }> = {};
@@ -250,7 +268,7 @@ export async function installStack(
           record.mcp = mcp;
         }
 
-        if (record.instructions || record.skills || record.mcp) {
+        if (record.instructions || record.skills || record.rules || record.mcp) {
           adapterRecords[adapter.id] = record;
         }
       }

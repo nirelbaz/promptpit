@@ -118,6 +118,7 @@ async function handleChanges(
         },
         agentInstructions: "",
         skills: [skill],
+        rules: [],
         mcpServers: {},
         envExample: {},
       };
