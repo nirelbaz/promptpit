@@ -19,6 +19,7 @@ const BUNDLE: StackBundle = {
       content: "---\nname: my-skill\ndescription: test skill\n---\n\nDo things.\n",
     },
   ],
+  agents: [],
   mcpServers: { postgres: { command: "npx", args: ["-y", "pg"] } },
   envExample: {},
 };

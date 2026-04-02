@@ -10,13 +10,14 @@ import type {
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists, removeFileOrSymlink, symlinkOrCopy } from "../shared/utils.js";
-import { readSkillsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, skillDryRunEntry } from "./adapter-utils.js";
+import { readSkillsFromDir, readAgentsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, skillDryRunEntry } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
     config: path.join(root, "CLAUDE.md"),
     skills: path.join(root, ".claude", "skills"),
     mcp: path.join(root, ".claude", "settings.json"),
+    agents: path.join(root, ".claude", "agents"),
   };
 }
 
@@ -26,6 +27,7 @@ function userPaths() {
     config: path.join(home, ".claude", "CLAUDE.md"),
     skills: path.join(home, ".claude", "skills"),
     mcp: path.join(home, ".claude", "settings.json"),
+    agents: path.join(home, ".claude", "agents"),
   };
 }
 
@@ -55,12 +57,13 @@ async function read(root: string): Promise<PlatformConfig> {
     }
   }
   const mcpServers = await readMcpFromSettings(p.mcp);
+  const agents = await readAgentsFromDir(path.join(root, ".claude", "agents"));
 
   return {
     adapterId: "claude-code",
     agentInstructions,
     skills,
-    agents: [],
+    agents,
     mcpServers,
     rules: [],
   };
@@ -113,6 +116,20 @@ async function write(
       }
     }
 
+    // Write agents to .claude/agents/
+    for (const agent of stack.agents) {
+      const dest = path.join(p.agents!, agent.name + ".md");
+      if (opts.dryRun) {
+        dryRunEntries.push({
+          file: dest,
+          action: (await exists(dest)) ? "modify" : "create",
+        });
+      } else {
+        await writeFileEnsureDir(dest, agent.content);
+        filesWritten.push(dest);
+      }
+    }
+
     // Write MCP config
     const mcpResult = await mergeMcpIntoJson(p.mcp, stack.mcpServers, warnings, opts.dryRun);
     if (mcpResult.written) filesWritten.push(mcpResult.written);
@@ -141,7 +158,7 @@ export const claudeCodeAdapter: PlatformAdapter = {
     mcpRootKey: "mcpServers",
     agentsmd: false,
     hooks: true,
-    agents: "none",
+    agents: "native",
   },
   detect,
   read,
