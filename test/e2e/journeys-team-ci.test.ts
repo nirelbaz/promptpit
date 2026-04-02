@@ -1,38 +1,16 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { collectStack } from "../../src/commands/collect.js";
 import { installStack } from "../../src/commands/install.js";
 import { checkCommand } from "../../src/commands/check.js";
 import { hasMarkers, replaceMarkerContent } from "../../src/shared/markers.js";
 import path from "node:path";
-import {
-  mkdtemp,
-  rm,
-  readFile,
-  writeFile,
-  mkdir,
-  cp,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { vi } from "vitest";
+import { readFile, writeFile, mkdir, cp } from "node:fs/promises";
+import { useTmpDirs } from "./helpers.js";
 
 const CLAUDE_PROJECT = path.resolve("test/__fixtures__/claude-project");
 
 describe("E2E: Team Lead & CI journeys", () => {
-  const tmpDirs: string[] = [];
-
-  afterEach(async () => {
-    vi.restoreAllMocks();
-    for (const dir of tmpDirs) {
-      await rm(dir, { recursive: true, force: true });
-    }
-    tmpDirs.length = 0;
-  });
-
-  async function makeTmpDir(suffix = ""): Promise<string> {
-    const dir = await mkdtemp(path.join(tmpdir(), `pit-team-ci-${suffix}`));
-    tmpDirs.push(dir);
-    return dir;
-  }
+  const { makeTmpDir } = useTmpDirs("pit-team-ci-");
 
   // ── Journey 5: collect after config change updates the bundle ──
 

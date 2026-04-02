@@ -1,45 +1,15 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { collectStack } from "../../src/commands/collect.js";
 import { installStack } from "../../src/commands/install.js";
 import { statusCommand } from "../../src/commands/status.js";
 import path from "node:path";
-import { mkdtemp, rm, readFile, writeFile, mkdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { vi } from "vitest";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { useTmpDirs, captureJson } from "./helpers.js";
 
 const CLAUDE_PROJECT = path.resolve("test/__fixtures__/claude-project");
 
 describe("E2E: Multi-Stack & Edge Case journeys", () => {
-  const tmpDirs: string[] = [];
-
-  afterEach(async () => {
-    vi.restoreAllMocks();
-    for (const dir of tmpDirs) {
-      await rm(dir, { recursive: true, force: true });
-    }
-    tmpDirs.length = 0;
-  });
-
-  async function makeTmpDir(suffix = ""): Promise<string> {
-    const dir = await mkdtemp(path.join(tmpdir(), `pit-edge-${suffix}`));
-    tmpDirs.push(dir);
-    return dir;
-  }
-
-  function captureJson(fn: () => Promise<void>): Promise<Record<string, unknown>> {
-    return new Promise(async (resolve, reject) => {
-      const spy = vi.spyOn(console, "log").mockImplementation(() => {});
-      try {
-        await fn();
-        const output = spy.mock.calls.map((c) => c.join(" ")).join("");
-        resolve(JSON.parse(output));
-      } catch (err) {
-        reject(err);
-      } finally {
-        spy.mockRestore();
-      }
-    });
-  }
+  const { makeTmpDir } = useTmpDirs("pit-edge-");
 
   it("Journey 24: re-installing one stack does not clobber another", async () => {
     // Step 1: Collect stack A from claude-project fixture
