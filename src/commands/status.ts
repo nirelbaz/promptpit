@@ -327,9 +327,9 @@ function formatDetailed(result: StatusResult, root: string, verbose: boolean): v
   const hasDrift = result.stacks.some((s) => s.overallState !== "synced");
   if (hasDrift) {
     console.log();
-    console.log(chalk.dim("Suggestions:"));
-    console.log(chalk.dim("  Run `pit install` to restore drifted files."));
-    console.log(chalk.dim("  Run `pit collect` to capture current state."));
+    log.warn("Suggestions:");
+    log.info("  Run 'pit install' to restore drifted files.");
+    log.info("  Run 'pit collect' to capture current state.");
   }
 
   console.log();
