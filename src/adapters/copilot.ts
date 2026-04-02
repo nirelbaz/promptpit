@@ -2,6 +2,7 @@ import path from "node:path";
 import { homedir } from "node:os";
 import fg from "fast-glob";
 import matter from "gray-matter";
+import yaml from "js-yaml";
 import { SAFE_MATTER_OPTIONS } from "./adapter-utils.js";
 import type {
   PlatformAdapter,
@@ -12,6 +13,8 @@ import type {
   DryRunEntry,
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
+import { agentFrontmatterSchema } from "../shared/schema.js";
+import type { AgentEntry } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
 import { readMcpFromSettings, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, skillDryRunEntry } from "./adapter-utils.js";
 
@@ -21,6 +24,7 @@ function projectPaths(root: string) {
     skills: path.join(root, ".github", "instructions"),
     mcp: path.join(root, ".vscode", "mcp.json"),
     rules: path.join(root, ".github", "instructions"),
+    agents: path.join(root, ".github", "agents"),
   };
 }
 
@@ -31,6 +35,7 @@ function userPaths() {
     skills: path.join(home, ".github", "instructions"),
     mcp: path.join(home, ".vscode", "mcp.json"),
     rules: path.join(home, ".github", "instructions"),
+    agents: path.join(home, ".github", "agents"),
   };
 }
 
@@ -46,6 +51,49 @@ export function skillToInstructionsMd(skillContent: string): string {
   }
 
   return `---\napplyTo: "${applyTo}"\n---\n\n${parsed.content.trim()}\n`;
+}
+
+// Translate portable agent to Copilot .agent.md format
+// Copilot agents use: name, description, tools (no model field)
+export function agentToGitHubAgent(agentContent: string): string {
+  const parsed = matter(agentContent, SAFE_MATTER_OPTIONS as never);
+  const fm = parsed.data as Record<string, unknown>;
+
+  const copilotFm: Record<string, unknown> = {};
+  if (fm.name) copilotFm.name = fm.name;
+  if (fm.description) copilotFm.description = fm.description;
+  if (fm.tools) copilotFm.tools = fm.tools;
+  // model is dropped — Copilot doesn't support per-agent model selection
+
+  const yamlStr = yaml.dump(copilotFm, { schema: yaml.JSON_SCHEMA }).trim();
+
+  return `---\n${yamlStr}\n---\n\n${parsed.content.trim()}\n`;
+}
+
+async function readCopilotAgents(agentsDir: string): Promise<AgentEntry[]> {
+  const agentFiles = await fg("*.agent.md", {
+    cwd: agentsDir,
+    absolute: true,
+  }).catch(() => [] as string[]);
+
+  const agents: AgentEntry[] = [];
+  for (const file of agentFiles) {
+    const raw = await readFileOrNull(file);
+    if (!raw) continue;
+
+    const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
+    const validation = agentFrontmatterSchema.safeParse(parsed.data);
+    if (!validation.success) continue;
+
+    const agentName = path.basename(file, ".agent.md");
+    agents.push({
+      name: agentName,
+      path: `agents/${agentName}`,
+      frontmatter: validation.data,
+      content: raw,
+    });
+  }
+  return agents;
 }
 
 // Infer MCP server type from config shape
@@ -87,6 +135,7 @@ async function read(root: string): Promise<PlatformConfig> {
 
   const agentInstructions = (await readFileOrNull(p.config)) ?? "";
   const mcpServers = await readMcpFromSettings(p.mcp, "servers");
+  const agents = await readCopilotAgents(p.agents!);
 
   // Read scoped instructions as rules
   const rules: string[] = [];
@@ -105,7 +154,7 @@ async function read(root: string): Promise<PlatformConfig> {
     adapterId: "copilot",
     agentInstructions,
     skills: [],
-    agents: [],
+    agents,
     mcpServers,
     rules,
   };
@@ -148,6 +197,22 @@ async function write(
         dryRunEntries.push(skillDryRunEntry(dest, await exists(dest), "translate to .instructions.md"));
       } else {
         await writeFileEnsureDir(dest, instructionContent);
+        filesWritten.push(dest);
+      }
+    }
+
+    // Write agents to .github/agents/*.agent.md
+    for (const agent of stack.agents) {
+      const translated = agentToGitHubAgent(agent.content);
+      const dest = path.join(p.agents!, `${agent.name}.agent.md`);
+      if (opts.dryRun) {
+        dryRunEntries.push({
+          file: dest,
+          action: (await exists(dest)) ? "modify" : "create",
+          detail: "translate to .agent.md",
+        });
+      } else {
+        await writeFileEnsureDir(dest, translated);
         filesWritten.push(dest);
       }
     }
@@ -202,7 +267,7 @@ export const copilotAdapter: PlatformAdapter = {
     mcpRootKey: "servers",
     agentsmd: true,
     hooks: false,
-    agents: "none",
+    agents: "native",
   },
   detect,
   read,
