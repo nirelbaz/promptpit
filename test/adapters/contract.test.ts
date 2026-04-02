@@ -128,5 +128,13 @@ describe.each(listAdapters().map((a) => [a.id, a] as const))(
       expect(content).toContain("Do not delete this.");
       expect(content).toContain("promptpit:start:test-stack");
     });
+
+    // 8. read() returns agents array
+    it("read() returns agents array in PlatformConfig", async () => {
+      const setup = ADAPTER_FIXTURES[id];
+      if (setup) await setup(tmpDir);
+      const config = await adapter.read(tmpDir);
+      expect(Array.isArray(config.agents)).toBe(true);
+    });
   },
 );
