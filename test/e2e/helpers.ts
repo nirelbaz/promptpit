@@ -29,13 +29,18 @@ export function useTmpDirs(prefix: string) {
 
 /**
  * Captures JSON output from a command that prints to console.log.
+ * Only call inside it() blocks — uses vi.spyOn which requires an active test context.
  */
 export async function captureJson(fn: () => Promise<void>): Promise<Record<string, unknown>> {
   const spy = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
     await fn();
     const output = spy.mock.calls.map((c) => c.join(" ")).join("");
-    return JSON.parse(output);
+    try {
+      return JSON.parse(output);
+    } catch (e) {
+      throw new Error(`captureJson: failed to parse output:\n${output}\n${e}`);
+    }
   } finally {
     spy.mockRestore();
   }
