@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { stackManifestSchema, skillFrontmatterSchema, mcpServerSchema, mcpConfigSchema } from "../../src/shared/schema.js";
+import { stackManifestSchema, skillFrontmatterSchema, mcpServerSchema, mcpConfigSchema, agentFrontmatterSchema } from "../../src/shared/schema.js";
 
 describe("stackManifestSchema", () => {
   it("validates a complete stack manifest", () => {
@@ -54,6 +54,16 @@ describe("stackManifestSchema", () => {
       compatibility: ["claude-code", "cursor"],
     };
     const result = stackManifestSchema.safeParse(full);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts optional agents field", () => {
+    const valid = {
+      name: "my-stack",
+      version: "1.0.0",
+      agents: ["agents/reviewer"],
+    };
+    const result = stackManifestSchema.safeParse(valid);
     expect(result.success).toBe(true);
   });
 });
@@ -127,6 +137,47 @@ describe("mcpServerSchema", () => {
       expect(result.data).toHaveProperty("type", "stdio");
       expect(result.data).toHaveProperty("customField", true);
     }
+  });
+});
+
+describe("agentFrontmatterSchema", () => {
+  it("validates minimal agent frontmatter", () => {
+    const valid = { name: "reviewer", description: "Code review agent" };
+    const result = agentFrontmatterSchema.safeParse(valid);
+    expect(result.success).toBe(true);
+  });
+
+  it("requires name and description", () => {
+    const missing = { name: "no-desc" };
+    const result = agentFrontmatterSchema.safeParse(missing);
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts optional tools as array", () => {
+    const input = { name: "r", description: "d", tools: ["Read", "Grep"] };
+    const result = agentFrontmatterSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    expect(result.data!.tools).toEqual(["Read", "Grep"]);
+  });
+
+  it("coerces tools string to array", () => {
+    const input = { name: "r", description: "d", tools: "Read" };
+    const result = agentFrontmatterSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    expect(result.data!.tools).toEqual(["Read"]);
+  });
+
+  it("accepts optional model field", () => {
+    const input = { name: "r", description: "d", model: "claude-sonnet-4-5-20250514" };
+    const result = agentFrontmatterSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    expect(result.data!.model).toBe("claude-sonnet-4-5-20250514");
+  });
+
+  it("rejects empty name", () => {
+    const input = { name: "", description: "d" };
+    const result = agentFrontmatterSchema.safeParse(input);
+    expect(result.success).toBe(false);
   });
 });
 

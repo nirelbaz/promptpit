@@ -108,6 +108,7 @@ export async function collectStack(
     },
     agentInstructions: mergeResult.agentInstructions,
     skills: mergeResult.skills,
+    agents: [],
     mcpServers: stripped,
     envExample,
   };

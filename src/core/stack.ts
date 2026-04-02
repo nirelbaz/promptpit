@@ -98,6 +98,7 @@ export async function readStack(stackDir: string): Promise<StackBundle> {
     manifest: manifestResult.data,
     agentInstructions,
     skills,
+    agents: [],
     mcpServers,
     envExample,
   };
