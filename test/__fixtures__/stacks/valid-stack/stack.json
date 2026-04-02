@@ -3,5 +3,6 @@
   "version": "1.0.0",
   "description": "A test stack for fixtures",
   "skills": ["skills/browse"],
+  "agents": ["agents/reviewer"],
   "compatibility": ["claude-code"]
 }

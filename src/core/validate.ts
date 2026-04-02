@@ -7,6 +7,7 @@ import {
   stackManifestSchema,
   mcpConfigSchema,
   skillFrontmatterSchema,
+  agentFrontmatterSchema,
 } from "../shared/schema.js";
 import { validateEnvNames } from "../core/security.js";
 import { readFileOrNull } from "../shared/utils.js";
@@ -50,10 +51,12 @@ export async function validateStack(stackDir: string): Promise<ValidateResult> {
 
   // Read all files in parallel
   const skillsDir = path.join(stackDir, "skills");
-  const [manifestRaw, agentRaw, skillFiles, mcpRaw, envRaw] = await Promise.all([
+  const agentsDir = path.join(stackDir, "agents");
+  const [manifestRaw, agentRaw, skillFiles, agentFiles, mcpRaw, envRaw] = await Promise.all([
     readFileOrNull(path.join(stackDir, "stack.json")),
     readFileOrNull(path.join(stackDir, "agent.promptpit.md")),
     fg("*/SKILL.md", { cwd: skillsDir, absolute: true }).catch(() => [] as string[]),
+    fg("*.md", { cwd: agentsDir, absolute: true }).catch(() => [] as string[]),
     readFileOrNull(path.join(stackDir, "mcp.json")),
     readFileOrNull(path.join(stackDir, ".env.example")),
   ]);
@@ -102,6 +105,31 @@ export async function validateStack(stackDir: string): Promise<ValidateResult> {
     try {
       const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
       const result = skillFrontmatterSchema.safeParse(parsed.data);
+      if (!result.success) {
+        for (const issue of result.error.issues) {
+          addDiag(diagnostics, relPath, "error", `${issue.path.join(".")}: ${issue.message}`);
+        }
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "unknown error";
+      addDiag(diagnostics, relPath, "error", `Invalid frontmatter: ${msg}`);
+    }
+  }
+
+  // --- agents/*.md (optional) ---
+  const agentContents = await Promise.all(
+    agentFiles.map(async (file) => ({
+      file,
+      agentName: path.basename(file, ".md"),
+      raw: await readFileOrNull(file),
+    })),
+  );
+  for (const { agentName, raw } of agentContents) {
+    const relPath = `agents/${agentName}.md`;
+    if (!raw) continue;
+    try {
+      const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
+      const result = agentFrontmatterSchema.safeParse(parsed.data);
       if (!result.success) {
         for (const issue of result.error.issues) {
           addDiag(diagnostics, relPath, "error", `${issue.path.join(".")}: ${issue.message}`);
