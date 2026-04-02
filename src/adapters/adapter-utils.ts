@@ -2,8 +2,8 @@ import path from "node:path";
 import fg from "fast-glob";
 import matter from "gray-matter";
 import yaml from "js-yaml";
-import type { SkillEntry, McpConfig } from "../shared/schema.js";
-import { skillFrontmatterSchema } from "../shared/schema.js";
+import type { SkillEntry, McpConfig, AgentEntry } from "../shared/schema.js";
+import { skillFrontmatterSchema, agentFrontmatterSchema } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir } from "../shared/utils.js";
 import { log } from "../shared/io.js";
 import { hasMarkers, insertMarkers, replaceMarkerContent } from "../shared/markers.js";
@@ -49,6 +49,57 @@ export async function readSkillsFromDir(
     });
   }
   return skills;
+}
+
+export async function readAgentsFromDir(
+  agentsDir: string,
+): Promise<AgentEntry[]> {
+  const agentFiles = await fg("*.md", {
+    cwd: agentsDir,
+    absolute: true,
+  }).catch(() => [] as string[]);
+
+  const agents: AgentEntry[] = [];
+  for (const file of agentFiles) {
+    const raw = await readFileOrNull(file);
+    if (!raw) continue;
+
+    const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
+    const validation = agentFrontmatterSchema.safeParse(parsed.data);
+    if (!validation.success) {
+      const reasons = validation.error.errors.map((e) => e.message).join(", ");
+      log.warn(`Skipping ${file}: invalid agent frontmatter (${reasons})`);
+      continue;
+    }
+
+    const agentName = path.basename(file, ".md");
+    agents.push({
+      name: agentName,
+      path: `agents/${agentName}`,
+      frontmatter: validation.data,
+      content: raw,
+    });
+  }
+  return agents;
+}
+
+export function formatAgentsInlineSection(agents: AgentEntry[]): string {
+  if (agents.length === 0) return "";
+
+  const sections = agents.map((agent) => {
+    const fm = agent.frontmatter;
+    const parsed = matter(agent.content, SAFE_MATTER_OPTIONS as never);
+    const body = parsed.content.trim();
+
+    let header = `### ${fm.name}\n> ${fm.description}`;
+    if (fm.tools && fm.tools.length > 0) {
+      header += `\n> Tools: ${fm.tools.join(", ")}`;
+    }
+
+    return `${header}\n\n${body}`;
+  });
+
+  return `## Custom Agents\n\n${sections.join("\n\n")}`;
 }
 
 export async function readMcpFromSettings(
