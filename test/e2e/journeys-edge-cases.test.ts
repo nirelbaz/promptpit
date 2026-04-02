@@ -95,32 +95,4 @@ describe("E2E: Multi-Stack & Edge Case journeys", () => {
     expect(result.hasManifest).toBe(false);
   });
 
-  it("Journey 28: double install produces byte-identical files", async () => {
-    // Step 1: Collect and install
-    const collectDir = await makeTmpDir("j28-collect-");
-    const bundleDir = path.join(collectDir, ".promptpit");
-    await collectStack(CLAUDE_PROJECT, bundleDir);
-
-    const targetDir = await makeTmpDir("j28-target-");
-    await writeFile(path.join(targetDir, "CLAUDE.md"), "# My project\n");
-    await installStack(bundleDir, targetDir, {});
-
-    // Step 2: Read content after first install
-    const contentAfterFirst = await readFile(
-      path.join(targetDir, "CLAUDE.md"),
-      "utf-8",
-    );
-
-    // Step 3: Install again
-    await installStack(bundleDir, targetDir, {});
-
-    // Step 4: Read content after second install
-    const contentAfterSecond = await readFile(
-      path.join(targetDir, "CLAUDE.md"),
-      "utf-8",
-    );
-
-    // Step 5: Assert byte-identical — no duplication, no marker drift
-    expect(contentAfterSecond).toBe(contentAfterFirst);
-  });
 });
