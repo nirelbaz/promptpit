@@ -93,11 +93,13 @@ function formatHuman(result: ValidateResult, stackDir: string): void {
   console.log();
   if (result.valid) {
     log.success(`${stackDir} is valid`);
+    log.info("Next: Run 'pit install' to install the stack.");
   } else {
     const parts: string[] = [];
     if (result.errors > 0) parts.push(`${result.errors} error${result.errors === 1 ? "" : "s"}`);
     if (result.warnings > 0) parts.push(`${result.warnings} warning${result.warnings === 1 ? "" : "s"}`);
     log.error(parts.join(", "));
+    log.info("Fix the issues above, then re-run 'pit validate'.");
   }
   console.log();
 }
