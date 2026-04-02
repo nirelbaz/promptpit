@@ -127,15 +127,18 @@ export async function initCommand(
 
     log.success(`Initialized stack in ${path.relative(resolvedDir, outputDir) || outputDir}`);
 
-    const steps = ["Edit .promptpit/stack.json to add skills and tags"];
+    const steps: string[] = [];
     if (includeInstructions) {
       steps.push("Write your agent instructions in .promptpit/agent.promptpit.md");
     }
     steps.push("Add skills to .promptpit/skills/<name>/SKILL.md");
+    steps.push("Run 'pit validate' to check for issues");
+    steps.push("Run 'pit install' to install the stack into your project");
 
     log.info("Next steps:");
     steps.forEach((s, i) => log.info(`  ${i + 1}. ${s}`));
-    log.info("  Run 'pit install' to install the stack into your project");
+    log.info("");
+    log.info("Already have AI tool configs? Run 'pit collect' instead to bundle them automatically.");
   } finally {
     if (!prompter) {
       rl.close();
