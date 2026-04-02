@@ -6,5 +6,10 @@ export default defineConfig({
     testTimeout: 30000,
     include: ["test/**/*.test.ts"],
     exclude: ["node_modules", ".claude", "dist"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "lcov"],
+      include: ["src/**/*.ts"],
+    },
   },
 });
