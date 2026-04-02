@@ -23,7 +23,7 @@ export function mergeConfigs(
     return {
       agentInstructions: c.agentInstructions,
       skills: c.skills,
-      agents: c.agents ?? [],
+      agents: c.agents,
       mcpServers: c.mcpServers,
       rules: c.rules,
       warnings: [],

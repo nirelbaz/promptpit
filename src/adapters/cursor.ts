@@ -13,7 +13,7 @@ import type {
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
-import { readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, skillDryRunEntry, formatAgentsInlineSection } from "./adapter-utils.js";
+import { readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, skillDryRunEntry, buildInlineContent } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -102,12 +102,8 @@ async function write(
   const version = stack.manifest.version;
 
   try {
-    if (stack.agentInstructions || stack.agents.length > 0) {
-      let content = stack.agentInstructions || "";
-      const agentSection = formatAgentsInlineSection(stack.agents);
-      if (agentSection) {
-        content = content ? `${content}\n\n${agentSection}` : agentSection;
-      }
+    const content = buildInlineContent(stack.agentInstructions, stack.agents);
+    if (content) {
       const result = await writeWithMarkers(
         p.config,
         content,

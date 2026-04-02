@@ -53,8 +53,12 @@ export async function readSkillsFromDir(
 
 export async function readAgentsFromDir(
   agentsDir: string,
+  opts: { glob?: string; ext?: string } = {},
 ): Promise<AgentEntry[]> {
-  const agentFiles = await fg("*.md", {
+  const pattern = opts.glob ?? "*.md";
+  const ext = opts.ext ?? ".md";
+
+  const agentFiles = await fg(pattern, {
     cwd: agentsDir,
     absolute: true,
   }).catch(() => [] as string[]);
@@ -72,7 +76,7 @@ export async function readAgentsFromDir(
       continue;
     }
 
-    const agentName = path.basename(file, ".md");
+    const agentName = path.basename(file, ext);
     agents.push({
       name: agentName,
       path: `agents/${agentName}`,
@@ -83,13 +87,18 @@ export async function readAgentsFromDir(
   return agents;
 }
 
+// Strip YAML frontmatter fences without re-parsing through gray-matter
+function stripFrontmatter(raw: string): string {
+  const match = raw.match(/^---\n[\s\S]*?\n---\n*/);
+  return match ? raw.slice(match[0].length).trim() : raw.trim();
+}
+
 export function formatAgentsInlineSection(agents: AgentEntry[]): string {
   if (agents.length === 0) return "";
 
   const sections = agents.map((agent) => {
     const fm = agent.frontmatter;
-    const parsed = matter(agent.content, SAFE_MATTER_OPTIONS as never);
-    const body = parsed.content.trim();
+    const body = stripFrontmatter(agent.content);
 
     let header = `### ${fm.name}\n> ${fm.description}`;
     if (fm.tools && fm.tools.length > 0) {
@@ -100,6 +109,17 @@ export function formatAgentsInlineSection(agents: AgentEntry[]): string {
   });
 
   return `## Custom Agents\n\n${sections.join("\n\n")}`;
+}
+
+// Build marker content with optional inline agents section
+export function buildInlineContent(agentInstructions: string, agents: AgentEntry[]): string | null {
+  if (!agentInstructions && agents.length === 0) return null;
+  let content = agentInstructions || "";
+  const agentSection = formatAgentsInlineSection(agents);
+  if (agentSection) {
+    content = content ? `${content}\n\n${agentSection}` : agentSection;
+  }
+  return content;
 }
 
 export async function readMcpFromSettings(

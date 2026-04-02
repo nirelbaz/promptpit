@@ -13,10 +13,8 @@ import type {
   DryRunEntry,
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
-import { agentFrontmatterSchema } from "../shared/schema.js";
-import type { AgentEntry } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
-import { readMcpFromSettings, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, skillDryRunEntry } from "./adapter-utils.js";
+import { readAgentsFromDir, readMcpFromSettings, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, skillDryRunEntry } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -53,8 +51,7 @@ export function skillToInstructionsMd(skillContent: string): string {
   return `---\napplyTo: "${applyTo}"\n---\n\n${parsed.content.trim()}\n`;
 }
 
-// Translate portable agent to Copilot .agent.md format
-// Copilot agents use: name, description, tools (no model field)
+// model dropped — Copilot doesn't support per-agent model selection
 export function agentToGitHubAgent(agentContent: string): string {
   const parsed = matter(agentContent, SAFE_MATTER_OPTIONS as never);
   const fm = parsed.data as Record<string, unknown>;
@@ -63,39 +60,10 @@ export function agentToGitHubAgent(agentContent: string): string {
   if (fm.name) copilotFm.name = fm.name;
   if (fm.description) copilotFm.description = fm.description;
   if (fm.tools) copilotFm.tools = fm.tools;
-  // model is dropped — Copilot doesn't support per-agent model selection
 
   const yamlStr = yaml.dump(copilotFm, { schema: yaml.JSON_SCHEMA }).trim();
 
   return `---\n${yamlStr}\n---\n\n${parsed.content.trim()}\n`;
-}
-
-// Content retains Copilot-native format (same as how skill content works).
-// Translation happens at write time via agentToGitHubAgent.
-async function readCopilotAgents(agentsDir: string): Promise<AgentEntry[]> {
-  const agentFiles = await fg("*.agent.md", {
-    cwd: agentsDir,
-    absolute: true,
-  }).catch(() => [] as string[]);
-
-  const agents: AgentEntry[] = [];
-  for (const file of agentFiles) {
-    const raw = await readFileOrNull(file);
-    if (!raw) continue;
-
-    const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
-    const validation = agentFrontmatterSchema.safeParse(parsed.data);
-    if (!validation.success) continue;
-
-    const agentName = path.basename(file, ".agent.md");
-    agents.push({
-      name: agentName,
-      path: `agents/${agentName}`,
-      frontmatter: validation.data,
-      content: raw,
-    });
-  }
-  return agents;
 }
 
 // Infer MCP server type from config shape
@@ -137,7 +105,7 @@ async function read(root: string): Promise<PlatformConfig> {
 
   const agentInstructions = (await readFileOrNull(p.config)) ?? "";
   const mcpServers = await readMcpFromSettings(p.mcp, "servers");
-  const agents = await readCopilotAgents(p.agents!);
+  const agents = await readAgentsFromDir(p.agents!, { glob: "*.agent.md", ext: ".agent.md" });
 
   // Read scoped instructions as rules
   const rules: string[] = [];

@@ -10,7 +10,7 @@ import type {
 } from "./types.js";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, exists } from "../shared/utils.js";
-import { writeWithMarkers, readMcpFromSettings, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, formatAgentsInlineSection } from "./adapter-utils.js";
+import { writeWithMarkers, readMcpFromSettings, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, buildInlineContent } from "./adapter-utils.js";
 
 const MCP_FILE = ".mcp.json";
 
@@ -70,12 +70,8 @@ async function write(
   const version = stack.manifest.version;
 
   try {
-    if (stack.agentInstructions || stack.agents.length > 0) {
-      let content = stack.agentInstructions || "";
-      const agentSection = formatAgentsInlineSection(stack.agents);
-      if (agentSection) {
-        content = content ? `${content}\n\n${agentSection}` : agentSection;
-      }
+    const content = buildInlineContent(stack.agentInstructions, stack.agents);
+    if (content) {
       const result = await writeWithMarkers(
         p.config,
         content,
