@@ -42,7 +42,7 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "@types/diff": "^7.0.2",
+    "@types/diff": "^8.0.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.5.0",
     "@vitest/coverage-v8": "^4.1.2",
