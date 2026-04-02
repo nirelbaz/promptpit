@@ -11,9 +11,9 @@ import type {
   WriteOptions,
   DryRunEntry,
 } from "./types.js";
-import type { StackBundle } from "../shared/schema.js";
+import type { StackBundle, RuleEntry, RuleFrontmatter } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
-import { readMcpFromSettings, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, skillDryRunEntry } from "./adapter-utils.js";
+import { readMcpFromSettings, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -46,6 +46,21 @@ export function skillToInstructionsMd(skillContent: string): string {
   }
 
   return `---\napplyTo: "${applyTo}"\n---\n\n${parsed.content.trim()}\n`;
+}
+
+// Translate portable rule format to Copilot .instructions.md format (globs → applyTo)
+export function ruleToInstructionsMd(ruleContent: string): string {
+  const parsed = matter(ruleContent, SAFE_MATTER_OPTIONS as never);
+  const fm = parsed.data as Record<string, unknown>;
+
+  let applyTo = "**";
+  if (fm.alwaysApply) {
+    applyTo = "**";
+  } else if (fm.globs) {
+    applyTo = Array.isArray(fm.globs) ? fm.globs.join(", ") : String(fm.globs);
+  }
+
+  return matter.stringify(parsed.content.trim() + "\n", { applyTo });
 }
 
 // Infer MCP server type from config shape
@@ -89,15 +104,37 @@ async function read(root: string): Promise<PlatformConfig> {
   const mcpServers = await readMcpFromSettings(p.mcp, "servers");
 
   // Read scoped instructions as rules
-  const rules: string[] = [];
+  const rules: RuleEntry[] = [];
   if (await exists(p.rules)) {
     const instructionFiles = await fg("*.instructions.md", {
       cwd: p.rules,
       absolute: true,
     });
     for (const file of instructionFiles) {
-      const content = await readFileOrNull(file);
-      if (content) rules.push(content);
+      const raw = await readFileOrNull(file);
+      if (!raw) continue;
+      // Use default parser — local Copilot config files, not untrusted input
+      let parsed: matter.GrayMatterFile<string>;
+      try {
+        parsed = matter(raw);
+      } catch {
+        continue;
+      }
+      const ruleName = path.basename(file, ".instructions.md");
+      const fm = parsed.data as Record<string, unknown>;
+      const portableFm: RuleFrontmatter = {
+        name: ruleName,
+        description: typeof fm.description === "string" ? fm.description : ruleName,
+      };
+      if (fm.applyTo) {
+        portableFm.globs = typeof fm.applyTo === "string" ? [fm.applyTo] : fm.applyTo as string[];
+      }
+      rules.push({
+        name: ruleName,
+        path: `rules/${ruleName}`,
+        frontmatter: portableFm,
+        content: raw,
+      });
     }
   }
 
@@ -144,8 +181,20 @@ async function write(
       const instructionContent = skillToInstructionsMd(skill.content);
       const dest = path.join(p.skills, `${skill.name}.instructions.md`);
       if (opts.dryRun) {
-        dryRunEntries.push(skillDryRunEntry(dest, await exists(dest), "translate to .instructions.md"));
+        dryRunEntries.push(fileDryRunEntry(dest, await exists(dest), "translate to .instructions.md"));
       } else {
+        await writeFileEnsureDir(dest, instructionContent);
+        filesWritten.push(dest);
+      }
+    }
+
+    for (const rule of stack.rules) {
+      const prefixedName = rule.name.startsWith("rule-") ? rule.name : `rule-${rule.name}`;
+      const dest = path.join(p.rules!, `${prefixedName}.instructions.md`);
+      if (opts.dryRun) {
+        dryRunEntries.push(fileDryRunEntry(dest, await exists(dest), "translate to .instructions.md"));
+      } else {
+        const instructionContent = ruleToInstructionsMd(rule.content);
         await writeFileEnsureDir(dest, instructionContent);
         filesWritten.push(dest);
       }

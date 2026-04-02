@@ -1,5 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { copilotAdapter, skillToInstructionsMd } from "../../src/adapters/copilot.js";
+import { describe, it, expect, afterEach } from "vitest";
+import { copilotAdapter, skillToInstructionsMd, ruleToInstructionsMd } from "../../src/adapters/copilot.js";
+import path from "node:path";
+import { mkdtemp, rm, readFile, writeFile, mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { readStack } from "../../src/core/stack.js";
 
 describe("copilotAdapter", () => {
   it("has correct id and displayName", () => {
@@ -64,5 +68,53 @@ Content here.`;
     expect(result).not.toContain("allowed-tools");
     expect(result).not.toContain("Read");
     expect(result).toContain("Content here.");
+  });
+});
+
+describe("copilot rules", () => {
+  const tmpDirs: string[] = [];
+  afterEach(async () => {
+    for (const d of tmpDirs) await rm(d, { recursive: true, force: true });
+    tmpDirs.length = 0;
+  });
+
+  it("reads .instructions.md files as RuleEntry", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-copilot-readrules-"));
+    tmpDirs.push(dir);
+    await mkdir(path.join(dir, ".github", "instructions"), { recursive: true });
+    await writeFile(
+      path.join(dir, ".github", "instructions", "lint.instructions.md"),
+      '---\napplyTo: "**/*.ts"\n---\n\nRun eslint.\n',
+    );
+
+    const config = await copilotAdapter.read(dir);
+    expect(config.rules).toHaveLength(1);
+    expect(config.rules[0].name).toBe("lint");
+    expect(config.rules[0].frontmatter.globs).toEqual(["**/*.ts"]);
+  });
+
+  it("writes rules with rule- prefix", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-copilot-writerules-"));
+    tmpDirs.push(target);
+    await mkdir(path.join(target, ".github"), { recursive: true });
+
+    const bundle = await readStack(
+      path.resolve("test/__fixtures__/stacks/valid-stack"),
+    );
+
+    await copilotAdapter.write(target, bundle, {});
+
+    const testingRule = await readFile(
+      path.join(target, ".github", "instructions", "rule-testing.instructions.md"), "utf-8",
+    );
+    expect(testingRule).toContain("**/*.test.ts, **/*.spec.ts");
+    expect(testingRule).toContain("vitest");
+
+    const securityRule = await readFile(
+      path.join(target, ".github", "instructions", "rule-security.instructions.md"), "utf-8",
+    );
+    expect(securityRule).toContain("applyTo:");
+    expect(securityRule).toContain("**");
+    expect(securityRule).toContain("sanitize");
   });
 });

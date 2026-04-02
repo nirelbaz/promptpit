@@ -117,4 +117,58 @@ describe("claudeCodeAdapter", () => {
       expect(content).toContain("browse");
     });
   });
+
+  describe("rules", () => {
+    const tmpDirs: string[] = [];
+
+    afterEach(async () => {
+      for (const dir of tmpDirs) {
+        await rm(dir, { recursive: true, force: true });
+      }
+      tmpDirs.length = 0;
+    });
+
+    it("writes rules to .claude/rules/ with translated frontmatter", async () => {
+      const target = await mkdtemp(path.join(tmpdir(), "pit-cc-rules-"));
+      tmpDirs.push(target);
+      await writeFile(path.join(target, "CLAUDE.md"), "");
+
+      const bundle = await readStack(
+        path.resolve("test/__fixtures__/stacks/valid-stack"),
+      );
+
+      await claudeCodeAdapter.write(target, bundle, {});
+
+      const testingRule = await readFile(
+        path.join(target, ".claude", "rules", "testing.md"), "utf-8",
+      );
+      expect(testingRule).toContain("paths:");
+      expect(testingRule).toContain("**/*.test.ts");
+      expect(testingRule).not.toContain("globs:");
+      expect(testingRule).toContain("vitest");
+
+      const securityRule = await readFile(
+        path.join(target, ".claude", "rules", "security.md"), "utf-8",
+      );
+      // alwaysApply: true should remove paths
+      expect(securityRule).not.toContain("paths:");
+      expect(securityRule).toContain("sanitize");
+    });
+
+    it("reads rules from .claude/rules/*.md", async () => {
+      const dir = await mkdtemp(path.join(tmpdir(), "pit-cc-readrules-"));
+      tmpDirs.push(dir);
+      await writeFile(path.join(dir, "CLAUDE.md"), "");
+      await mkdir(path.join(dir, ".claude", "rules"), { recursive: true });
+      await writeFile(
+        path.join(dir, ".claude", "rules", "lint.md"),
+        "---\nname: lint\ndescription: Lint rules\n---\n\nRun eslint.\n",
+      );
+
+      const config = await claudeCodeAdapter.read(dir);
+      expect(config.rules).toHaveLength(1);
+      expect(config.rules[0].name).toBe("lint");
+      expect(config.rules[0].frontmatter.description).toBe("Lint rules");
+    });
+  });
 });

@@ -1,6 +1,6 @@
 ---
 description: Testing rules
-globs: **/*.test.ts
+globs: "**/*.test.ts"
 ---
 
 Always use vitest for testing.

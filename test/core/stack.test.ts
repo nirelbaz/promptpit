@@ -17,6 +17,27 @@ describe("readStack", () => {
     expect(bundle.agentInstructions).toContain("TypeScript strict mode");
   });
 
+  it("reads rules from rules/*.md", async () => {
+    const bundle = await readStack(VALID_STACK);
+    expect(bundle.rules).toHaveLength(2);
+    const names = bundle.rules.map((r) => r.name).sort();
+    expect(names).toEqual(["security", "testing"]);
+    const testing = bundle.rules.find((r) => r.name === "testing")!;
+    expect(testing.frontmatter.description).toBe("Testing conventions");
+    expect(testing.frontmatter.globs).toEqual(["**/*.test.ts", "**/*.spec.ts"]);
+    expect(testing.frontmatter.alwaysApply).toBe(false);
+    const security = bundle.rules.find((r) => r.name === "security")!;
+    expect(security.frontmatter.alwaysApply).toBe(true);
+  });
+
+  it("returns empty rules for bundle without rules dir", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-norules-"));
+    await writeFile(path.join(dir, "stack.json"), JSON.stringify({ name: "test", version: "1.0.0" }));
+    const bundle = await readStack(dir);
+    expect(bundle.rules).toEqual([]);
+    await rm(dir, { recursive: true });
+  });
+
   it("throws on missing stack.json", async () => {
     const emptyDir = await mkdtemp(path.join(tmpdir(), "pit-test-"));
     await expect(readStack(emptyDir)).rejects.toThrow("stack.json");
@@ -49,6 +70,47 @@ describe("writeStack", () => {
       "utf-8",
     );
     expect(skillContent).toContain("browse");
+
+    await rm(dir, { recursive: true });
+  });
+
+  it("writes rules to rules/{name}.md", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-write-rules-"));
+    const outputDir = path.join(dir, ".promptpit");
+
+    const bundle = await readStack(VALID_STACK);
+    await writeStack(outputDir, bundle);
+
+    const ruleContent = await readFile(
+      path.join(outputDir, "rules", "testing.md"),
+      "utf-8",
+    );
+    expect(ruleContent).toContain("Testing conventions");
+    expect(ruleContent).toContain("vitest");
+
+    const secContent = await readFile(
+      path.join(outputDir, "rules", "security.md"),
+      "utf-8",
+    );
+    expect(secContent).toContain("Security guidelines");
+
+    await rm(dir, { recursive: true });
+  });
+
+  it("round-trips rules through write then read", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-roundtrip-rules-"));
+    const outputDir = path.join(dir, ".promptpit");
+
+    const original = await readStack(VALID_STACK);
+    await writeStack(outputDir, original);
+    const reread = await readStack(outputDir);
+
+    expect(reread.rules).toHaveLength(original.rules.length);
+    for (const origRule of original.rules) {
+      const found = reread.rules.find((r) => r.name === origRule.name);
+      expect(found).toBeDefined();
+      expect(found!.frontmatter.description).toBe(origRule.frontmatter.description);
+    }
 
     await rm(dir, { recursive: true });
   });

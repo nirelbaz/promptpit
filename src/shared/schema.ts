@@ -17,6 +17,7 @@ export const stackManifestSchema = z.object({
   license: z.string().optional(),
   author: z.string().optional(),
   skills: z.array(z.string()).optional(),
+  rules: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
   compatibility: z.array(z.string()).optional(),
 });
@@ -45,6 +46,29 @@ export const skillFrontmatterSchema = z.object({
 });
 
 export type SkillFrontmatter = z.infer<typeof skillFrontmatterSchema>;
+
+// --- Rule Frontmatter ---
+
+export const ruleFrontmatterSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().min(1),
+  globs: z.preprocess(
+    (val: unknown) => (typeof val === "string" ? [val] : val),
+    z.array(z.string()),
+  ).optional(),
+  alwaysApply: z.boolean().optional(),
+});
+
+export type RuleFrontmatter = z.infer<typeof ruleFrontmatterSchema>;
+
+// --- Rule Entry ---
+
+export interface RuleEntry {
+  name: string;
+  path: string;
+  frontmatter: RuleFrontmatter;
+  content: string;
+}
 
 // --- MCP Server Config ---
 
@@ -77,6 +101,7 @@ export interface StackBundle {
   manifest: StackManifest;
   agentInstructions: string;
   skills: SkillEntry[];
+  rules: RuleEntry[];
   mcpServers: McpConfig;
   envExample: Record<string, string>;
 }
@@ -114,6 +139,7 @@ const artifactHashSchema = z.object({
 const adapterInstallSchema = z.object({
   instructions: artifactHashSchema.optional(),
   skills: z.record(artifactHashSchema).optional(),
+  rules: z.record(artifactHashSchema).optional(),
   mcp: z.record(artifactHashSchema).optional(),
 });
 

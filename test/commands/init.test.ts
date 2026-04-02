@@ -91,6 +91,19 @@ describe("pit init", () => {
     expect(content).toBe("");
   });
 
+  it("creates rules/.gitkeep always", async () => {
+    const dir = await makeTmpDir();
+    const prompter = fakePrompter(["test", "0.1.0", "", "", "n", "n", "n"]);
+
+    await initCommand(dir, {}, prompter);
+
+    const content = await readFile(
+      path.join(dir, ".promptpit", "rules", ".gitkeep"),
+      "utf-8",
+    );
+    expect(content).toBe("");
+  });
+
   it("creates optional files when user says yes", async () => {
     const dir = await makeTmpDir();
     const prompter = fakePrompter([

@@ -11,9 +11,9 @@ import type {
   WriteOptions,
   DryRunEntry,
 } from "./types.js";
-import type { StackBundle } from "../shared/schema.js";
+import type { StackBundle, RuleEntry, RuleFrontmatter } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
-import { readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, skillDryRunEntry } from "./adapter-utils.js";
+import { readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -53,6 +53,21 @@ export function skillToMdc(skillContent: string, _skillName: string): string {
   return `---\n${fmLines}\n---\n\n${parsed.content.trim()}\n`;
 }
 
+// Translate portable rule format to Cursor .mdc format
+export function ruleToMdc(ruleContent: string): string {
+  const parsed = matter(ruleContent, SAFE_MATTER_OPTIONS as never);
+  const fm = parsed.data as Record<string, unknown>;
+
+  const mdcFm: Record<string, unknown> = {};
+  if (fm.description) mdcFm.description = fm.description;
+  if (fm.alwaysApply != null) mdcFm.alwaysApply = fm.alwaysApply;
+  if (fm.globs) {
+    mdcFm.globs = Array.isArray(fm.globs) ? fm.globs.join(", ") : fm.globs;
+  }
+
+  return matter.stringify(parsed.content.trim() + "\n", mdcFm);
+}
+
 async function detect(root: string): Promise<DetectionResult> {
   const p = projectPaths(root);
   const found: string[] = [];
@@ -70,12 +85,40 @@ async function read(root: string): Promise<PlatformConfig> {
   const agentInstructions = (await readFileOrNull(p.config)) ?? "";
   const mcpServers = await readMcpFromSettings(p.mcp, "mcpServers");
 
-  const rules: string[] = [];
+  const rules: RuleEntry[] = [];
   if (await exists(p.rules)) {
     const mdcFiles = await fg("*.mdc", { cwd: p.rules, absolute: true });
     for (const file of mdcFiles) {
-      const content = await readFileOrNull(file);
-      if (content) rules.push(content);
+      const raw = await readFileOrNull(file);
+      if (!raw) continue;
+      // Use default gray-matter parser (not SAFE_MATTER_OPTIONS) because .mdc files
+      // are local Cursor configs, not untrusted input, and often contain unquoted
+      // glob patterns like **/*.test.ts that JSON_SCHEMA YAML rejects
+      let parsed: matter.GrayMatterFile<string>;
+      try {
+        parsed = matter(raw);
+      } catch {
+        continue;
+      }
+      const ruleName = path.basename(file, ".mdc");
+      // Map Cursor's globs/alwaysApply/description to portable format
+      const fm = parsed.data as Record<string, unknown>;
+      const portableFm: RuleFrontmatter = {
+        name: ruleName,
+        description: typeof fm.description === "string" ? fm.description : ruleName,
+      };
+      if (fm.globs) {
+        portableFm.globs = typeof fm.globs === "string" ? fm.globs.split(",").map((g: string) => g.trim()) : fm.globs as string[];
+      }
+      if (fm.alwaysApply != null) {
+        portableFm.alwaysApply = !!fm.alwaysApply;
+      }
+      rules.push({
+        name: ruleName,
+        path: `rules/${ruleName}`,
+        frontmatter: portableFm,
+        content: raw,
+      });
     }
   }
 
@@ -120,8 +163,20 @@ async function write(
       const mdcContent = skillToMdc(skill.content, skill.name);
       const dest = path.join(p.rules!, `${skill.name}.mdc`);
       if (opts.dryRun) {
-        dryRunEntries.push(skillDryRunEntry(dest, await exists(dest), "translate to .mdc"));
+        dryRunEntries.push(fileDryRunEntry(dest, await exists(dest), "translate to .mdc"));
       } else {
+        await writeFileEnsureDir(dest, mdcContent);
+        filesWritten.push(dest);
+      }
+    }
+
+    for (const rule of stack.rules) {
+      const prefixedName = rule.name.startsWith("rule-") ? rule.name : `rule-${rule.name}`;
+      const dest = path.join(p.rules!, `${prefixedName}.mdc`);
+      if (opts.dryRun) {
+        dryRunEntries.push(fileDryRunEntry(dest, await exists(dest), "translate to .mdc"));
+      } else {
+        const mdcContent = ruleToMdc(rule.content);
         await writeFileEnsureDir(dest, mdcContent);
         filesWritten.push(dest);
       }

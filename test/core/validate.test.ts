@@ -74,6 +74,28 @@ describe("validateStack", () => {
     }
   });
 
+  it("validates rules with valid frontmatter", async () => {
+    const result = await validateStack(VALID_STACK);
+    expect(result.valid).toBe(true);
+    const ruleDiags = result.diagnostics.filter((d) => d.file.startsWith("rules/"));
+    expect(ruleDiags).toHaveLength(0);
+  });
+
+  it("returns errors for invalid rule frontmatter", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-validate-rules-"));
+    try {
+      await writeFile(path.join(dir, "stack.json"), JSON.stringify({ name: "test", version: "1.0.0" }));
+      await mkdir(path.join(dir, "rules"), { recursive: true });
+      await writeFile(path.join(dir, "rules", "bad-rule.md"), "---\nfoo: bar\n---\n\nNo name or description.\n");
+      const result = await validateStack(dir);
+      const ruleDiags = result.diagnostics.filter((d) => d.file.startsWith("rules/"));
+      expect(ruleDiags.length).toBeGreaterThanOrEqual(1);
+      expect(ruleDiags[0]!.level).toBe("error");
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
   it("returns warnings for dangerous env names", async () => {
     const result = await validateStack(INVALID_STACK);
     const envWarnings = result.diagnostics.filter(

@@ -104,10 +104,12 @@ export async function collectStack(
       version: "0.1.0",
       description: projectInfo.description,
       skills: mergeResult.skills.map((s) => s.path),
+      rules: mergeResult.rules.map((r) => r.path),
       compatibility: detected.map((d) => d.adapter.id),
     },
     agentInstructions: mergeResult.agentInstructions,
     skills: mergeResult.skills,
+    rules: mergeResult.rules,
     mcpServers: stripped,
     envExample,
   };
@@ -120,6 +122,9 @@ export async function collectStack(
     }
     for (const skill of bundle.skills) {
       filePaths.push(path.join(outputDir, "skills", skill.name, "SKILL.md"));
+    }
+    for (const rule of bundle.rules) {
+      filePaths.push(path.join(outputDir, "rules", `${rule.name}.md`));
     }
     if (Object.keys(bundle.mcpServers).length > 0) {
       filePaths.push(path.join(outputDir, "mcp.json"));
@@ -143,11 +148,13 @@ export async function collectStack(
     );
 
     const skillCount = bundle.skills.length;
+    const ruleCount = bundle.rules.length;
     const mcpCount = Object.keys(bundle.mcpServers).length;
     const secretCount = Object.keys(bundle.envExample).length;
     log.info(
       `Summary: ${bundle.agentInstructions ? "1 instruction file" : "no instructions"}, ` +
         `${skillCount} skill${skillCount !== 1 ? "s" : ""}, ` +
+        `${ruleCount} rule${ruleCount !== 1 ? "s" : ""}, ` +
         `${mcpCount} MCP server${mcpCount !== 1 ? "s" : ""}, ` +
         `${secretCount} secret${secretCount !== 1 ? "s" : ""} stripped`,
     );
@@ -159,7 +166,7 @@ export async function collectStack(
   writeSpin.succeed(`Stack written to ${outputDir}`);
 
   log.success(
-    `Collected: ${mergeResult.skills.length} skills, ${Object.keys(stripped).length} MCP servers, ${Object.keys(envExample).length} secrets stripped`,
+    `Collected: ${mergeResult.skills.length} skills, ${mergeResult.rules.length} rules, ${Object.keys(stripped).length} MCP servers, ${Object.keys(envExample).length} secrets stripped`,
   );
   log.info(
     "Next: Run 'pit validate' to check for issues, then 'git add .promptpit && git commit'.",
