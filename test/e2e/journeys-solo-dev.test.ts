@@ -107,7 +107,7 @@ describe("E2E: Solo Dev journeys", () => {
 
     // Should throw with a helpful message — not crash with unhandled error
     await expect(collectStack(emptyDir, bundleDir)).rejects.toThrow(
-      "No AI tool configuration found",
+      "No AI tool configs found",
     );
   });
 

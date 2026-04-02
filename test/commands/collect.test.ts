@@ -55,7 +55,7 @@ describe("collectStack", () => {
     const outDir = path.join(emptyDir, ".promptpit");
 
     await expect(collectStack(emptyDir, outDir)).rejects.toThrow(
-      "No AI tool configuration found",
+      "No AI tool configs found",
     );
 
     await rm(emptyDir, { recursive: true });
