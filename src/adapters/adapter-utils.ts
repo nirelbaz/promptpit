@@ -2,8 +2,8 @@ import path from "node:path";
 import fg from "fast-glob";
 import matter from "gray-matter";
 import yaml from "js-yaml";
-import type { SkillEntry, McpConfig } from "../shared/schema.js";
-import { skillFrontmatterSchema } from "../shared/schema.js";
+import type { SkillEntry, RuleEntry, McpConfig } from "../shared/schema.js";
+import { skillFrontmatterSchema, ruleFrontmatterSchema } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir } from "../shared/utils.js";
 import { log } from "../shared/io.js";
 import { hasMarkers, insertMarkers, replaceMarkerContent } from "../shared/markers.js";
@@ -49,6 +49,38 @@ export async function readSkillsFromDir(
     });
   }
   return skills;
+}
+
+export async function readRulesFromDir(
+  rulesDir: string,
+): Promise<RuleEntry[]> {
+  const ruleFiles = await fg("*.md", {
+    cwd: rulesDir,
+    absolute: true,
+  }).catch(() => [] as string[]);
+
+  const rules: RuleEntry[] = [];
+  for (const file of ruleFiles) {
+    const raw = await readFileOrNull(file);
+    if (!raw) continue;
+
+    const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
+    const validation = ruleFrontmatterSchema.safeParse(parsed.data);
+    if (!validation.success) {
+      const reasons = validation.error.errors.map((e) => e.message).join(", ");
+      log.warn(`Skipping rule ${file}: invalid frontmatter (${reasons})`);
+      continue;
+    }
+
+    const ruleName = path.basename(file, ".md");
+    rules.push({
+      name: ruleName,
+      path: `rules/${ruleName}`,
+      frontmatter: validation.data,
+      content: raw,
+    });
+  }
+  return rules;
 }
 
 export async function readMcpFromSettings(
@@ -159,14 +191,14 @@ export async function writeWithMarkers(
   return { written: filePath, content: updated, oldContent: existing, existed };
 }
 
-export function skillDryRunEntry(
+export function fileDryRunEntry(
   dest: string,
-  skillExists: boolean,
+  fileExists: boolean,
   detail?: string,
 ): DryRunEntry {
   return {
     file: dest,
-    action: skillExists ? "modify" : "create",
+    action: fileExists ? "modify" : "create",
     detail,
   };
 }

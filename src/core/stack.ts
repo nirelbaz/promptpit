@@ -9,7 +9,7 @@ import {
   type McpConfig,
 } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir } from "../shared/utils.js";
-import { readSkillsFromDir } from "../adapters/adapter-utils.js";
+import { readSkillsFromDir, readRulesFromDir } from "../adapters/adapter-utils.js";
 
 
 /** Non-throwing read of stack.json — returns null if missing or invalid */
@@ -76,6 +76,9 @@ export async function readStack(stackDir: string): Promise<StackBundle> {
   const skillsDir = path.join(stackDir, "skills");
   const skills = await readSkillsFromDir(skillsDir);
 
+  const rulesDir = path.join(stackDir, "rules");
+  const rules = await readRulesFromDir(rulesDir);
+
   const mcpPath = path.join(stackDir, "mcp.json");
   const mcpServers = await tryReadMcpConfig(mcpPath);
 
@@ -98,6 +101,7 @@ export async function readStack(stackDir: string): Promise<StackBundle> {
     manifest: manifestResult.data,
     agentInstructions,
     skills,
+    rules,
     mcpServers,
     envExample,
   };
@@ -129,6 +133,13 @@ export async function writeStack(
     await writeFileEnsureDir(
       path.join(outputDir, "skills", skill.name, "SKILL.md"),
       skill.content,
+    );
+  }
+
+  for (const rule of bundle.rules) {
+    await writeFileEnsureDir(
+      path.join(outputDir, "rules", `${rule.name}.md`),
+      rule.content,
     );
   }
 
