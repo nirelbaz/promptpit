@@ -11,7 +11,7 @@
 - `pit status` detects agent drift for native adapters (hash comparison against install manifest).
 - `pit check` verifies agent freshness and drift in CI.
 - `pit init` scaffolds an `agents/` directory alongside `skills/` and `rules/`.
-- Free-ride agent coverage for Windsurf, Zed, Cline, and Aider via the Standards adapter's AGENTS.md inline section.
+- Tools without native agent support (Windsurf, Zed, Cline, Aider, and others) get agent definitions embedded in AGENTS.md automatically.
 
 ### Fixed
 
@@ -90,7 +90,7 @@ The "new dev joins, runs one command, every AI tool is configured" release. Five
 ### Changed
 
 - Each adapter declares `mcpFormat` and `mcpRootKey` in its capabilities for native MCP reading
-- 286 tests across 33 test files
+- 395 tests across 38 test files
 
 ## 0.2.9 (2026-04-01)
 

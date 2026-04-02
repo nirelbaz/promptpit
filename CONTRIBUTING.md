@@ -54,11 +54,13 @@ src/
 
 test/
 ├── adapters/           # Contract tests (parameterized) + per-adapter tests
-├── commands/           # collect, install, status integration tests
-├── core/               # manifest, merger, security, stack unit tests
+├── commands/           # collect, install, status, check integration tests
+├── core/               # manifest, merger, security, stack, validate unit tests
 ├── shared/             # markers, markers-strip, schema tests
 ├── sources/            # github source tests
-└── e2e/                # Round-trip, dedup, and install→status integration tests
+├── e2e/                # Round-trip, dedup, journey, and install→status integration tests
+├── rules.test.ts       # Rules read/write/translate tests
+└── scripts/            # Build script tests (check-version)
 ```
 
 ## Slash commands (Claude Code)

@@ -59,8 +59,8 @@ PromptPit already parses Agent Skills frontmatter (`skillFrontmatterSchema` in `
 ### ~~Add `rules/` to bundle schema~~
 **Completed:** v0.3.5 (2026-04-02). Portable conditional rules in `.promptpit/rules/*.md` with YAML frontmatter (`name`, `description`, `globs`, `alwaysApply`). Translated per-adapter: Claude Code (`.claude/rules/*.md`, globs→paths), Cursor (`.cursor/rules/rule-*.mdc`), Copilot (`.github/instructions/rule-*.instructions.md`, globs→applyTo). Cursor/Copilot use `rule-` prefix to avoid collision with skills in shared directories. Windsurf translation deferred to Tier 2 adapter. 35 new tests.
 
-### Add `agents/` to bundle schema
-Portable custom agent format in `.promptpit/agents/*.md` with YAML frontmatter: `name`, `description`, `tools` (array of allowed tools). Translated to `.github/agents/*.agent.md` (Copilot — native agent support with tool/MCP grants), `.gemini/agents/*.md` (Gemini — native with kind/model/max_turns). Tools without agent systems get agent definitions inlined into their instructions file as a section.
+### ~~Add `agents/` to bundle schema~~
+**Completed:** v0.3.6 (2026-04-02). Portable custom agents in `.promptpit/agents/*.md` with YAML frontmatter (`name`, `description`, `tools`, `model`). Native write to Claude Code (`.claude/agents/*.md`) and Copilot (`.github/agents/*.agent.md`), inline for Codex/Cursor/Standards. Copilot translation strips `model` field. `pit collect` reads agents from Claude Code and Copilot. `pit validate`, `pit status`, and `pit check` all handle agents. `pit init` scaffolds `agents/` directory.
 
 ### Uninstall command
 `pit uninstall <stack>` — clean reverse of install. Markers make CLAUDE.md/.cursorrules removal straightforward. Skills/MCP/env is messier (what if the user modified them after install?). Basic version: remove marked blocks + delete unmodified skill files.

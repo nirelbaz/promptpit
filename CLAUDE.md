@@ -7,7 +7,7 @@ PromptPit (`pit`) — the composition layer for AI agent configuration. Bundles 
 ## Commands
 
 ```bash
-npm test          # run tests (vitest, 286 tests)
+npm test          # run tests (vitest, 395 tests)
 npm run build     # build dist/cli.js (tsup, ESM)
 npm run lint      # TypeScript strict mode check
 npm run dev       # watch mode build

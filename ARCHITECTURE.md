@@ -8,10 +8,10 @@ promptpit is the composition layer for AI agent configuration. It bundles instru
 
 ```
 collect:
-  detect adapters → read each tool's configs → strip installed markers → merge (hash dedup) → strip secrets → write .promptpit/
+  detect adapters → read each tool's configs (instructions, skills, rules, agents, MCP) → strip installed markers → merge (hash dedup) → strip secrets → write .promptpit/
 
 install:
-  read .promptpit/ (or clone from GitHub) → write canonical .agents/skills/ → detect adapters → symlink or copy+translate to each tool's format → write manifest (.promptpit/installed.json)
+  read .promptpit/ (or clone from GitHub) → write canonical .agents/skills/ → detect adapters → symlink or copy+translate skills, rules, and agents to each tool's format → write manifest (.promptpit/installed.json)
 
 status:
   read manifest → compute content hashes of installed files → compare → report synced/drifted/deleted
@@ -37,7 +37,7 @@ src/adapters/
 └── standards.ts      # Cross-tool standards: AGENTS.md (instructions), .mcp.json (MCP servers), .agents/skills/
 ```
 
-Adding a tool means one file plus one registry entry. The contract tests in `test/adapters/contract.test.ts` automatically validate any registered adapter against 7 checks.
+Adding a tool means one file plus one registry entry. The contract tests in `test/adapters/contract.test.ts` automatically validate any registered adapter against 8 checks (including agent capability declaration).
 
 ### Why composition over inheritance
 
@@ -53,6 +53,8 @@ The original design used a `BaseAdapter` class. It was replaced with plain funct
 ├── stack.json          # Manifest: name, version, skills list, compatibility
 ├── agent.promptpit.md  # Agent instructions (merged from CLAUDE.md, .cursorrules, etc.)
 ├── skills/             # SKILL.md files, one per directory
+├── rules/              # Conditional rules (*.md with name, description, globs, alwaysApply frontmatter)
+├── agents/             # Custom agent definitions (*.md with name, description, tools, model frontmatter)
 ├── mcp.json            # MCP server configs (secrets replaced with ${PLACEHOLDER})
 └── .env.example        # Required environment variables
 ```
@@ -72,7 +74,7 @@ Content written to config files (CLAUDE.md, .cursorrules) is wrapped in HTML com
 This means:
 - Multiple stacks can coexist in the same file
 - Re-installing the same stack replaces its block cleanly
-- Uninstall (future) can remove a specific stack without touching others
+- Uninstall can remove a specific stack without touching others
 
 Marker logic lives in `src/shared/markers.ts`. During collect, `stripAllMarkerBlocks()` removes installed content to prevent recursive duplication.
 

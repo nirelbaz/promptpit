@@ -22,7 +22,9 @@ pit check          # CI integration — verify config is fresh and in sync
 - **Five adapters:** Claude Code, Cursor, Codex CLI, GitHub Copilot, and cross-tool standards (AGENTS.md, .mcp.json). One stack, every tool configured.
 - **Install from any GitHub repo,** even ones that don't use promptpit. pit auto-collects from raw configs.
 - **Skills follow the [Agent Skills](https://agentskills.io) spec,** symlinked or translated per tool (SKILL.md, .mdc, .instructions.md)
-- **Drift detection:** `pit status` shows what's synced, drifted, or deleted across all adapters
+- **Portable rules:** conditional rules in `.promptpit/rules/*.md` with YAML frontmatter, translated per-adapter (Claude Code, Cursor, Copilot)
+- **Portable agents:** custom agent definitions in `.promptpit/agents/*.md`, written natively to Claude Code and Copilot, inlined for other tools
+- **Drift detection:** `pit status` shows what's synced, drifted, or deleted across all adapters, including rules and agents
 - **Dry-run previews:** `--dry-run` on collect and install shows exactly what would change. `--verbose` adds unified diffs.
 - **CI integration:** `pit check` exits non-zero on stale or drifted config. `pit validate` lints your stack before publishing.
 - **MCP handled automatically:** stdio and HTTP remote servers, secrets stripped during collect, per-adapter format translation (JSON, TOML)
@@ -63,6 +65,8 @@ Scans for Claude Code, Cursor, Codex CLI, Copilot, and Standards configs, merges
 ├── stack.json          # Manifest (name, version, skills, compatibility)
 ├── agent.promptpit.md  # Agent instructions (from CLAUDE.md, .cursorrules, AGENTS.md, etc.)
 ├── skills/             # SKILL.md files
+├── rules/              # Conditional rules (globs, alwaysApply)
+├── agents/             # Custom agent definitions (tools, model)
 ├── mcp.json            # MCP server configs (secrets replaced with placeholders)
 └── .env.example        # Required environment variables
 ```
@@ -107,6 +111,8 @@ Add `.promptpit/` to your AI tool's ignore list so it doesn't scan the raw bundl
 
 pit writes AGENTS.md (cross-tool standard, read by 60+ tools) and .mcp.json (project-level MCP config) on every install. Copilot MCP goes to .vscode/mcp.json with the `servers` root key and auto-inferred `type` field. Codex MCP is written as TOML to .codex/config.toml.
 
+Rules are translated per-adapter: `.claude/rules/*.md` (Claude Code), `.cursor/rules/*.mdc` (Cursor), `.github/instructions/*.instructions.md` (Copilot). Agents are written natively to Claude Code (`.claude/agents/*.md`) and Copilot (`.github/agents/*.agent.md`), and inlined into instructions for tools without native agent support.
+
 Skills are installed to `.agents/skills/` as the canonical location (matching the [Agent Skills](https://agentskills.io) ecosystem convention), then symlinked into tool-native paths. Tools that need different formats (like Cursor's .mdc) get translated copies. Windows falls back to copies when symlinks aren't available.
 
 Adding a new tool is one file plus one registry entry. See [CONTRIBUTING.md](CONTRIBUTING.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -125,7 +131,7 @@ Adding a new tool is one file plus one registry entry. See [CONTRIBUTING.md](CON
 git clone https://github.com/nirelbaz/promptpit.git
 cd promptpit
 npm install
-npm test          # 286 tests, vitest
+npm test          # 395 tests, vitest
 npm run build     # builds dist/cli.js via tsup
 npm run lint      # TypeScript strict mode check
 ```
@@ -134,8 +140,8 @@ npm run lint      # TypeScript strict mode check
 
 See [TODOS.md](TODOS.md) for the full roadmap. The big milestones:
 
-- **v0.3 (Team Platform):** Done. Five adapters (Claude Code, Cursor, Codex, Copilot, Standards), seven commands, drift detection, dry-run previews, CI integration.
-- **v0.5 (Stack Composer):** Stack composition via `extends` in stack.json, `pit diff`, `pit update`, rules and agents in the bundle schema.
+- **v0.3 (Team Platform):** Done. Five adapters (Claude Code, Cursor, Codex, Copilot, Standards), seven commands, drift detection, dry-run previews, CI integration, portable rules and agents.
+- **v0.4 (Stack Composer):** Stack composition via `extends` in stack.json, `pit diff`, `pit update`, `pit uninstall`, selective install/collect, AGENTS.md as primary input.
 - **v1.0 (Ecosystem Bridge):** Multi-source install (skills.sh, SkillsMP, cursor.directory), `pit publish`, `pit search`.
 
 ## Related
