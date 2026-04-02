@@ -45,6 +45,7 @@
     "@types/diff": "^7.0.2",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.5.0",
+    "@vitest/coverage-v8": "^4.1.2",
     "memfs": "^4.56.11",
     "tsup": "^8.5.1",
     "typescript": "^6.0.2",
