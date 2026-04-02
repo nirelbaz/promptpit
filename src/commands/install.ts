@@ -241,6 +241,17 @@ export async function installStack(
           }
         }
 
+        // Hash agents from in-memory content
+        if (bundle.agents.length > 0) {
+          const agents: Record<string, { hash: string }> = {};
+          for (const agent of bundle.agents) {
+            agents[agent.name] = { hash: computeHash(agent.content) };
+          }
+          if (Object.keys(agents).length > 0) {
+            record.agents = agents;
+          }
+        }
+
         // Hash MCP for any adapter that supports it
         if (adapter.capabilities.mcpStdio && Object.keys(bundle.mcpServers).length > 0) {
           const mcp: Record<string, { hash: string }> = {};
@@ -250,7 +261,7 @@ export async function installStack(
           record.mcp = mcp;
         }
 
-        if (record.instructions || record.skills || record.mcp) {
+        if (record.instructions || record.skills || record.agents || record.mcp) {
           adapterRecords[adapter.id] = record;
         }
       }
