@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.5 (2026-04-02)
+
+### Added
+
+- Portable conditional rules in `.promptpit/rules/*.md` with YAML frontmatter (`name`, `description`, `globs`, `alwaysApply`). Rules are translated per-adapter during install: `.claude/rules/*.md` (Claude Code), `.cursor/rules/*.mdc` (Cursor), `.github/instructions/*.instructions.md` (Copilot).
+- `pit collect` now reads rules from Claude Code, Cursor, and Copilot projects and includes them in the bundle.
+- `pit validate` checks rule frontmatter for errors.
+- `pit status` detects rule drift (modified, deleted, synced).
+- `pit init` scaffolds a `rules/` directory alongside `skills/`.
+- Rule files in Cursor and Copilot use a `rule-` prefix to avoid name collisions with skills in shared directories.
+
 ## 0.3.4 (2026-04-02)
 
 ### Added
