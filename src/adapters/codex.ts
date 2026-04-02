@@ -67,6 +67,7 @@ async function read(root: string): Promise<PlatformConfig> {
     adapterId: "codex",
     agentInstructions,
     skills,
+    agents: [],
     mcpServers,
     rules: [],
   };
@@ -150,6 +151,7 @@ export const codexAdapter: PlatformAdapter = {
     mcpRootKey: "mcp_servers",
     agentsmd: true,
     hooks: false,
+    agents: "none",
   },
   detect,
   read,

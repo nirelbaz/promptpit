@@ -51,6 +51,7 @@ async function read(root: string): Promise<PlatformConfig> {
     adapterId: "standards",
     agentInstructions,
     skills: [],
+    agents: [],
     mcpServers,
     rules: [],
   };
@@ -113,6 +114,7 @@ export const standardsAdapter: PlatformAdapter = {
     mcpRootKey: "mcpServers",
     agentsmd: true,
     hooks: false,
+    agents: "none",
   },
   detect,
   read,

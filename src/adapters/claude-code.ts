@@ -60,6 +60,7 @@ async function read(root: string): Promise<PlatformConfig> {
     adapterId: "claude-code",
     agentInstructions,
     skills,
+    agents: [],
     mcpServers,
     rules: [],
   };
@@ -140,6 +141,7 @@ export const claudeCodeAdapter: PlatformAdapter = {
     mcpRootKey: "mcpServers",
     agentsmd: false,
     hooks: true,
+    agents: "none",
   },
   detect,
   read,

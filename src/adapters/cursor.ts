@@ -83,6 +83,7 @@ async function read(root: string): Promise<PlatformConfig> {
     adapterId: "cursor",
     agentInstructions,
     skills: [],
+    agents: [],
     mcpServers,
     rules,
   };
@@ -154,6 +155,7 @@ export const cursorAdapter: PlatformAdapter = {
     mcpRootKey: "mcpServers",
     agentsmd: true,
     hooks: false,
+    agents: "none",
   },
   detect,
   read,

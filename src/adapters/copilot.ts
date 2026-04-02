@@ -105,6 +105,7 @@ async function read(root: string): Promise<PlatformConfig> {
     adapterId: "copilot",
     agentInstructions,
     skills: [],
+    agents: [],
     mcpServers,
     rules,
   };
@@ -201,6 +202,7 @@ export const copilotAdapter: PlatformAdapter = {
     mcpRootKey: "servers",
     agentsmd: true,
     hooks: false,
+    agents: "none",
   },
   detect,
   read,
