@@ -12,41 +12,70 @@ concurrency:
 
 permissions:
   contents: read
+  security-events: write
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [20, 22]
-
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run lint
-      - run: npm test
+      - run: npm test -- --coverage
       - run: npm run build
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        continue-on-error: true
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
 
-  publish:
-    needs: test
+  codeql:
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: read
-      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+      - uses: github/codeql-action/analyze@v4
+
+  version-check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Check version/changelog consistency
+        run: bash scripts/check-version.sh
+
+  dogfood:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 20
-          registry-url: https://registry.npmjs.org
+          node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Install test stack
+        run: |
+          mkdir -p /tmp/pit-dogfood
+          # This fixture is used by CI dogfood — do not rename without updating this workflow
+          cp -r test/__fixtures__/stacks/valid-stack/* /tmp/pit-dogfood/
+          mkdir -p /tmp/pit-dogfood/.promptpit
+          cp /tmp/pit-dogfood/stack.json /tmp/pit-dogfood/.promptpit/
+          cp /tmp/pit-dogfood/mcp.json /tmp/pit-dogfood/.promptpit/
+          cp /tmp/pit-dogfood/agent.promptpit.md /tmp/pit-dogfood/.promptpit/
+          cp -r /tmp/pit-dogfood/skills /tmp/pit-dogfood/.promptpit/
+          cd /tmp/pit-dogfood
+          node $GITHUB_WORKSPACE/dist/cli.js install
+      - name: Verify no drift
+        run: |
+          cd /tmp/pit-dogfood
+          node $GITHUB_WORKSPACE/dist/cli.js check --json
