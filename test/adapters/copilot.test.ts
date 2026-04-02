@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdir, writeFile, readFile, rm, mkdtemp } from "node:fs/promises";
 import path from "node:path";
-import os from "node:os";
-import { copilotAdapter, skillToInstructionsMd, agentToGitHubAgent } from "../../src/adapters/copilot.js";
+import os, { tmpdir } from "node:os";
+import { copilotAdapter, skillToInstructionsMd, agentToGitHubAgent, ruleToInstructionsMd } from "../../src/adapters/copilot.js";
 import { readStack } from "../../src/core/stack.js";
 
 const VALID_STACK = path.join(import.meta.dirname, "../__fixtures__/stacks/valid-stack");
@@ -10,7 +10,7 @@ const VALID_STACK = path.join(import.meta.dirname, "../__fixtures__/stacks/valid
 let tmpDir: string;
 
 beforeEach(async () => {
-  tmpDir = await (await import("node:fs/promises")).mkdtemp(path.join(os.tmpdir(), "copilot-test-"));
+  tmpDir = await mkdtemp(path.join(os.tmpdir(), "copilot-test-"));
 });
 
 afterEach(async () => {
@@ -127,5 +127,53 @@ describe("agent read/write", () => {
     await writeFile(path.join(tmpDir, ".github", "copilot-instructions.md"), "# Test");
     const config = await copilotAdapter.read(tmpDir);
     expect(config.agents).toEqual([]);
+  });
+});
+
+describe("copilot rules", () => {
+  const tmpDirs: string[] = [];
+  afterEach(async () => {
+    for (const d of tmpDirs) await rm(d, { recursive: true, force: true });
+    tmpDirs.length = 0;
+  });
+
+  it("reads .instructions.md files as RuleEntry", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-copilot-readrules-"));
+    tmpDirs.push(dir);
+    await mkdir(path.join(dir, ".github", "instructions"), { recursive: true });
+    await writeFile(
+      path.join(dir, ".github", "instructions", "lint.instructions.md"),
+      '---\napplyTo: "**/*.ts"\n---\n\nRun eslint.\n',
+    );
+
+    const config = await copilotAdapter.read(dir);
+    expect(config.rules).toHaveLength(1);
+    expect(config.rules[0].name).toBe("lint");
+    expect(config.rules[0].frontmatter.globs).toEqual(["**/*.ts"]);
+  });
+
+  it("writes rules with rule- prefix", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-copilot-writerules-"));
+    tmpDirs.push(target);
+    await mkdir(path.join(target, ".github"), { recursive: true });
+
+    const bundle = await readStack(
+      path.resolve("test/__fixtures__/stacks/valid-stack"),
+    );
+
+    await copilotAdapter.write(target, bundle, {});
+
+    const testingRule = await readFile(
+      path.join(target, ".github", "instructions", "rule-testing.instructions.md"), "utf-8",
+    );
+    expect(testingRule).toContain("**/*.test.ts, **/*.spec.ts");
+    expect(testingRule).toContain("vitest");
+
+    const securityRule = await readFile(
+      path.join(target, ".github", "instructions", "rule-security.instructions.md"), "utf-8",
+    );
+    expect(securityRule).toContain("applyTo:");
+    expect(securityRule).toContain("**");
+    expect(securityRule).toContain("sanitize");
   });
 });

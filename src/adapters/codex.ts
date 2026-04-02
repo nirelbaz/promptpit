@@ -16,7 +16,7 @@ import {
   removeFileOrSymlink,
   symlinkOrCopy,
 } from "../shared/utils.js";
-import { readSkillsFromDir, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, skillDryRunEntry, buildInlineContent } from "./adapter-utils.js";
+import { readSkillsFromDir, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, fileDryRunEntry, buildInlineContent } from "./adapter-utils.js";
 import { readMcpFromToml, writeMcpToToml } from "./toml-utils.js";
 
 function projectPaths(root: string) {
@@ -106,7 +106,7 @@ async function write(
       const skillDir = path.join(p.skills, skill.name);
       const dest = path.join(skillDir, "SKILL.md");
       if (opts.dryRun) {
-        dryRunEntries.push(skillDryRunEntry(dest, await exists(dest), "symlink"));
+        dryRunEntries.push(fileDryRunEntry(dest, await exists(dest), "symlink"));
       } else {
         const canonicalPath = opts.canonicalSkillPaths?.get(skill.name);
         if (canonicalPath) {

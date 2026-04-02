@@ -20,6 +20,7 @@ const BUNDLE: StackBundle = {
     },
   ],
   agents: [],
+  rules: [],
   mcpServers: { postgres: { command: "npx", args: ["-y", "pg"] } },
   envExample: {},
 };

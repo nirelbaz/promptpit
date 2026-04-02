@@ -105,6 +105,10 @@ export async function initCommand(
       writeFileEnsureDir(path.join(outputDir, "skills", ".gitkeep"), ""),
     );
 
+    writes.push(
+      writeFileEnsureDir(path.join(outputDir, "rules", ".gitkeep"), ""),
+    );
+
     if (includeMcp) {
       writes.push(
         writeFileEnsureDir(
@@ -132,6 +136,7 @@ export async function initCommand(
       steps.push("Write your agent instructions in .promptpit/agent.promptpit.md");
     }
     steps.push("Add skills to .promptpit/skills/<name>/SKILL.md");
+    steps.push("Add conditional rules to .promptpit/rules/<name>.md");
     steps.push("Run 'pit validate' to check for issues");
     steps.push("Run 'pit install' to install the stack into your project");
 

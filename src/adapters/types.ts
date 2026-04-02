@@ -1,4 +1,4 @@
-import type { StackBundle, McpConfig, SkillEntry, AgentEntry } from "../shared/schema.js";
+import type { StackBundle, McpConfig, SkillEntry, AgentEntry, RuleEntry } from "../shared/schema.js";
 
 // --- Path Sets ---
 
@@ -45,7 +45,7 @@ export interface PlatformConfig {
   skills: SkillEntry[];
   agents: AgentEntry[];
   mcpServers: McpConfig;
-  rules: string[];
+  rules: RuleEntry[];
 }
 
 // --- Write Options ---

@@ -1,5 +1,5 @@
 import type { PlatformConfig } from "../adapters/types.js";
-import type { SkillEntry, McpConfig, AgentEntry } from "../shared/schema.js";
+import type { SkillEntry, RuleEntry, McpConfig, AgentEntry } from "../shared/schema.js";
 import { computeHash, normalizeForHash } from "./manifest.js";
 
 export interface MergedStack {
@@ -7,7 +7,7 @@ export interface MergedStack {
   skills: SkillEntry[];
   agents: AgentEntry[];
   mcpServers: McpConfig;
-  rules: string[];
+  rules: RuleEntry[];
 }
 
 type MergeResult = MergedStack & { warnings: string[] };
@@ -80,14 +80,21 @@ export function mergeConfigs(
     }
   }
 
-  const rules = configs.flatMap((c) => c.rules);
+  const seenRules = new Map<string, RuleEntry>();
+  for (const config of configs) {
+    for (const rule of config.rules) {
+      if (!seenRules.has(rule.name)) {
+        seenRules.set(rule.name, rule);
+      }
+    }
+  }
 
   return {
     agentInstructions: instructions,
     skills: [...seenSkills.values()],
     agents: [...seenAgents.values()],
     mcpServers: seenMcp,
-    rules,
+    rules: [...seenRules.values()],
     warnings,
   };
 }

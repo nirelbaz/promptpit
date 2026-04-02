@@ -41,6 +41,8 @@ src/
 - `AdapterCapabilities.skillLinkStrategy` declares each adapter's skill install strategy: `"symlink"`, `"translate-copy"`, or `"none"`
 - `AdapterCapabilities.mcpFormat` (`"json"` or `"toml"`) and `mcpRootKey` (e.g. `"mcpServers"`, `"servers"`, `"mcp_servers"`) declare how each adapter stores MCP config, used by `status.ts` for drift detection
 - `computeMcpServerHash()` in `manifest.ts` hashes only canonical MCP fields (command, args, env, url, serverUrl) with recursive key sorting, ignoring adapter-added fields like Copilot's `type`
+- Rules in `.promptpit/rules/*.md` use portable YAML frontmatter (`name`, `description`, `globs`, `alwaysApply`), translated per-adapter: Claude Code (`paths`), Cursor (`.mdc` with `rule-` prefix), Copilot (`.instructions.md` with `rule-` prefix and `applyTo`)
+- Install manifest hashes translated (post-adapter) rule content so `pit status` drift detection compares apples to apples
 
 ## Testing
 

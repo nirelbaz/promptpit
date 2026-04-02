@@ -56,8 +56,8 @@ Currently PromptPit generates AGENTS.md during install. With 60K+ repos adopting
 ### Formalize Agent Skills alignment
 PromptPit already parses Agent Skills frontmatter (`skillFrontmatterSchema` in `schema.ts`). Formalize this: ensure full spec compliance (name validation: 1-64 chars, lowercase alphanumeric + hyphens; description: 1-1024 chars), support optional `scripts/`, `references/`, `assets/` directories in skills, and document that `.promptpit/` is "Agent Skills + composition." This ensures PromptPit stacks are valid Agent Skills packages, not a parallel format.
 
-### Add `rules/` to bundle schema
-Portable conditional rules in `.promptpit/rules/*.md` with YAML frontmatter: `name`, `description`, `globs` (file patterns), `alwaysApply` (boolean). Translated per-adapter during install: `.claude/rules/*.md` (paths frontmatter), `.cursor/rules/*.mdc` (globs + alwaysApply + description), `.windsurf/rules/*.md` (trigger frontmatter), `.github/instructions/*.instructions.md` (applyTo globs). Tools without conditional rules get rules appended to their instructions file.
+### ~~Add `rules/` to bundle schema~~
+**Completed:** v0.3.5 (2026-04-02). Portable conditional rules in `.promptpit/rules/*.md` with YAML frontmatter (`name`, `description`, `globs`, `alwaysApply`). Translated per-adapter: Claude Code (`.claude/rules/*.md`, globs→paths), Cursor (`.cursor/rules/rule-*.mdc`), Copilot (`.github/instructions/rule-*.instructions.md`, globs→applyTo). Cursor/Copilot use `rule-` prefix to avoid collision with skills in shared directories. Windsurf translation deferred to Tier 2 adapter. 35 new tests.
 
 ### Add `agents/` to bundle schema
 Portable custom agent format in `.promptpit/agents/*.md` with YAML frontmatter: `name`, `description`, `tools` (array of allowed tools). Translated to `.github/agents/*.agent.md` (Copilot — native agent support with tool/MCP grants), `.gemini/agents/*.md` (Gemini — native with kind/model/max_turns). Tools without agent systems get agent definitions inlined into their instructions file as a section.

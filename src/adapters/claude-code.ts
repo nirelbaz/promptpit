@@ -8,9 +8,10 @@ import type {
   WriteOptions,
   DryRunEntry,
 } from "./types.js";
+import matter from "gray-matter";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists, removeFileOrSymlink, symlinkOrCopy } from "../shared/utils.js";
-import { readSkillsFromDir, readAgentsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, skillDryRunEntry } from "./adapter-utils.js";
+import { SAFE_MATTER_OPTIONS, readSkillsFromDir, readAgentsFromDir, readRulesFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -18,6 +19,7 @@ function projectPaths(root: string) {
     skills: path.join(root, ".claude", "skills"),
     mcp: path.join(root, ".claude", "settings.json"),
     agents: path.join(root, ".claude", "agents"),
+    rules: path.join(root, ".claude", "rules"),
   };
 }
 
@@ -28,7 +30,27 @@ function userPaths() {
     skills: path.join(home, ".claude", "skills"),
     mcp: path.join(home, ".claude", "settings.json"),
     agents: path.join(home, ".claude", "agents"),
+    rules: path.join(home, ".claude", "rules"),
   };
+}
+
+// Translate portable rule format to Claude Code format (globs → paths)
+export function ruleToClaudeFormat(ruleContent: string): string {
+  const parsed = matter(ruleContent, SAFE_MATTER_OPTIONS as never);
+  const fm = parsed.data as Record<string, unknown>;
+
+  const claudeFm: Record<string, unknown> = {};
+  if (fm.name) claudeFm.name = fm.name;
+  if (fm.description) claudeFm.description = fm.description;
+  if (fm.globs) {
+    claudeFm.paths = Array.isArray(fm.globs) ? fm.globs : [fm.globs];
+  }
+  if (fm.alwaysApply) {
+    // Claude Code has no alwaysApply — rules without paths are always active
+    delete claudeFm.paths;
+  }
+
+  return matter.stringify(parsed.content.trim() + "\n", claudeFm);
 }
 
 async function detect(root: string): Promise<DetectionResult> {
@@ -57,7 +79,8 @@ async function read(root: string): Promise<PlatformConfig> {
     }
   }
   const mcpServers = await readMcpFromSettings(p.mcp);
-  const agents = await readAgentsFromDir(path.join(root, ".claude", "agents"));
+  const agents = await readAgentsFromDir(p.agents!);
+  const rules = await readRulesFromDir(p.rules!);
 
   return {
     adapterId: "claude-code",
@@ -65,7 +88,7 @@ async function read(root: string): Promise<PlatformConfig> {
     skills,
     agents,
     mcpServers,
-    rules: [],
+    rules,
   };
 }
 
@@ -103,7 +126,7 @@ async function write(
       const skillDir = path.join(p.skills, skill.name);
       const dest = path.join(skillDir, "SKILL.md");
       if (opts.dryRun) {
-        dryRunEntries.push(skillDryRunEntry(dest, await exists(dest), "symlink"));
+        dryRunEntries.push(fileDryRunEntry(dest, await exists(dest), "symlink"));
       } else {
         const canonicalPath = opts.canonicalSkillPaths?.get(skill.name);
         if (canonicalPath) {
@@ -120,12 +143,21 @@ async function write(
     for (const agent of stack.agents) {
       const dest = path.join(p.agents!, agent.name + ".md");
       if (opts.dryRun) {
-        dryRunEntries.push({
-          file: dest,
-          action: (await exists(dest)) ? "modify" : "create",
-        });
+        dryRunEntries.push(fileDryRunEntry(dest, await exists(dest)));
       } else {
         await writeFileEnsureDir(dest, agent.content);
+        filesWritten.push(dest);
+      }
+    }
+
+    // Write rules to .claude/rules/
+    for (const rule of stack.rules) {
+      const dest = path.join(p.rules!, `${rule.name}.md`);
+      if (opts.dryRun) {
+        dryRunEntries.push(fileDryRunEntry(dest, await exists(dest), "translate to Claude rules"));
+      } else {
+        const ruleContent = ruleToClaudeFormat(rule.content);
+        await writeFileEnsureDir(dest, ruleContent);
         filesWritten.push(dest);
       }
     }
@@ -150,7 +182,7 @@ export const claudeCodeAdapter: PlatformAdapter = {
   paths: { project: projectPaths, user: userPaths },
   capabilities: {
     skillLinkStrategy: "symlink",
-    rules: false,
+    rules: true,
     skillFormat: "skill.md",
     mcpStdio: true,
     mcpRemote: false,

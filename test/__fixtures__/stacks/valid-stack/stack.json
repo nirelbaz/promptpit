@@ -4,5 +4,6 @@
   "description": "A test stack for fixtures",
   "skills": ["skills/browse"],
   "agents": ["agents/reviewer"],
+  "rules": ["rules/testing", "rules/security"],
   "compatibility": ["claude-code"]
 }
