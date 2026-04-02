@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.4 (2026-04-02)
+
+### Added
+
+- Help examples on all 7 CLI commands (`pit <command> --help` now shows usage examples)
+- Next-step suggestions after `pit collect`, `pit install`, `pit validate`, and `pit check` complete
+- E2E journey tests for multi-stack coexistence, corrupted manifest recovery, drift detection, and skill authoring
+
+### Changed
+
+- `pit init` next-steps revised: dropped "edit stack.json" step, added `pit validate` and `pit collect` hints
+- `pit status` drift suggestions now use visible colors instead of dim text
+- Error messages for "no .promptpit/ found" and "no AI tools found" now suggest `pit init` and `pit collect` as next actions
+
 ## 0.3.3 (2026-04-01)
 
 ### Fixed

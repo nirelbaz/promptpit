@@ -32,11 +32,13 @@ export async function installStack(
     resolvedSource = path.resolve(target, ".promptpit");
     if (!(await exists(path.join(resolvedSource, "stack.json")))) {
       throw new Error(
-        "No .promptpit/ found in this directory.\n" +
-          "Usage:\n" +
-          "  pit install                              # install from .promptpit/ in current dir\n" +
-          "  pit install ./path/to/.promptpit          # install from local path\n" +
-          "  pit install github:user/repo              # install from GitHub",
+        "No .promptpit/ found in this directory.\n\n" +
+          "To create one:\n" +
+          "  pit init       scaffold a new stack from scratch\n" +
+          "  pit collect    bundle existing AI tool configs\n\n" +
+          "Or install from another source:\n" +
+          "  pit install ./path/to/.promptpit\n" +
+          "  pit install github:user/repo",
       );
     }
   }
@@ -302,6 +304,7 @@ export async function installStack(
     }
 
     log.success("Stack installed successfully!");
+    log.info("Next: Run 'pit status' to verify.");
   } finally {
     if (tmpDir) {
       await removeDir(tmpDir);

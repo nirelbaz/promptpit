@@ -42,10 +42,15 @@ export async function collectStack(
 
   const detected = await detectAdapters(root);
   if (detected.length === 0) {
-    spin.fail("No AI tool configuration found");
+    spin.fail("No AI tool configs found");
     throw new Error(
-      "No AI tool configuration found in this project. " +
-        "Looked for: CLAUDE.md, .claude/, .cursorrules, .cursor/, AGENTS.md, .mcp.json, .github/copilot-instructions.md, .vscode/mcp.json",
+      "No AI tool configs found in this project.\n\n" +
+        "Run 'pit init' to create a stack from scratch, or add a config file for one of:\n" +
+        "  Claude Code    CLAUDE.md or .claude/\n" +
+        "  Cursor         .cursorrules or .cursor/\n" +
+        "  Codex CLI      AGENTS.md or .codex/\n" +
+        "  Copilot        .github/copilot-instructions.md\n" +
+        "  Standards      AGENTS.md or .mcp.json",
     );
   }
 
@@ -155,5 +160,8 @@ export async function collectStack(
 
   log.success(
     `Collected: ${mergeResult.skills.length} skills, ${Object.keys(stripped).length} MCP servers, ${Object.keys(envExample).length} secrets stripped`,
+  );
+  log.info(
+    "Next: Run 'pit validate' to check for issues, then 'git add .promptpit && git commit'.",
   );
 }

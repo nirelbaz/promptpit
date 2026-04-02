@@ -185,6 +185,9 @@ function formatHuman(result: CheckResult, root: string): void {
   } else {
     const total = result.freshness.issues.length + result.drift.issues.length;
     log.error(`Check failed — ${total} issue${total === 1 ? "" : "s"} found`);
+    log.info(
+      "To fix: Run 'pit install' to sync, or 'pit collect' to adopt current changes.",
+    );
   }
 }
 

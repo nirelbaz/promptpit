@@ -26,6 +26,11 @@ program
   .argument("[dir]", "Project directory to initialize", ".")
   .option("-o, --output <path>", "Output directory", ".promptpit")
   .option("--force", "Overwrite existing stack.json")
+  .addHelpText("after", `
+Examples:
+  pit init                    # scaffold in current directory
+  pit init ./my-project       # scaffold in a specific directory
+`)
   .action(async (dir: string, opts: { output: string; force?: boolean }) => {
     try {
       const root = path.resolve(dir);
@@ -47,6 +52,12 @@ program
   .option("-o, --output <path>", "Output directory", ".promptpit")
   .option("--dry-run", "Show what would be collected without writing")
   .option("-v, --verbose", "Show full diffs in dry-run output")
+  .addHelpText("after", `
+Examples:
+  pit collect                 # bundle from current directory
+  pit collect --dry-run       # preview what would be bundled
+  pit collect --dry-run -v    # preview with full diffs
+`)
   .action(async (dir: string, opts: { output: string; dryRun?: boolean; verbose?: boolean }) => {
     try {
       const root = path.resolve(dir);
@@ -72,6 +83,14 @@ program
   .option("--dry-run", "Show what would be installed without writing")
   .option("-v, --verbose", "Show full diffs in dry-run output")
   .option("--force", "Overwrite existing content outside markers")
+  .addHelpText("after", `
+Examples:
+  pit install                          # from .promptpit/ in current dir
+  pit install ./path/to/.promptpit     # from a local stack
+  pit install github:org/stack@v1.0    # from GitHub
+  pit install --dry-run                # preview without writing
+  pit install --global                 # install to user-level paths
+`)
   .action(
     async (
       source: string | undefined,
@@ -98,6 +117,12 @@ program
   .option("--json", "Output as JSON (porcelain mode)")
   .option("--short", "One-line summary per stack")
   .option("-v, --verbose", "Show detailed per-adapter inventory with file paths")
+  .addHelpText("after", `
+Examples:
+  pit status                  # show sync state
+  pit status --json           # machine-readable output
+  pit status --short          # one-line summary
+`)
   .action(async (dir: string, opts: { json?: boolean; short?: boolean; verbose?: boolean }) => {
     try {
       const root = path.resolve(dir);
@@ -114,6 +139,10 @@ program
   .command("watch")
   .description("Watch .agents/skills/ and re-translate on change")
   .argument("[dir]", "Project directory to watch", ".")
+  .addHelpText("after", `
+Examples:
+  pit watch                   # watch and re-translate on change
+`)
   .action(async (dir: string) => {
     try {
       const root = path.resolve(dir);
@@ -131,6 +160,12 @@ program
   .description("Check if a stack is well-formed")
   .argument("[dir]", "Stack directory to validate", ".promptpit")
   .option("--json", "Output as JSON")
+  .addHelpText("after", `
+Examples:
+  pit validate                # validate .promptpit/ in current dir
+  pit validate ./my-stack     # validate a specific stack
+  pit validate --json         # machine-readable output
+`)
   .action(async (dir: string, opts: { json?: boolean }) => {
     try {
       const stackDir = path.resolve(dir);
@@ -151,6 +186,11 @@ program
   .description("CI integration: verify installed config is fresh and in sync")
   .argument("[dir]", "Project directory to check", ".")
   .option("--json", "Output as JSON")
+  .addHelpText("after", `
+Examples:
+  pit check                   # verify freshness + drift
+  pit check --json            # machine-readable for CI
+`)
   .action(async (dir: string, opts: { json?: boolean }) => {
     try {
       const root = path.resolve(dir);
