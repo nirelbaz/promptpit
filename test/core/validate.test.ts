@@ -74,7 +74,7 @@ describe("validateStack", () => {
     }
   });
 
-  it("reports error for agent with invalid frontmatter", async () => {
+  it("accepts agent without description (inferred from body)", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "pit-validate-"));
     try {
       await writeFile(path.join(dir, "stack.json"), JSON.stringify({ name: "test", version: "1.0.0" }));
@@ -85,8 +85,8 @@ describe("validateStack", () => {
       );
       const result = await validateStack(dir);
       const agentDiags = result.diagnostics.filter((d) => d.file.includes("agents/"));
-      expect(agentDiags.length).toBeGreaterThan(0);
-      expect(agentDiags[0]!.level).toBe("error");
+      const errors = agentDiags.filter((d) => d.level === "error");
+      expect(errors).toHaveLength(0);
     } finally {
       await rm(dir, { recursive: true });
     }
@@ -126,16 +126,16 @@ describe("validateStack", () => {
     expect(ruleDiags).toHaveLength(0);
   });
 
-  it("returns errors for invalid rule frontmatter", async () => {
+  it("accepts rule without name or description (relaxed for real-world compat)", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "pit-validate-rules-"));
     try {
       await writeFile(path.join(dir, "stack.json"), JSON.stringify({ name: "test", version: "1.0.0" }));
       await mkdir(path.join(dir, "rules"), { recursive: true });
-      await writeFile(path.join(dir, "rules", "bad-rule.md"), "---\nfoo: bar\n---\n\nNo name or description.\n");
+      await writeFile(path.join(dir, "rules", "no-name.md"), "---\nfoo: bar\n---\n\nNo name or description.\n");
       const result = await validateStack(dir);
       const ruleDiags = result.diagnostics.filter((d) => d.file.startsWith("rules/"));
-      expect(ruleDiags.length).toBeGreaterThanOrEqual(1);
-      expect(ruleDiags[0]!.level).toBe("error");
+      const errors = ruleDiags.filter((d) => d.level === "error");
+      expect(errors).toHaveLength(0);
     } finally {
       await rm(dir, { recursive: true });
     }

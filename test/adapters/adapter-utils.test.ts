@@ -150,11 +150,13 @@ describe("readAgentsFromDir", () => {
     expect(agents).toEqual([]);
   });
 
-  it("skips files with invalid frontmatter", async () => {
+  it("infers description from body when missing in frontmatter", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "pit-agents-"));
     await writeFile(path.join(dir, "bad.md"), "---\nname: bad\n---\n\nNo description.\n");
     const agents = await readAgentsFromDir(dir);
-    expect(agents).toEqual([]);
+    expect(agents).toHaveLength(1);
+    expect(agents[0]!.name).toBe("bad");
+    expect(agents[0]!.frontmatter.description).toBe("No description.");
     await rm(dir, { recursive: true });
   });
 
