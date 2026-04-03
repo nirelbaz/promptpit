@@ -2,7 +2,7 @@ import path from "node:path";
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
 import matter from "gray-matter";
-import { SAFE_MATTER_OPTIONS } from "../adapters/adapter-utils.js";
+import { SAFE_MATTER_OPTIONS, inferAgentDefaults, inferRuleDefaults } from "../adapters/adapter-utils.js";
 import {
   stackManifestSchema,
   mcpConfigSchema,
@@ -132,7 +132,8 @@ export async function validateStack(stackDir: string): Promise<ValidateResult> {
     if (!raw) continue;
     try {
       const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
-      const result = agentFrontmatterSchema.safeParse(parsed.data);
+      const data = inferAgentDefaults(parsed.data as Record<string, unknown>, agentName, parsed.content);
+      const result = agentFrontmatterSchema.safeParse(data);
       if (!result.success) {
         for (const issue of result.error.issues) {
           addDiag(diagnostics, relPath, "error", `${issue.path.join(".")}: ${issue.message}`);
@@ -157,7 +158,8 @@ export async function validateStack(stackDir: string): Promise<ValidateResult> {
     if (!raw) continue;
     try {
       const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
-      const result = ruleFrontmatterSchema.safeParse(parsed.data);
+      const dataWithName = inferRuleDefaults(parsed.data as Record<string, unknown>, ruleName);
+      const result = ruleFrontmatterSchema.safeParse(dataWithName);
       if (!result.success) {
         for (const issue of result.error.issues) {
           addDiag(diagnostics, relPath, "error", `${issue.path.join(".")}: ${issue.message}`);

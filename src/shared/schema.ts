@@ -69,12 +69,16 @@ export interface AgentEntry {
 // --- Rule Frontmatter ---
 
 export const ruleFrontmatterSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().min(1),
+  name: z.string().min(1).optional(),
+  description: z.string().optional(),
   globs: z.preprocess(
-    (val: unknown) => (typeof val === "string" ? [val] : val),
-    z.array(z.string()),
-  ).optional(),
+    (val: unknown) => {
+      if (val === null || val === undefined) return undefined;
+      if (typeof val === "string") return [val];
+      return val;
+    },
+    z.array(z.string()).optional(),
+  ),
   alwaysApply: z.boolean().optional(),
 });
 

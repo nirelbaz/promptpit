@@ -51,6 +51,33 @@ export async function readSkillsFromDir(
   return skills;
 }
 
+// Infer missing name/description from filename and body content.
+// Shared between readAgentsFromDir and validateStack.
+export function inferAgentDefaults(
+  data: Record<string, unknown>,
+  nameFromFile: string,
+  bodyContent: string,
+): Record<string, unknown> {
+  const result = { ...data };
+  if (!result.name) result.name = nameFromFile;
+  if (!result.description) {
+    const firstLine = bodyContent
+      .split("\n")
+      .find((l) => { const t = l.trim(); return t.length > 0 && !t.startsWith("#"); })
+      ?.trim();
+    if (firstLine) result.description = firstLine.slice(0, 200);
+  }
+  return result;
+}
+
+// Inject name from filename when missing. Shared between readRulesFromDir and validateStack.
+export function inferRuleDefaults(
+  data: Record<string, unknown>,
+  nameFromFile: string,
+): Record<string, unknown> {
+  return { ...data, name: data.name ?? nameFromFile };
+}
+
 export async function readAgentsFromDir(
   agentsDir: string,
   opts: { glob?: string; ext?: string } = {},
@@ -69,19 +96,27 @@ export async function readAgentsFromDir(
     if (!raw) continue;
 
     const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
-    const validation = agentFrontmatterSchema.safeParse(parsed.data);
+    const agentName = path.basename(file, ext);
+    const data = inferAgentDefaults(parsed.data as Record<string, unknown>, agentName, parsed.content);
+
+    const validation = agentFrontmatterSchema.safeParse(data);
     if (!validation.success) {
-      const reasons = validation.error.errors.map((e) => e.message).join(", ");
+      const reasons = validation.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ");
       log.warn(`Skipping ${file}: invalid agent frontmatter (${reasons})`);
       continue;
     }
 
-    const agentName = path.basename(file, ext);
+    // Rebuild content with inferred frontmatter so round-trips preserve name
+    let content = raw;
+    if (!parsed.data.name || !parsed.data.description) {
+      content = matter.stringify(parsed.content.trim() + "\n", validation.data);
+    }
+
     agents.push({
       name: agentName,
       path: `agents/${agentName}`,
       frontmatter: validation.data,
-      content: raw,
+      content,
     });
   }
   return agents;
@@ -101,14 +136,16 @@ export async function readRulesFromDir(
     if (!raw) continue;
 
     const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
-    const validation = ruleFrontmatterSchema.safeParse(parsed.data);
+    const ruleName = path.basename(file, ".md");
+
+    const dataWithDefaults = inferRuleDefaults(parsed.data as Record<string, unknown>, ruleName);
+    const validation = ruleFrontmatterSchema.safeParse(dataWithDefaults);
     if (!validation.success) {
-      const reasons = validation.error.errors.map((e) => e.message).join(", ");
+      const reasons = validation.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ");
       log.warn(`Skipping rule ${file}: invalid frontmatter (${reasons})`);
       continue;
     }
 
-    const ruleName = path.basename(file, ".md");
     rules.push({
       name: ruleName,
       path: `rules/${ruleName}`,

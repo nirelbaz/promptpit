@@ -52,14 +52,35 @@ describe("ruleFrontmatterSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("rejects missing name", () => {
+  it("accepts missing name (inferred from filename at read time)", () => {
     const result = ruleFrontmatterSchema.safeParse({ description: "A rule" });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
-  it("rejects missing description", () => {
+  it("accepts missing description (optional for real-world compatibility)", () => {
     const result = ruleFrontmatterSchema.safeParse({ name: "test" });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts null globs (treated as undefined)", () => {
+    const result = ruleFrontmatterSchema.safeParse({ name: "test", globs: null });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.globs).toBeUndefined();
+    }
+  });
+
+  it("strips unknown adapter fields (paths, applyTo)", () => {
+    const result = ruleFrontmatterSchema.safeParse({
+      name: "test",
+      paths: ["src/**/*.ts"],
+      applyTo: "**/*.ts",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect("paths" in result.data).toBe(false);
+      expect("applyTo" in result.data).toBe(false);
+    }
   });
 
   it("coerces single string globs to array", () => {
@@ -94,14 +115,16 @@ describe("readRulesFromDir", () => {
     expect(rules).toEqual([]);
   });
 
-  it("skips files with invalid frontmatter", async () => {
-    const dir = await makeTmp("pit-rules-invalid-");
-    await writeFile(path.join(dir, "bad.md"), "---\nfoo: bar\n---\n\nNo name or description.\n");
+  it("reads files without name/description (infers name from filename)", async () => {
+    const dir = await makeTmp("pit-rules-infer-");
+    await writeFile(path.join(dir, "no-name.md"), "---\nfoo: bar\n---\n\nNo name or description.\n");
     await writeFile(path.join(dir, "good.md"), makeRule({ name: "good", description: "Good rule" }));
 
     const rules = await readRulesFromDir(dir);
-    expect(rules).toHaveLength(1);
-    expect(rules[0].name).toBe("good");
+    expect(rules).toHaveLength(2);
+    const noName = rules.find((r) => r.name === "no-name");
+    expect(noName).toBeDefined();
+    expect(noName!.frontmatter.name).toBe("no-name");
   });
 
   it("derives name from filename", async () => {

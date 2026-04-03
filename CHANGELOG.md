@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.7 (2026-04-03)
+
+### Fixed
+
+- Rules without `name` in frontmatter are no longer silently dropped. Real-world rules from Claude Code, Cursor, and Copilot rarely include `name`, so pit now infers it from the filename. Previously, every rule from every tested repo was lost during collect.
+- Agents without `name` or `description` in frontmatter are no longer silently dropped. Name is inferred from filename, description from the first body line. Previously, 13 of 17 real-world agents were lost.
+- `globs: null` in rule frontmatter no longer causes a validation error. Treated as "no globs specified."
+- Validation error messages now include field names (e.g., "name: Required") instead of generic "Required, Required".
+
+### Added
+
+- Real-world validation test suite (`test/e2e/real-world-repos.test.ts`) that clones 9 public GitHub repos across all 5 adapters and runs the full collect, validate, install, status pipeline. Documents remaining gaps in `REAL_WORLD_REPORT.md`.
+
 ## 0.3.6 (2026-04-02)
 
 ### Added
