@@ -160,6 +160,29 @@ describe("readAgentsFromDir", () => {
     await rm(dir, { recursive: true });
   });
 
+  it("infers name from filename and rebuilds content when both name and description missing", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-agents-infer-"));
+    await writeFile(path.join(dir, "my-agent.md"), "---\ntools:\n  - Read\n---\n\nDoes things.\n");
+    const agents = await readAgentsFromDir(dir);
+    expect(agents).toHaveLength(1);
+    expect(agents[0]!.name).toBe("my-agent");
+    expect(agents[0]!.frontmatter.name).toBe("my-agent");
+    expect(agents[0]!.frontmatter.description).toBe("Does things.");
+    // Content should be rebuilt with inferred frontmatter
+    expect(agents[0]!.content).toContain("name: my-agent");
+    expect(agents[0]!.content).toContain("description: Does things.");
+    await rm(dir, { recursive: true });
+  });
+
+  it("skips heading lines when inferring description", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-agents-heading-"));
+    await writeFile(path.join(dir, "reviewer.md"), "---\ntools:\n  - Read\n---\n\n# Reviewer Agent\n\nReviews code carefully.\n");
+    const agents = await readAgentsFromDir(dir);
+    expect(agents).toHaveLength(1);
+    expect(agents[0]!.frontmatter.description).toBe("Reviews code carefully.");
+    await rm(dir, { recursive: true });
+  });
+
   it("reads multiple agent files from a directory", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "pit-agents-multi-"));
     await writeFile(
