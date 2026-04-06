@@ -1,5 +1,12 @@
+import path from "node:path";
+import fg from "fast-glob";
+import matter from "gray-matter";
 import { parse, stringify } from "smol-toml";
-import type { McpConfig, McpServerConfig } from "../shared/schema.js";
+import type { McpConfig, McpServerConfig, AgentEntry } from "../shared/schema.js";
+import { readFileOrNull } from "../shared/utils.js";
+import { inferAgentDefaults } from "./adapter-utils.js";
+import { agentFrontmatterSchema } from "../shared/schema.js";
+import { log } from "../shared/io.js";
 
 /**
  * Read MCP servers from a config.toml string.
@@ -76,4 +83,64 @@ export function writeMcpToToml(
 
   config.mcp_servers = merged;
   return stringify(config) + "\n";
+}
+
+/**
+ * Read Codex agent .toml files from a directory.
+ * Maps TOML fields to the portable AgentEntry format:
+ *   - name: from filename
+ *   - description: first sentence of developer_instructions
+ *   - model: from model field
+ *   - developer_instructions: becomes body content
+ *   - other fields: preserved via passthrough
+ */
+export async function readAgentsFromToml(
+  agentsDir: string,
+): Promise<AgentEntry[]> {
+  const agentFiles = await fg("*.toml", {
+    cwd: agentsDir,
+    absolute: true,
+  }).catch(() => [] as string[]);
+
+  const agents: AgentEntry[] = [];
+  for (const file of agentFiles) {
+    const raw = await readFileOrNull(file);
+    if (!raw) continue;
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = parse(raw) as Record<string, unknown>;
+    } catch {
+      log.warn(`Skipping ${file}: invalid TOML`);
+      continue;
+    }
+
+    const agentName = path.basename(file, ".toml");
+    const instructions = typeof parsed.developer_instructions === "string"
+      ? parsed.developer_instructions.trim()
+      : "";
+
+    // Build portable frontmatter from TOML fields
+    const data: Record<string, unknown> = { ...parsed };
+    delete data.developer_instructions;
+
+    const withDefaults = inferAgentDefaults(data, agentName, instructions);
+    const validation = agentFrontmatterSchema.safeParse(withDefaults);
+    if (!validation.success) {
+      const reasons = validation.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ");
+      log.warn(`Skipping ${file}: invalid agent frontmatter (${reasons})`);
+      continue;
+    }
+
+    // Build markdown content with frontmatter for portable round-trips
+    const content = matter.stringify(instructions + "\n", validation.data);
+
+    agents.push({
+      name: agentName,
+      path: `agents/${agentName}`,
+      frontmatter: validation.data,
+      content,
+    });
+  }
+  return agents;
 }

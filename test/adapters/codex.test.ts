@@ -70,6 +70,44 @@ describe("Codex CLI adapter", () => {
       });
     });
 
+    it("reads agents from .codex/agents/*.toml", async () => {
+      const agentsDir = path.join(tmpDir, ".codex", "agents");
+      await mkdir(agentsDir, { recursive: true });
+      await writeFile(
+        path.join(agentsDir, "reviewer.toml"),
+        'model = "gpt-5.4"\nmodel_reasoning_effort = "high"\nsandbox_mode = "read-only"\n\ndeveloper_instructions = """\nReview like an owner.\nPrioritize correctness and security.\n"""\n',
+      );
+      const config = await codexAdapter.read(tmpDir);
+      expect(config.agents).toHaveLength(1);
+      expect(config.agents![0].name).toBe("reviewer");
+      expect(config.agents![0].frontmatter.description).toContain("Review like an owner");
+      expect(config.agents![0].frontmatter.model).toBe("gpt-5.4");
+    });
+
+    it("reads multiple agents and preserves passthrough fields", async () => {
+      const agentsDir = path.join(tmpDir, ".codex", "agents");
+      await mkdir(agentsDir, { recursive: true });
+      await writeFile(
+        path.join(agentsDir, "explorer.toml"),
+        'model = "gpt-5.4"\nsandbox_mode = "read-only"\n\ndeveloper_instructions = """\nStay in exploration mode.\n"""\n',
+      );
+      await writeFile(
+        path.join(agentsDir, "docs.toml"),
+        'model = "gpt-5.4"\n\ndeveloper_instructions = """\nVerify APIs against docs.\n"""\n',
+      );
+      const config = await codexAdapter.read(tmpDir);
+      expect(config.agents).toHaveLength(2);
+      const names = config.agents!.map((a) => a.name).sort();
+      expect(names).toEqual(["docs", "explorer"]);
+      const explorer = config.agents!.find((a) => a.name === "explorer")!;
+      expect((explorer.frontmatter as Record<string, unknown>).sandbox_mode).toBe("read-only");
+    });
+
+    it("returns empty agents for missing .codex/agents/ dir", async () => {
+      const config = await codexAdapter.read(tmpDir);
+      expect(config.agents).toEqual([]);
+    });
+
     it("returns empty config for unconfigured project", async () => {
       const config = await codexAdapter.read(tmpDir);
       expect(config.agentInstructions).toBe("");

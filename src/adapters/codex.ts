@@ -17,13 +17,14 @@ import {
   symlinkOrCopy,
 } from "../shared/utils.js";
 import { readSkillsFromDir, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, fileDryRunEntry, buildInlineContent } from "./adapter-utils.js";
-import { readMcpFromToml, writeMcpToToml } from "./toml-utils.js";
+import { readAgentsFromToml, readMcpFromToml, writeMcpToToml } from "./toml-utils.js";
 
 function projectPaths(root: string) {
   return {
     config: path.join(root, "AGENTS.md"),
     skills: path.join(root, ".codex", "skills"),
     mcp: path.join(root, ".codex", "config.toml"),
+    agents: path.join(root, ".codex", "agents"),
   };
 }
 
@@ -33,6 +34,7 @@ function userPaths() {
     config: path.join(home, ".codex", "AGENTS.md"),
     skills: path.join(home, ".codex", "skills"),
     mcp: path.join(home, ".codex", "config.toml"),
+    agents: path.join(home, ".codex", "agents"),
   };
 }
 
@@ -56,10 +58,11 @@ async function detect(root: string): Promise<DetectionResult> {
 async function read(root: string): Promise<PlatformConfig> {
   const p = projectPaths(root);
 
-  const [agentInstructions, skills, tomlContent] = await Promise.all([
+  const [agentInstructions, skills, tomlContent, agents] = await Promise.all([
     readFileOrNull(p.config).then((r) => r ?? ""),
     readSkillsFromDir(p.skills),
     readFileOrNull(p.mcp).then((r) => r ?? ""),
+    readAgentsFromToml(p.agents),
   ]);
   const mcpServers = readMcpFromToml(tomlContent);
 
@@ -67,7 +70,7 @@ async function read(root: string): Promise<PlatformConfig> {
     adapterId: "codex",
     agentInstructions,
     skills,
-    agents: [],
+    agents,
     mcpServers,
     rules: [],
   };
