@@ -2,7 +2,7 @@
 
 ## Test Suite
 
-9 repos, all 5 adapters covered, 91 tests (83 passed, 8 failed).
+9 repos, all 5 adapters covered, 91 tests passing.
 
 Test file: `test/e2e/real-world-repos.test.ts`
 
@@ -11,7 +11,7 @@ Test file: `test/e2e/real-world-repos.test.ts`
 | Repo | Stars | Adapters | Skills | Agents | Rules | MCP |
 |------|-------|----------|--------|--------|-------|-----|
 | posit-dev/positron | 4,039 | Claude Code, Copilot | 7 CC skills | 3 Copilot agents | 2 CC rules, 9 Copilot instructions | 2 (.vscode/mcp.json) |
-| specklesystems/speckle-server | 786 | Cursor, Copilot | 0 | 0 | 4 .mdc, 7 instructions | 1 (.cursor/mcp.json) |
+| specklesystems/speckle-server | 786 | Cursor, Copilot | 0 | 0 | 4 .mdc | 1 (.cursor/mcp.json) |
 | Azure/azure-sdk-for-js | 2,287 | Claude Code, Copilot, Codex | 0 | 8 Copilot agents | 0 | 2 (.vscode/mcp.json) |
 | microsoft/apm | 925 | Copilot | 0 | 6 Copilot agents | 6 instructions | 1 |
 | ModelEngine-Group/fit-framework | 2,107 | Codex, Claude Code | 0 | 0 | 0 | 0 |
@@ -20,184 +20,199 @@ Test file: `test/e2e/real-world-repos.test.ts`
 | getsentry/spotlight | 573 | Claude Code, Cursor, Codex, Standards | 0 | 0 | 0 | 2 (.mcp.json) |
 | snyk/snyk-intellij-plugin | 65 | Cursor | 4 Cursor skills | 0 | 1 .mdc | 0 |
 
-## Coverage Matrix (collected vs source)
-
-```
-Repo                                Adapters                               Skills       Agents       Rules        MCP
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-posit-dev/positron                  claude-code, codex, standards, copilot  7/7          1/3 (-2)     0/11 (-11)   0/1 (-1)
-specklesystems/speckle-server       cursor, copilot                        0/0          0/0          0/11 (-11)   1/1
-Azure/azure-sdk-for-js              claude-code, codex, standards, copilot  0/0          0/8 (-8)     0/0          2/2
-microsoft/apm                       copilot                                0/0          3/6 (-3)     0/6 (-6)     1/1
-ModelEngine-Group/fit-framework     claude-code, codex, standards           0/0          0/0          0/0          0/0
-affaan-m/everything-claude-code     claude-code, cursor, codex, standards   1/11 (-10)   0/0          0/41 (-41)   5/6 (-1)
-kurrent-io/KurrentDB                claude-code, standards                  0/0          0/0          0/0          4/8 (-4)
-getsentry/spotlight                 claude-code, cursor, codex, standards   0/0          0/0          0/0          0/2 (-2)
-snyk/snyk-intellij-plugin           cursor                                 0/4 (-4)     0/0          0/1 (-1)     0/0
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-TOTAL DROPPED                                                              14           13           70           8
-```
-
-**pit is currently dropping 105 artifacts across 9 real-world repos.**
-
 ---
 
-## Bugs Found
+## Bugs Found & Fix Status
 
 ### BUG 1 (Critical): Rules without `name` frontmatter silently dropped — 70 rules lost
+**Status: FIXED** (PR #37)
 
-**Repos affected:** ALL repos with rules (positron, speckle-server, apm, everything-claude-code, snyk)
-
-Real-world rules from Claude Code, Cursor, and Copilot use native frontmatter:
-- Claude Code: `paths: [...]` (no `name`, no `description`)
-- Cursor .mdc: `description: ...`, `globs: ...` (no `name`)
-- Copilot: `description: ...`, `applyTo: ...` (no `name`)
-
-pit's `ruleFrontmatterSchema` requires both `name` and `description`. The collect step writes rules to the bundle (adapters have their own parsing), but `readStack()` and `validateStack()` reject every single rule because the portable format requires `name`.
-
-**Impact:** 70 rules across all tested repos are silently dropped. Zero rules survive the collect→install pipeline.
-
-**Fix:** Infer `name` from filename (already done for skills). Make `description` optional or infer from first paragraph.
-
----
+Real-world rules use native frontmatter without `name`. Fix: infer `name` from filename via `inferRuleDefaults()`, make `description` optional in schema.
 
 ### BUG 2 (Critical): Agents without `name` frontmatter silently dropped — 13 agents lost
+**Status: FIXED** (PR #37)
 
-**Repos affected:** Azure/azure-sdk-for-js (8/8 dropped), microsoft/apm (3/6 dropped), positron (2/3 dropped)
-
-Real-world Copilot agents use:
-```yaml
----
-description: Expert in public API design...
-tools: ["read", "search", "bash"]
----
-```
-
-No `name` field. pit's `agentFrontmatterSchema` requires `name`. Agents without it are skipped.
-
-Note: microsoft/apm has 3 of 6 agents that DO include `name` — confirming it's inconsistent across repos.
-
-**Fix:** Infer `name` from filename (strip `.agent.md` extension).
-
----
+Real-world Copilot agents lack `name` field. Fix: infer `name` from filename (strip `.agent.md`), infer `description` from first body paragraph via `inferAgentDefaults()`.
 
 ### BUG 3 (Medium): JSONC not parsed — MCP servers lost in VS Code ecosystem
+**Status: FIXED** (PR #40)
 
-**Repos affected:** positron (2 MCP servers lost)
+`.vscode/mcp.json` contains JS-style comments. Fix: added `strip-json-comments` dependency, JSONC parsing in `readMcpFromSettings()`.
 
-`.vscode/mcp.json` commonly contains JavaScript-style comments (`// ...`). `JSON.parse()` fails silently.
+### BUG 4 (Medium): Standards MCP suppressed when other adapters read zero MCP
+**Status: FIXED** (PR #41)
 
-**Fix:** Use a JSONC parser (`strip-json-comments` or `jsonc-parser`).
-
----
-
-### BUG 4 (Medium): Standards MCP suppressed when other adapters read zero MCP — 2+ repos affected
-
-**Repos affected:** spotlight (2 MCP servers lost), everything-claude-code (1 lost), KurrentDB (4 lost)
-
-The collect logic (collect.ts:68-77) clears Standards MCP when any other adapter "supports" MCP — but checks the capability flag, not whether the adapter actually read any servers. When `.claude/settings.json` exists but has no `mcpServers` key, the `.mcp.json` servers are still suppressed.
-
-**Fix:** Only suppress Standards MCP when another adapter actually has non-empty `mcpServers` in its read config.
-
----
+Standards MCP was cleared when other adapters "supported" MCP but read zero servers. Fix: only suppress when another adapter actually has non-empty `mcpServers`.
 
 ### BUG 5 (Medium): Status shows "drifted" immediately after fresh install
+**Status: FIXED** (PR #38 partial, PR #44 complete)
 
-**Repos affected:** positron
-
-`pit status` reports `drifted` for cursor, copilot, and standards adapters right after install. The instructions hash in the manifest is computed from raw `agentInstructions` but the file on disk has marker blocks that alter the hash on re-read.
-
----
+Install manifest hashed source content, but status compared against on-disk translated content. Fix: hash translated content at install time — `buildInlineContent()` for inline adapters, `agentToGitHubAgent()` for Copilot agents.
 
 ### BUG 6 (Medium): Cursor `.cursor/skills/` not read by Cursor adapter — 14 skills lost
+**Status: FIXED** (PR #37)
 
-**Repos affected:** snyk-intellij-plugin (4 skills), everything-claude-code (10 skills)
-
-The Cursor adapter reads `.cursor/rules/*.mdc` for rules but does NOT read `.cursor/skills/*/SKILL.md`. This is a valid skill directory used by real repos — snyk has 4 skills (commit, create-implementation-plan, implementation, verification) and everything-claude-code has 10.
-
-**Fix:** Add `readSkillsFromDir` call for `.cursor/skills/` in the Cursor adapter's `read()` function.
-
----
+Added `readSkillsFromDir` call for `.cursor/skills/` in the Cursor adapter's `read()`.
 
 ### BUG 7 (Low): Rule with `globs: null` fails validation
+**Status: FIXED** (PR #37)
 
-**Repo affected:** snyk-intellij-plugin
-
-The .mdc rule has a frontmatter field that parses as `globs: null`. The Zod schema expects `string | string[]` — `null` is not accepted, causing a validation error: "Expected array, received null".
-
-**Fix:** Accept `null` as equivalent to `undefined` in the globs field (`.nullable()` or `.transform()`).
-
----
+Added `.nullable().transform()` to globs field in Zod schema — `null` treated as `undefined`.
 
 ### BUG 8 (Low): Standards adapter not tracked in manifest for instructions-only installs
+**Status: FIXED** (PR #38)
 
-**Repo affected:** snyk-intellij-plugin
+### BUG 9: agnix AGENTS.md uses custom YAML frontmatter
+**Status: DEFERRED** — agnix upstream issue, added to known gaps.
 
-When a stack has only instructions (no skills, agents, rules, or MCP), the Standards adapter writes to `AGENTS.md` but the manifest check `if (record.instructions || record.skills || ...)` may not fire if no adapter-specific config path matches. The test expects Standards to always be tracked but it wasn't for the snyk target.
+### BUG 10 (Medium): MCP version pins lost during dedup
+**Status: FIXED** (PR #42)
+
+When both Standards and another adapter had the same MCP server, the pinned version (e.g. `@2025.4.8`) was discarded. Fix: prefer version-pinned args via `hasVersionPins()` heuristic.
+
+### BUG 11 (Medium): Status drift for inline agents and Copilot agent translation
+**Status: FIXED** (PR #44)
+
+Install manifest used raw agent content, but status read translated content. Fix: instructions hash uses `buildInlineContent()` for inline adapters; agent hashes use `agentToGitHubAgent()` for Copilot; only records agent hashes for `"native"` adapters.
+
+### BUG 12 (Medium): Copilot rule applyTo→globs translation lost in content
+**Status: FIXED** (PR #45)
+
+Copilot reader stored raw file content (with `applyTo`) but portable frontmatter (with `globs`). Claude Code's `ruleToClaudeFormat` parsed the content, not frontmatter, losing the translation. Fix: rebuild content with portable frontmatter via `matter.stringify`.
+
+### BUG 13: agnix MCP uses custom format
+**Status: DEFERRED** — agnix upstream issue, added to known gaps.
+
+### BUG 14 (Medium): Codex .toml agents not collected
+**Status: FIXED** (PR #46)
+
+Codex agents use `.toml` format with `developer_instructions`, `model`, `sandbox_mode` fields. Added `readAgentsFromToml()` to parse TOML agent files and map to portable `AgentEntry` format.
+
+### BUG 15 (Medium): `pit init` hangs with piped/non-interactive stdin
+**Status: FIXED** (PR #47)
+
+Added `--yes` and `--name` flags for non-interactive use. Extracted `parseManifest()` and `buildInstructionsContent()` helpers.
+
+### BUG 16 (Medium): Codex adapter self-inflicts drift via shared AGENTS.md
+**Status: FIXED** (PR #48)
+
+Both Codex and Standards adapters claimed AGENTS.md. Fix: Codex detection now requires `.codex/` directory to exist, preventing false detection on Standards-only projects.
+
+### BUG 17 (Medium): Standards MCP version pins lost during collect
+**Status: FIXED** (PR #49)
+
+The wholesale Standards MCP wipe (`config.mcpServers = {}`) discarded version-pinned servers before the merger could see them. Fix: per-server dedup that preserves Standards servers with version pins.
+
+### BUG 18 (Medium): Standards HTTP MCP servers dropped during collect
+**Status: FIXED** (PR #49)
+
+HTTP servers (url-based, e.g. `https://mcp.exa.ai/mcp`) only existed in Standards and were wholesale-wiped. Fix: per-server dedup preserves Standards-only servers. Also added HTTP server support to TOML reader.
+
+### BUG 19 (Low): Verbose dry-run diffs not shown for new file creates
+**Status: FIXED** (PR #49)
+
+The `result.existed` guard in `markersDryRunEntry` prevented diffs for newly created files. Removed the guard so both creates and modifies show verbose diffs.
+
+### BUG 20 (Low): MCP overwrite warnings on idempotent re-install
+**Status: FIXED** (PR #49)
+
+Re-installing the same stack triggered spurious "overwriting" warnings. Fix: `warnMcpOverwrites()` uses `computeMcpServerHash()` for key-order-independent comparison, skipping warnings for identical content.
+
+### BUG 21: Cursor globs comma-separated string
+**Status: NOT A BUG** — Cursor reader already splits comma-separated globs back to arrays.
 
 ---
 
-## Gaps Found
+## QA Round 3 Findings (post-fix validation)
+
+After all 18 fixes landed, ran agent-based QA across all 9 repos. 7/9 fully clean. New findings:
+
+### BUG 22 (High): Codex TOML writer drops `url` field for HTTP MCP servers
+**Status: OPEN**
+
+`writeMcpToToml()` in `toml-utils.ts` only writes `command`/`args`/`env` fields. HTTP/SSE servers (url-only, e.g. `exa`) lose their config on Codex install. The `readMcpFromToml()` correctly reads `url`/`serverUrl` (fixed in PR #49), but the writer doesn't round-trip them.
+
+**Repo affected:** everything-claude-code (exa MCP server)
+
+### BUG 23 (Medium): Codex config.toml drift after install
+**Status: OPEN**
+
+Installing MCP to an existing `config.toml` strips comments and reformats the file. The hash computed at install time doesn't match the on-disk content after TOML serialization, causing immediate drift in `pit status`.
+
+**Repo affected:** everything-claude-code
+
+### BUG 24 (Medium): Rule duplication on install into source repo
+**Status: OPEN**
+
+When installing back into a repo that already has rules, `rule-` prefixed copies are created alongside the originals (e.g. `general.mdc` + `rule-general.mdc`). Technically correct (pit manages `rule-` prefixed files), but confusing for users doing collect→install round-trips.
+
+**Repos affected:** positron, speckle-server, snyk-intellij-plugin
+
+### BUG 25 (Low): Standalone skill .md files not collected
+**Status: OPEN**
+
+Skills that are single `.md` files in `.claude/skills/` (not in a subdirectory with `SKILL.md`) are silently dropped by `readSkillsFromDir()` which only globs `*/SKILL.md`.
+
+**Repo affected:** positron (`review-upstream-merge.md`)
+
+### BUG 26 (Low): Validator false positives on cross-platform tool/model names
+**Status: OPEN**
+
+CC-AG-009 flags Copilot-native tool names (`agent/runSubagent`, `vscode/extensions`) and CC-AG-003 flags Codex model names (`gpt-5.4`) as errors. The validator only knows Claude Code's allowlist.
+
+**Repos affected:** positron, azure-sdk-for-js, apm, everything-claude-code
+
+---
+
+## Remaining Gaps
 
 ### GAP 1 (High): Commands directories not collected — 46+ files lost
+`.claude/commands/*.md` and `.codex/commands/*.md` are slash commands. pit doesn't collect them.
 
-**Repos affected:** fit-framework (23 `.codex/commands/` + 23 `.claude/commands/`), positron (`.claude/commands/`)
+### GAP 2 (Medium): Skills only port SKILL.md, companion files lost
+`readSkillsFromDir` only reads `*/SKILL.md`. Companion files (scripts, configs) in skill directories are lost.
 
-`.claude/commands/*.md` and `.codex/commands/*.md` are slash commands/custom prompts. pit doesn't collect them at all. This is a major feature gap.
+### GAP 3 (Medium): Codex skills untested (no public repos use them)
+No public repo has `.codex/skills/*/SKILL.md`. The Codex ecosystem uses `.codex/commands/` and `.codex/agents/` instead.
 
-### GAP 2 (High): Cursor skills directory not read
-
-See BUG 6 above. `.cursor/skills/*/SKILL.md` is a real pattern in the wild.
-
-### GAP 3 (Medium): Skills only port SKILL.md, companion files lost
-
-`readSkillsFromDir` only reads `*/SKILL.md`. `installCanonical` only writes `SKILL.md`. Any companion files (scripts, configs, templates) in a skill directory are silently lost.
-
-### GAP 4 (Medium): Codex skills don't exist in the wild
-
-No public repo has `.codex/skills/*/SKILL.md`. The Codex ecosystem uses `.codex/commands/` and `.codex/agents/` instead. The skills feature of the Codex adapter is untested against real-world data.
-
-### GAP 5 (Low): Claude Code settings.json permissions/hooks not ported
-
+### GAP 4 (Low): Claude Code settings.json permissions/hooks not ported
 spotlight has a rich `.claude/settings.json` with `permissions`, `hooks`, and `enabledMcpServers`. Only `mcpServers` is collected.
 
----
+### GAP 5 (Low): Large file size not reported
+KurrentDB has a 25.1KB CLAUDE.md. No warning about unusually large instruction files.
 
-## UX Issues
-
-### UX 1: Warning spam — "invalid frontmatter (Required, Required)" on valid files
-
-Every rule triggers a "Skipping rule: invalid frontmatter (Required)" warning. This floods the output (100+ warnings across 9 repos). The warning doesn't name the missing fields.
-
-**Fix:** Include field names: "missing required fields: name, description"
-
-### UX 2: Duplicate MCP dedup warnings
-
-Re-collecting from an installed target shows duplicate "MCP server found in multiple tools" warnings.
-
-### UX 3: Large file size not reported
-
-KurrentDB has a 25.1KB CLAUDE.md. No warning or note about unusually large instruction files that may cause issues for some AI tools.
+### GAP 6: agnix uses non-standard formats
+agnix AGENTS.md has custom YAML frontmatter and non-standard MCP config. Out of scope for pit.
 
 ---
 
-## Summary of Required Fixes
+## Summary
 
-| Priority | Issue | Type | Artifacts Lost |
-|----------|-------|------|---------------|
-| **P0** | Rules without `name` silently dropped | Bug | 70 rules |
-| **P0** | Agents without `name` silently dropped | Bug | 13 agents |
-| **P0** | Cursor `.cursor/skills/` not read | Bug | 14 skills |
-| **P1** | JSONC in .vscode/mcp.json not parsed | Bug | 2+ MCP servers |
-| **P1** | Standards MCP suppressed incorrectly | Bug | 8+ MCP servers |
-| **P1** | Commands directories not collected | Gap | 46+ files |
-| **P2** | Status drifted after fresh install | Bug | — |
-| **P2** | Rule `globs: null` fails validation | Bug | 1 rule |
-| **P2** | Standards not tracked in manifest edge case | Bug | — |
-| **P2** | Multi-file skills lose companion files | Gap | unknown |
-| **P2** | Warning messages don't name missing fields | UX | — |
-| **P3** | Duplicate MCP warnings | UX | — |
-| **P3** | Codex skills untestable (no public repos) | Gap | — |
-| **P3** | Claude Code permissions/hooks not ported | Gap | — |
+| Metric | Before | After |
+|--------|--------|-------|
+| Bugs found | 20 | 26 |
+| Bugs fixed | 0 | 18 |
+| Bugs deferred | 0 | 2 (agnix upstream) |
+| Bugs open | 0 | 5 (QA round 3) |
+| Not a bug | 0 | 1 |
+| Tests | 83/91 passing | 91/91 passing |
+| Unit tests | ~350 | 433 |
+| PRs shipped | 0 | 13 (#37–#49) |
 
-**Total: 105 artifacts silently dropped across 9 real-world repos (14 skills, 13 agents, 70 rules, 8 MCP servers)**
+### Fixes by PR
+
+| PR | Title | Bugs Fixed |
+|----|-------|-----------|
+| #37 | fix: infer name/description defaults for rules and agents | 1, 2, 6, 7 |
+| #38 | fix: status drift and manifest tracking | 5 (partial), 8 |
+| #39 | fix: copilot adapter reads .instructions.md from subdirectories | (coverage) |
+| #40 | fix: parse JSONC comments in MCP config files | 3 |
+| #41 | fix: standards MCP not suppressed when other adapters read zero servers | 4 |
+| #42 | fix: prefer version-pinned MCP servers during dedup | 10 |
+| #43 | fix: preserve adapter-specific agent fields during collection | (agent passthrough) |
+| #44 | fix: hash translated content in install manifest to prevent status drift | 5 (complete), 11 |
+| #45 | fix: rebuild Copilot rule content with portable globs instead of applyTo | 12 |
+| #46 | feat: collect Codex .toml agents from .codex/agents/ | 14 |
+| #47 | feat: add --yes and --name flags to pit init | 15 |
+| #48 | fix: require .codex/ directory for Codex adapter detection | 16 |
+| #49 | fix: preserve MCP version pins and HTTP servers during collect dedup | 17, 18, 19, 20 |

@@ -62,6 +62,27 @@ PromptPit already parses Agent Skills frontmatter (`skillFrontmatterSchema` in `
 ### ~~Add `agents/` to bundle schema~~
 **Completed:** v0.3.6 (2026-04-02). Portable custom agents in `.promptpit/agents/*.md` with YAML frontmatter (`name`, `description`, `tools`, `model`). Native write to Claude Code (`.claude/agents/*.md`) and Copilot (`.github/agents/*.agent.md`), inline for Codex/Cursor/Standards. Copilot translation strips `model` field. `pit collect` reads agents from Claude Code and Copilot. `pit validate`, `pit status`, and `pit check` all handle agents. `pit init` scaffolds `agents/` directory.
 
+### Known bugs from real-world validation (QA rounds 1-3)
+
+**BUG 22:** `writeMcpToToml()` only writes `command`/`args`/`env` — drops `url`/`serverUrl` for HTTP MCP servers on Codex install. Data loss for url-only servers like exa.
+
+**BUG 23:** Codex `config.toml` install strips comments and reformats, causing immediate drift in `pit status`. Either preserve non-managed sections or hash only managed fields.
+
+**BUG 24:** Install into a repo that already has rules creates `rule-` prefixed duplicates alongside originals. Consider skipping `rule-{name}` when `{name}` already exists in the target directory.
+
+**BUG 25:** `readSkillsFromDir()` only globs `*/SKILL.md`, missing standalone `.md` skill files (e.g. positron's `review-upstream-merge.md`).
+
+**BUG 26:** Validator CC-AG-009/CC-AG-003 false positives on Copilot/Codex-native tool and model names. Validator should be platform-aware or skip tool/model validation for non-Claude-origin agents.
+
+### Collect commands directories
+`.claude/commands/*.md` and `.codex/commands/*.md` are slash commands / custom prompts. 46+ files across real-world repos (fit-framework, positron). Not currently collected. Needs a `commands/` section in the bundle schema and per-adapter translation.
+
+### Claude Code settings.json permissions/hooks
+spotlight has a rich `.claude/settings.json` with `permissions`, `hooks`, and `enabledMcpServers`. Only `mcpServers` is collected. Consider porting these as optional bundle sections.
+
+### Large instruction file warning
+KurrentDB has a 25.1KB CLAUDE.md. No warning about unusually large instruction files that may cause issues for some AI tools. Add a size threshold warning during collect/validate.
+
 ### Uninstall command
 `pit uninstall <stack>` — clean reverse of install. Markers make CLAUDE.md/.cursorrules removal straightforward. Skills/MCP/env is messier (what if the user modified them after install?). Basic version: remove marked blocks + delete unmodified skill files.
 
