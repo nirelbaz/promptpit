@@ -145,6 +145,20 @@ describe("readAgentsFromDir", () => {
     await rm(dir, { recursive: true });
   });
 
+  it("preserves adapter-specific fields via passthrough (e.g., handoffs)", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-agents-passthrough-"));
+    await writeFile(
+      path.join(dir, "router.md"),
+      "---\nname: router\ndescription: Routes tasks\ntools:\n  - read\nhandoffs:\n  - coder\n  - reviewer\ndisable-model-invocation: true\n---\n\nRoute tasks to agents.\n",
+    );
+    const agents = await readAgentsFromDir(dir);
+    expect(agents).toHaveLength(1);
+    const fm = agents[0]!.frontmatter as Record<string, unknown>;
+    expect(fm.handoffs).toEqual(["coder", "reviewer"]);
+    expect(fm["disable-model-invocation"]).toBe(true);
+    await rm(dir, { recursive: true });
+  });
+
   it("returns empty array for missing directory", async () => {
     const agents = await readAgentsFromDir("/tmp/nonexistent-agents-dir-" + Date.now());
     expect(agents).toEqual([]);
