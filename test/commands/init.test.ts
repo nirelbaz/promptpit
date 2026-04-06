@@ -236,4 +236,62 @@ describe("pit init", () => {
     );
     expect(JSON.parse(raw).name).toBe("test");
   });
+
+  it("--yes creates all files non-interactively with defaults", async () => {
+    const dir = await makeTmpDir();
+
+    await initCommand(dir, { yes: true });
+
+    const raw = await readFile(path.join(dir, ".promptpit", "stack.json"), "utf-8");
+    const manifest = JSON.parse(raw);
+    expect(manifest.name).toBe(path.basename(dir));
+    expect(manifest.version).toBe("0.1.0");
+
+    // All optional files should be created
+    const instructions = await readFile(path.join(dir, ".promptpit", "agent.promptpit.md"), "utf-8");
+    expect(instructions).toContain("Agent Instructions");
+    const mcp = await readFile(path.join(dir, ".promptpit", "mcp.json"), "utf-8");
+    expect(JSON.parse(mcp)).toEqual({});
+    const env = await readFile(path.join(dir, ".promptpit", ".env.example"), "utf-8");
+    expect(env).toContain("environment variables");
+  });
+
+  it("--yes with --name uses provided name", async () => {
+    const dir = await makeTmpDir();
+
+    await initCommand(dir, { yes: true, name: "my-custom-stack" });
+
+    const raw = await readFile(path.join(dir, ".promptpit", "stack.json"), "utf-8");
+    expect(JSON.parse(raw).name).toBe("my-custom-stack");
+  });
+
+  it("--yes with --force overwrites existing stack", async () => {
+    const dir = await makeTmpDir();
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(path.join(dir, ".promptpit"), { recursive: true });
+    await writeFile(path.join(dir, ".promptpit", "stack.json"), '{"name":"old"}');
+
+    await initCommand(dir, { yes: true, force: true, name: "new-stack" });
+
+    const raw = await readFile(path.join(dir, ".promptpit", "stack.json"), "utf-8");
+    expect(JSON.parse(raw).name).toBe("new-stack");
+  });
+
+  it("--yes with invalid name throws validation error", async () => {
+    const dir = await makeTmpDir();
+    await expect(
+      initCommand(dir, { yes: true, name: "!!!invalid" }),
+    ).rejects.toThrow("Invalid stack config");
+  });
+
+  it("--name is used as default in interactive mode", async () => {
+    const dir = await makeTmpDir();
+    // Empty answers = accept defaults; --name provides the default for stack name
+    const prompter = fakePrompter(["", "0.1.0", "", "", "n", "n", "n"]);
+
+    await initCommand(dir, { name: "preset-name" }, prompter);
+
+    const raw = await readFile(path.join(dir, ".promptpit", "stack.json"), "utf-8");
+    expect(JSON.parse(raw).name).toBe("preset-name");
+  });
 });

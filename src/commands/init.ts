@@ -9,6 +9,8 @@ import { stackManifestSchema, type StackManifest } from "../shared/schema.js";
 export interface InitOptions {
   force?: boolean;
   output?: string;
+  name?: string;
+  yes?: boolean;
 }
 
 export interface Prompter {
@@ -18,6 +20,23 @@ export interface Prompter {
 
 function createPrompter(): Prompter {
   return createInterface({ input: stdin, output: stdout });
+}
+
+function parseManifest(data: Record<string, unknown>): StackManifest {
+  const result = stackManifestSchema.safeParse(data);
+  if (!result.success) {
+    const issues = result.error.issues
+      .map((i) => `  ${i.path.join(".")}: ${i.message}`)
+      .join("\n");
+    throw new Error(`Invalid stack config:\n${issues}`);
+  }
+  return result.data;
+}
+
+function buildInstructionsContent(manifest: StackManifest): string {
+  const fmData = { name: manifest.name, description: manifest.description ?? "" };
+  const frontmatter = `---\n${yaml.dump(fmData).trim()}\n---\n\n`;
+  return frontmatter + "# Agent Instructions\n\n<!-- Add your project-wide agent instructions here -->\n";
 }
 
 async function ask(
@@ -49,14 +68,33 @@ export async function initCommand(
     );
   }
 
+  const dirDefault = path.basename(resolvedDir)
+    .replace(/[^a-zA-Z0-9_@.\-/]/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "") || "my-stack";
+
+  // Non-interactive mode: use defaults for everything, include all optional files
+  if (opts.yes) {
+    const manifest = parseManifest({ name: opts.name || dirDefault, version: "0.1.0" });
+
+    await Promise.all([
+      writeFileEnsureDir(path.join(outputDir, "stack.json"), JSON.stringify(manifest, null, 2) + "\n"),
+      writeFileEnsureDir(path.join(outputDir, "agent.promptpit.md"), buildInstructionsContent(manifest)),
+      writeFileEnsureDir(path.join(outputDir, "skills", ".gitkeep"), ""),
+      writeFileEnsureDir(path.join(outputDir, "rules", ".gitkeep"), ""),
+      writeFileEnsureDir(path.join(outputDir, "agents", ".gitkeep"), ""),
+      writeFileEnsureDir(path.join(outputDir, "mcp.json"), JSON.stringify({}, null, 2) + "\n"),
+      writeFileEnsureDir(path.join(outputDir, ".env.example"), "# Add environment variables required by your stack\n"),
+    ]);
+
+    log.success(`Initialized stack in ${path.relative(resolvedDir, outputDir) || outputDir}`);
+    return;
+  }
+
   const rl = prompter ?? createPrompter();
 
   try {
-    const dirDefault = path.basename(resolvedDir)
-      .replace(/[^a-zA-Z0-9_@.\-/]/g, "-")
-      .replace(/^-+/, "")
-      .replace(/-+$/, "") || "my-stack";
-    const name = await ask(rl, "Stack name", dirDefault);
+    const name = await ask(rl, "Stack name", opts.name || dirDefault);
     const version = await ask(rl, "Version", "0.1.0");
     const description = await ask(rl, "Description");
     const author = await ask(rl, "Author");
@@ -65,15 +103,7 @@ export async function initCommand(
     if (description) manifestData.description = description;
     if (author) manifestData.author = author;
 
-    const result = stackManifestSchema.safeParse(manifestData);
-    if (!result.success) {
-      const issues = result.error.issues
-        .map((i) => `  ${i.path.join(".")}: ${i.message}`)
-        .join("\n");
-      throw new Error(`Invalid stack config:\n${issues}`);
-    }
-
-    const manifest: StackManifest = result.data;
+    const manifest = parseManifest(manifestData);
 
     const includeInstructions = await askYesNo(rl, "Create agent instructions file?");
     const includeMcp = await askYesNo(rl, "Create MCP config?");
@@ -90,13 +120,10 @@ export async function initCommand(
     );
 
     if (includeInstructions) {
-      const fmData = { name: manifest.name, description: manifest.description ?? "" };
-      const frontmatter = `---\n${yaml.dump(fmData).trim()}\n---\n\n`;
-      const body = "# Agent Instructions\n\n<!-- Add your project-wide agent instructions here -->\n";
       writes.push(
         writeFileEnsureDir(
           path.join(outputDir, "agent.promptpit.md"),
-          frontmatter + body,
+          buildInstructionsContent(manifest),
         ),
       );
     }
