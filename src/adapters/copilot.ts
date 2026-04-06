@@ -151,11 +151,14 @@ async function read(root: string): Promise<PlatformConfig> {
       if (fm.applyTo) {
         portableFm.globs = typeof fm.applyTo === "string" ? [fm.applyTo] : fm.applyTo as string[];
       }
+      // Rebuild content with portable frontmatter so downstream adapters
+      // see globs (not applyTo) when translating rule.content
+      const portableContent = matter.stringify(parsed.content.trim() + "\n", portableFm);
       rules.push({
         name: ruleName,
         path: `rules/${ruleName}`,
         frontmatter: portableFm,
-        content: raw,
+        content: portableContent,
       });
     }
   }
