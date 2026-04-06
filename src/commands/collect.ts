@@ -63,12 +63,12 @@ export async function collectStack(
     detected.map((d) => d.adapter.read(root)),
   );
 
-  // Clear MCP from standards adapter when other MCP-providing adapters are present
-  // (avoids double-reading MCP servers from both .mcp.json and tool-native settings).
-  const hasOtherMcpAdapter = detected.some(
-    (d) => d.adapter.id !== "standards" && d.adapter.capabilities.mcpStdio,
-  );
-  if (hasOtherMcpAdapter) {
+  // Clear MCP from standards adapter only when another adapter actually read MCP servers
+  // (avoids double-reading, but preserves .mcp.json when no other adapter collected any).
+  const otherMcpCount = configs
+    .filter((c) => c.adapterId !== "standards")
+    .reduce((sum, c) => sum + Object.keys(c.mcpServers).length, 0);
+  if (otherMcpCount > 0) {
     for (const config of configs) {
       if (config.adapterId === "standards") {
         config.mcpServers = {};
