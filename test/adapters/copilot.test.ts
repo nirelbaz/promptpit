@@ -204,6 +204,30 @@ describe("copilot rules", () => {
     expect(config.rules[0].frontmatter.globs).toEqual(["**/*.ts"]);
   });
 
+  it("reads .instructions.md from subdirectories", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-copilot-subrules-"));
+    tmpDirs.push(dir);
+    const instDir = path.join(dir, ".github", "instructions");
+    await mkdir(path.join(instDir, "review-guide"), { recursive: true });
+    await writeFile(
+      path.join(instDir, "lint.instructions.md"),
+      '---\napplyTo: "**/*.ts"\n---\n\nRun eslint.\n',
+    );
+    await writeFile(
+      path.join(instDir, "review-guide", "frontend.instructions.md"),
+      '---\napplyTo: "src/**"\n---\n\nFrontend review rules.\n',
+    );
+    await writeFile(
+      path.join(instDir, "review-guide", "server.instructions.md"),
+      '---\napplyTo: "packages/server/**"\n---\n\nServer review rules.\n',
+    );
+
+    const config = await copilotAdapter.read(dir);
+    expect(config.rules).toHaveLength(3);
+    const names = config.rules.map((r) => r.name).sort();
+    expect(names).toEqual(["lint", "review-guide-frontend", "review-guide-server"]);
+  });
+
   it("writes rules with rule- prefix", async () => {
     const target = await mkdtemp(path.join(tmpdir(), "pit-copilot-writerules-"));
     tmpDirs.push(target);
