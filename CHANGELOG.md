@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.3.9 (2026-04-06)
+
+### Fixed
+
+- `pit status` no longer shows false drift after a fresh install. The install manifest now hashes translated content (what's actually written to disk) instead of source content, fixing mismatches for inline agents and Copilot-translated agents/rules.
+- Copilot rules now round-trip correctly. The reader was storing raw file content (with `applyTo`) but portable frontmatter (with `globs`), so downstream tools lost the globs translation. Content is now rebuilt with portable frontmatter.
+- Standards MCP servers with version pins (e.g. `@2025.4.8`) are no longer silently replaced by unpinned versions from other adapters during collect.
+- Standards HTTP MCP servers (url-only, like `https://mcp.exa.ai/mcp`) are no longer dropped during collect. Previously, all Standards MCP was wholesale-wiped when another adapter had any MCP servers.
+- Codex adapter no longer falsely detects on projects that only have AGENTS.md. Detection now requires a `.codex/` directory, preventing self-inflicted drift on Standards-only projects.
+- MCP overwrite warnings are suppressed on idempotent re-installs (same content, different key order).
+- Adapter-specific agent fields (like Codex `sandbox_mode`, `model_reasoning_effort`) are preserved during collection instead of being stripped.
+- JSONC comments in `.vscode/mcp.json` are now parsed correctly (added `strip-json-comments`).
+- Standards MCP is no longer suppressed when other adapters detect MCP capability but read zero servers.
+- Copilot adapter now reads `.instructions.md` files from subdirectories (e.g. `review-guide/`).
+- Copilot adapter now reads plain `.md` agent files alongside `.agent.md`.
+
+### Added
+
+- Codex `.toml` agents (`.codex/agents/*.toml`) are now collected. Maps `developer_instructions`, `model`, `sandbox_mode`, and other TOML fields to portable agent format.
+- TOML MCP reader now supports HTTP/SSE servers (`url`/`serverUrl` fields).
+- `pit init` supports `--yes` and `--name` flags for non-interactive/CI use.
+- Shared `warnMcpOverwrites()` helper with hash-based comparison for key-order independence.
+- 80+ new tests covering all fixes and features.
+- Real-world QA validation report updated with 3 rounds of testing across 9 repos.
+
 ## 0.3.8 (2026-04-06)
 
 ### Fixed
