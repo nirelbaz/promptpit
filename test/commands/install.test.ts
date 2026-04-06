@@ -230,6 +230,37 @@ describe("installStack", () => {
     expect(adapterWithAgents!.agents!["reviewer"]!.hash).toMatch(/^sha256:/);
   });
 
+  it("inline adapter hashes agents even when agentInstructions is empty", async () => {
+    // Covers the right branch of: agentInstructions || (agents.length > 0 && agents === "inline")
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-noinstrs-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    // Build a minimal stack with agents but no instructions
+    const { mkdir } = await import("node:fs/promises");
+    const stackDir = await mkdtemp(path.join(tmpdir(), "pit-stack-noinstrs-"));
+    tmpDirs.push(stackDir);
+    await writeFile(path.join(stackDir, "stack.json"), JSON.stringify({
+      name: "agents-only", version: "1.0.0", agents: ["agents/helper"],
+    }));
+    await mkdir(path.join(stackDir, "agents"), { recursive: true });
+    await writeFile(
+      path.join(stackDir, "agents", "helper.md"),
+      "---\nname: helper\ndescription: Helps\n---\n\nHelp.\n",
+    );
+
+    await installStack(stackDir, target, {});
+
+    const { readManifest } = await import("../../src/core/manifest.js");
+    const manifest = await readManifest(target);
+    const standardsRecord = manifest.installs[0]!.adapters["standards"];
+    expect(standardsRecord).toBeDefined();
+    // Standards (inline) should have instructions hash even with no agentInstructions,
+    // because agents are embedded in the marker block
+    expect(standardsRecord!.instructions).toBeDefined();
+    expect(standardsRecord!.instructions!.hash).toMatch(/^sha256:/);
+  });
+
   it("copilot manifest hashes translated agent content (not source)", async () => {
     const target = await mkdtemp(path.join(tmpdir(), "pit-install-copilot-"));
     tmpDirs.push(target);
