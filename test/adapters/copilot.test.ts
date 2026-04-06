@@ -204,6 +204,30 @@ describe("copilot rules", () => {
     expect(config.rules[0].frontmatter.globs).toEqual(["**/*.ts"]);
   });
 
+  it("rule content uses portable globs (not applyTo) for cross-adapter translation", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-copilot-globs-roundtrip-"));
+    tmpDirs.push(dir);
+    await mkdir(path.join(dir, ".github", "instructions"), { recursive: true });
+    await writeFile(
+      path.join(dir, ".github", "instructions", "cli.instructions.md"),
+      '---\napplyTo: "src/apm_cli/cli.py"\n---\n\nCLI rules.\n',
+    );
+
+    const config = await copilotAdapter.read(dir);
+    const rule = config.rules[0]!;
+    // Frontmatter should have globs
+    expect(rule.frontmatter.globs).toEqual(["src/apm_cli/cli.py"]);
+    // Content should contain globs (not applyTo) so ruleToClaudeFormat sees them
+    expect(rule.content).toContain("globs:");
+    expect(rule.content).not.toContain("applyTo");
+
+    // Verify Claude Code translation picks up the globs as paths
+    const { ruleToClaudeFormat } = await import("../../src/adapters/claude-code.js");
+    const claudeRule = ruleToClaudeFormat(rule.content);
+    expect(claudeRule).toContain("paths:");
+    expect(claudeRule).toContain("src/apm_cli/cli.py");
+  });
+
   it("reads .instructions.md from subdirectories", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "pit-copilot-subrules-"));
     tmpDirs.push(dir);
