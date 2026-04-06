@@ -120,7 +120,8 @@ async function read(root: string): Promise<PlatformConfig> {
 
   const agentInstructions = (await readFileOrNull(p.config)) ?? "";
   const mcpServers = await readMcpFromSettings(p.mcp, "servers");
-  const agents = await readAgentsFromDir(p.agents!, { glob: "*.agent.md", ext: ".agent.md" });
+  // Read both *.agent.md and plain *.md — real-world repos use both formats
+  const agents = await readAgentsFromDir(p.agents!, { glob: "*.md", ext: ".agent.md" });
 
   // Read scoped instructions as rules
   const rules: RuleEntry[] = [];
