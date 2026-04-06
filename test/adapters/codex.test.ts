@@ -39,6 +39,13 @@ describe("Codex CLI adapter", () => {
       expect(result.detected).toBe(false);
     });
 
+    it("detects empty .codex/ directory as freshly-initialized", async () => {
+      await mkdir(path.join(tmpDir, ".codex"), { recursive: true });
+      const result = await codexAdapter.detect(tmpDir);
+      expect(result.detected).toBe(true);
+      expect(result.configPaths[0]).toContain(".codex");
+    });
+
     it("returns false for empty project", async () => {
       const result = await codexAdapter.detect(tmpDir);
       expect(result.detected).toBe(false);
