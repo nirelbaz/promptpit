@@ -53,3 +53,60 @@ describe("merger instruction hash dedup", () => {
     expect(result.agentInstructions).toContain("Different content");
   });
 });
+
+describe("merger MCP version pin preference", () => {
+  it("prefers version-pinned MCP server over unpinned duplicate", () => {
+    const unpinned: PlatformConfig = {
+      adapterId: "codex",
+      agentInstructions: "",
+      skills: [],
+      agents: [],
+      mcpServers: {
+        github: { command: "npx", args: ["-y", "@modelcontextprotocol/server-github"] },
+      },
+      rules: [],
+    };
+    const pinned: PlatformConfig = {
+      adapterId: "standards",
+      agentInstructions: "",
+      skills: [],
+      agents: [],
+      mcpServers: {
+        github: { command: "npx", args: ["-y", "@modelcontextprotocol/server-github@2025.4.8"] },
+      },
+      rules: [],
+    };
+    // Unpinned first, pinned second — should prefer pinned
+    const result = mergeConfigs([unpinned, pinned]);
+    const args = (result.mcpServers.github as Record<string, unknown>).args as string[];
+    expect(args[1]).toContain("@2025.4.8");
+    expect(result.warnings[0]).toContain("version-pinned");
+  });
+
+  it("keeps first when both are pinned", () => {
+    const pinned1: PlatformConfig = {
+      adapterId: "claude-code",
+      agentInstructions: "",
+      skills: [],
+      agents: [],
+      mcpServers: {
+        github: { command: "npx", args: ["-y", "@modelcontextprotocol/server-github@1.0.0"] },
+      },
+      rules: [],
+    };
+    const pinned2: PlatformConfig = {
+      adapterId: "standards",
+      agentInstructions: "",
+      skills: [],
+      agents: [],
+      mcpServers: {
+        github: { command: "npx", args: ["-y", "@modelcontextprotocol/server-github@2.0.0"] },
+      },
+      rules: [],
+    };
+    const result = mergeConfigs([pinned1, pinned2]);
+    const args = (result.mcpServers.github as Record<string, unknown>).args as string[];
+    expect(args[1]).toContain("@1.0.0");
+    expect(result.warnings[0]).toContain("keeping first");
+  });
+});

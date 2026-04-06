@@ -12,6 +12,14 @@ export interface MergedStack {
 
 type MergeResult = MergedStack & { warnings: string[] };
 
+// Check if an MCP server config has version-pinned package args (e.g., @modelcontextprotocol/server-github@2025.4.8)
+function hasVersionPins(server: unknown): boolean {
+  const s = server as Record<string, unknown>;
+  const args = s?.args;
+  if (!Array.isArray(args)) return false;
+  return args.some((a) => typeof a === "string" && /@\d/.test(a));
+}
+
 export function mergeConfigs(
   configs: PlatformConfig[],
 ): MergeResult {
@@ -62,9 +70,17 @@ export function mergeConfigs(
   for (const config of configs) {
     for (const [name, server] of Object.entries(config.mcpServers)) {
       if (name in seenMcp) {
-        warnings.push(
-          `MCP server "${name}" found in multiple tools — keeping first`,
-        );
+        // Prefer the version with pinned packages (args containing @version suffixes)
+        if (hasVersionPins(server) && !hasVersionPins(seenMcp[name]!)) {
+          seenMcp[name] = server;
+          warnings.push(
+            `MCP server "${name}" found in multiple tools — keeping version-pinned variant`,
+          );
+        } else {
+          warnings.push(
+            `MCP server "${name}" found in multiple tools — keeping first`,
+          );
+        }
       } else {
         seenMcp[name] = server;
       }
