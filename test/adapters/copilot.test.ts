@@ -120,6 +120,23 @@ describe("agent read/write", () => {
     expect(config.agents[0]!.name).toBe("reviewer");
   });
 
+  it("reads plain .md agents from .github/agents/", async () => {
+    const agentsDir = path.join(tmpDir, ".github", "agents");
+    await mkdir(agentsDir, { recursive: true });
+    await writeFile(
+      path.join(agentsDir, "data.md"),
+      "---\nname: data\ndescription: Data analysis agent\ntools:\n  - read\n  - search\n---\n\nAnalyze data.\n",
+    );
+    await writeFile(
+      path.join(agentsDir, "reviewer.agent.md"),
+      "---\nname: reviewer\ndescription: Security reviewer\ntools:\n  - Read\n---\n\nReview code.\n",
+    );
+    const config = await copilotAdapter.read(tmpDir);
+    expect(config.agents).toHaveLength(2);
+    const names = config.agents.map((a) => a.name).sort();
+    expect(names).toEqual(["data", "reviewer"]);
+  });
+
   it("writes agents to .github/agents/ with .agent.md extension", async () => {
     const bundle = await readStack(VALID_STACK);
     await mkdir(path.join(tmpDir, ".github"), { recursive: true });

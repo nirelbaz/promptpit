@@ -96,7 +96,7 @@ export async function readAgentsFromDir(
     if (!raw) continue;
 
     const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
-    const agentName = path.basename(file, ext);
+    const agentName = path.basename(file, file.endsWith(ext) ? ext : path.extname(file));
     const data = inferAgentDefaults(parsed.data as Record<string, unknown>, agentName, parsed.content);
 
     const validation = agentFrontmatterSchema.safeParse(data);
