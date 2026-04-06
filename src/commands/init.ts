@@ -9,6 +9,8 @@ import { stackManifestSchema, type StackManifest } from "../shared/schema.js";
 export interface InitOptions {
   force?: boolean;
   output?: string;
+  name?: string;
+  yes?: boolean;
 }
 
 export interface Prompter {
@@ -49,14 +51,47 @@ export async function initCommand(
     );
   }
 
+  const dirDefault = path.basename(resolvedDir)
+    .replace(/[^a-zA-Z0-9_@.\-/]/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "") || "my-stack";
+
+  // Non-interactive mode: use defaults for everything, include all optional files
+  if (opts.yes) {
+    const name = opts.name || dirDefault;
+    const manifestData: Record<string, unknown> = { name, version: "0.1.0" };
+
+    const result = stackManifestSchema.safeParse(manifestData);
+    if (!result.success) {
+      const issues = result.error.issues
+        .map((i) => `  ${i.path.join(".")}: ${i.message}`)
+        .join("\n");
+      throw new Error(`Invalid stack config:\n${issues}`);
+    }
+
+    const manifest: StackManifest = result.data;
+    const fmData = { name: manifest.name, description: manifest.description ?? "" };
+    const frontmatter = `---\n${yaml.dump(fmData).trim()}\n---\n\n`;
+    const body = "# Agent Instructions\n\n<!-- Add your project-wide agent instructions here -->\n";
+
+    await Promise.all([
+      writeFileEnsureDir(path.join(outputDir, "stack.json"), JSON.stringify(manifest, null, 2) + "\n"),
+      writeFileEnsureDir(path.join(outputDir, "agent.promptpit.md"), frontmatter + body),
+      writeFileEnsureDir(path.join(outputDir, "skills", ".gitkeep"), ""),
+      writeFileEnsureDir(path.join(outputDir, "rules", ".gitkeep"), ""),
+      writeFileEnsureDir(path.join(outputDir, "agents", ".gitkeep"), ""),
+      writeFileEnsureDir(path.join(outputDir, "mcp.json"), JSON.stringify({}, null, 2) + "\n"),
+      writeFileEnsureDir(path.join(outputDir, ".env.example"), "# Add environment variables required by your stack\n"),
+    ]);
+
+    log.success(`Initialized stack in ${path.relative(resolvedDir, outputDir) || outputDir}`);
+    return;
+  }
+
   const rl = prompter ?? createPrompter();
 
   try {
-    const dirDefault = path.basename(resolvedDir)
-      .replace(/[^a-zA-Z0-9_@.\-/]/g, "-")
-      .replace(/^-+/, "")
-      .replace(/-+$/, "") || "my-stack";
-    const name = await ask(rl, "Stack name", dirDefault);
+    const name = await ask(rl, "Stack name", opts.name || dirDefault);
     const version = await ask(rl, "Version", "0.1.0");
     const description = await ask(rl, "Description");
     const author = await ask(rl, "Author");

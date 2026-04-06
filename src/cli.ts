@@ -26,12 +26,16 @@ program
   .argument("[dir]", "Project directory to initialize", ".")
   .option("-o, --output <path>", "Output directory", ".promptpit")
   .option("--force", "Overwrite existing stack.json")
+  .option("-n, --name <name>", "Stack name (skip prompt)")
+  .option("-y, --yes", "Accept all defaults, no prompts (CI-friendly)")
   .addHelpText("after", `
 Examples:
   pit init                    # scaffold in current directory
   pit init ./my-project       # scaffold in a specific directory
+  pit init -y                 # non-interactive with defaults
+  pit init -y --name my-stack # non-interactive with custom name
 `)
-  .action(async (dir: string, opts: { output: string; force?: boolean }) => {
+  .action(async (dir: string, opts: { output: string; force?: boolean; name?: string; yes?: boolean }) => {
     try {
       const root = path.resolve(dir);
       await initCommand(root, opts);
