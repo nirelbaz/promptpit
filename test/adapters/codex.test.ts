@@ -19,17 +19,31 @@ describe("Codex CLI adapter", () => {
   });
 
   describe("detect", () => {
-    it("detects when AGENTS.md exists", async () => {
+    it("detects when .codex/ directory and AGENTS.md exist", async () => {
+      await mkdir(path.join(tmpDir, ".codex"), { recursive: true });
       await writeFile(path.join(tmpDir, "AGENTS.md"), "# Instructions");
       const result = await codexAdapter.detect(tmpDir);
       expect(result.detected).toBe(true);
     });
 
-    it("detects when .codex/ directory exists", async () => {
+    it("detects when .codex/ directory exists with config", async () => {
       await mkdir(path.join(tmpDir, ".codex"), { recursive: true });
       await writeFile(path.join(tmpDir, ".codex", "config.toml"), "");
       const result = await codexAdapter.detect(tmpDir);
       expect(result.detected).toBe(true);
+    });
+
+    it("does not detect AGENTS.md alone without .codex/ directory", async () => {
+      await writeFile(path.join(tmpDir, "AGENTS.md"), "# Instructions");
+      const result = await codexAdapter.detect(tmpDir);
+      expect(result.detected).toBe(false);
+    });
+
+    it("detects empty .codex/ directory as freshly-initialized", async () => {
+      await mkdir(path.join(tmpDir, ".codex"), { recursive: true });
+      const result = await codexAdapter.detect(tmpDir);
+      expect(result.detected).toBe(true);
+      expect(result.configPaths[0]).toContain(".codex");
     });
 
     it("returns false for empty project", async () => {
