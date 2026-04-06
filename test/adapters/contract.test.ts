@@ -16,6 +16,7 @@ const ADAPTER_FIXTURES: Record<string, (dir: string) => Promise<void>> = {
     await writeFile(path.join(dir, ".cursorrules"), "Test rules");
   },
   codex: async (dir) => {
+    await mkdir(path.join(dir, ".codex"), { recursive: true });
     await writeFile(path.join(dir, "AGENTS.md"), "# Codex instructions");
   },
   standards: async (dir) => {

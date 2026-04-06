@@ -43,14 +43,19 @@ async function detect(root: string): Promise<DetectionResult> {
   const [configExists, skillsExists, mcpExists, codexDirExists] =
     await Promise.all([exists(p.config), exists(p.skills), exists(p.mcp), exists(codexDir)]);
 
+  // Require .codex/ directory to distinguish from Standards adapter.
+  // Both use AGENTS.md, so without .codex/ an AGENTS.md-only project is Standards.
+  if (!codexDirExists) {
+    return { detected: false, configPaths: [] };
+  }
+
   const found: string[] = [];
   if (configExists) found.push(p.config);
   if (skillsExists) found.push(p.skills);
   if (mcpExists) found.push(p.mcp);
-  // Freshly-initialized Codex repos may only have .codex/ with no config files yet
-  if (found.length === 0 && codexDirExists) found.push(codexDir);
+  if (found.length === 0) found.push(codexDir);
 
-  return { detected: found.length > 0, configPaths: found };
+  return { detected: true, configPaths: found };
 }
 
 async function read(root: string): Promise<PlatformConfig> {
