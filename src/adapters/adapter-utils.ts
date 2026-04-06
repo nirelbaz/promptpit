@@ -241,9 +241,12 @@ export async function mergeMcpIntoJson(
   const existed = existingRaw != null;
   const currentMcp = (config.mcpServers as Record<string, unknown>) ?? {};
   if (!dryRun) {
-    for (const name of Object.keys(mcpServers)) {
+    for (const [name, server] of Object.entries(mcpServers)) {
       if (name in currentMcp) {
-        warnings.push(`MCP server "${name}" already exists in ${filePath} — overwriting with stack version`);
+        // Skip warning when content is identical (idempotent re-install)
+        if (JSON.stringify(currentMcp[name]) !== JSON.stringify(server)) {
+          warnings.push(`MCP server "${name}" already exists in ${filePath} — overwriting with stack version`);
+        }
       }
     }
   }
@@ -326,7 +329,7 @@ export function markersDryRunEntry(
     file: filePath,
     action: result.existed ? "modify" : "create",
     detail: result.existed ? "update marker block" : "insert marker block",
-    ...(verbose && result.existed && {
+    ...(verbose && {
       oldContent: result.oldContent,
       newContent: result.content,
     }),
@@ -343,8 +346,8 @@ export function mcpDryRunEntry(
     file: filePath,
     action: mcpResult.existed ? "modify" : "create",
     detail: `add ${serverCount} MCP server${serverCount !== 1 ? "s" : ""}`,
-    ...(verbose && mcpResult.existed && mcpResult.oldContent != null && {
-      oldContent: mcpResult.oldContent,
+    ...(verbose && mcpResult.newContent != null && {
+      oldContent: mcpResult.oldContent ?? "",
       newContent: mcpResult.newContent,
     }),
   };

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { detectAdapters } from "../adapters/registry.js";
-import { mergeConfigs } from "../core/merger.js";
+import { mergeConfigs, hasVersionPins } from "../core/merger.js";
 import { stripSecrets } from "../core/security.js";
 import { writeStack } from "../core/stack.js";
 import { stripAllMarkerBlocks } from "../shared/markers.js";
@@ -63,15 +63,30 @@ export async function collectStack(
     detected.map((d) => d.adapter.read(root)),
   );
 
-  // Clear MCP from standards adapter only when another adapter actually read MCP servers
-  // (avoids double-reading, but preserves .mcp.json when no other adapter collected any).
-  const otherMcpCount = configs
-    .filter((c) => c.adapterId !== "standards")
-    .reduce((sum, c) => sum + Object.keys(c.mcpServers).length, 0);
-  if (otherMcpCount > 0) {
+  // Remove Standards MCP servers that are duplicates of another adapter's version,
+  // UNLESS the Standards version has version pins that the other doesn't.
+  // This preserves: (a) HTTP servers only in Standards, (b) pinned versions from .mcp.json.
+  const otherMcp = new Map<string, unknown>();
+  for (const c of configs) {
+    if (c.adapterId !== "standards") {
+      for (const [name, server] of Object.entries(c.mcpServers)) {
+        otherMcp.set(name, server);
+      }
+    }
+  }
+  if (otherMcp.size > 0) {
     for (const config of configs) {
       if (config.adapterId === "standards") {
-        config.mcpServers = {};
+        for (const [name, server] of Object.entries(config.mcpServers)) {
+          if (!otherMcp.has(name)) continue; // Standards-only server — keep
+          // Standards has a pinned version the other adapter lacks — keep it
+          // so the merger can prefer the pinned version
+          const otherServer = otherMcp.get(name);
+          const stdPinned = hasVersionPins(server);
+          const otherPinned = hasVersionPins(otherServer);
+          if (stdPinned && !otherPinned) continue; // keep — merger will prefer this
+          delete config.mcpServers[name];
+        }
       }
     }
   }

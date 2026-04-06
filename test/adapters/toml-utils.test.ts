@@ -66,6 +66,32 @@ enabled_tools = ["read_file"]
     expect((result as Record<string, unknown>).fs).not.toHaveProperty("enabled");
     expect((result as Record<string, unknown>).fs).not.toHaveProperty("startup_timeout_sec");
   });
+
+  it("reads HTTP MCP servers with url field", () => {
+    const toml = `
+[mcp_servers.exa]
+url = "https://mcp.exa.ai/mcp"
+`;
+    const result = readMcpFromToml(toml);
+    expect(result.exa).toBeDefined();
+    expect(result.exa!.url).toBe("https://mcp.exa.ai/mcp");
+    expect(result.exa!.command).toBeUndefined();
+  });
+
+  it("reads mixed stdio and HTTP servers", () => {
+    const toml = `
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+
+[mcp_servers.exa]
+url = "https://mcp.exa.ai/mcp"
+`;
+    const result = readMcpFromToml(toml);
+    expect(Object.keys(result)).toHaveLength(2);
+    expect(result.github!.command).toBe("npx");
+    expect(result.exa!.url).toBe("https://mcp.exa.ai/mcp");
+  });
 });
 
 describe("writeMcpToToml", () => {

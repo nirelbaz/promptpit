@@ -31,12 +31,23 @@ export function readMcpFromToml(content: string): McpConfig {
   const result: McpConfig = {};
   for (const [name, server] of Object.entries(mcpServers)) {
     if (typeof server !== "object" || !server) continue;
-    const command = server.command;
-    if (typeof command !== "string") continue;
 
-    const entry: McpServerConfig = { command };
-    if (Array.isArray(server.args)) {
-      entry.args = server.args.map(String);
+    const command = server.command;
+    const url = server.url ?? server.serverUrl;
+
+    // Must have either command (stdio) or url (remote)
+    if (typeof command !== "string" && typeof url !== "string") continue;
+
+    const entry: McpServerConfig = {};
+    if (typeof command === "string") {
+      entry.command = command;
+      if (Array.isArray(server.args)) {
+        entry.args = server.args.map(String);
+      }
+    }
+    if (typeof url === "string") {
+      if (server.url) entry.url = String(server.url);
+      if (server.serverUrl) entry.serverUrl = String(server.serverUrl);
     }
     if (server.env && typeof server.env === "object" && !Array.isArray(server.env)) {
       const env: Record<string, string> = {};
