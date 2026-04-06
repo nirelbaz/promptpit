@@ -55,7 +55,7 @@ export const agentFrontmatterSchema = z.object({
   description: z.string().min(1),
   tools: stringOrArray.optional(),
   model: z.string().optional(),
-});
+}).passthrough();
 
 export type AgentFrontmatter = z.infer<typeof agentFrontmatterSchema>;
 
