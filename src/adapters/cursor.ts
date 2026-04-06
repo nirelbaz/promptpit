@@ -13,12 +13,12 @@ import type {
 } from "./types.js";
 import type { StackBundle, RuleEntry, RuleFrontmatter } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
-import { readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry, buildInlineContent } from "./adapter-utils.js";
+import { readSkillsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry, buildInlineContent } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
     config: path.join(root, ".cursorrules"),
-    skills: path.join(root, ".cursor", "rules"),
+    skills: path.join(root, ".cursor", "skills"),
     mcp: path.join(root, ".cursor", "mcp.json"),
     rules: path.join(root, ".cursor", "rules"),
   };
@@ -28,7 +28,7 @@ function userPaths() {
   const home = homedir();
   return {
     config: path.join(home, ".cursor", ".cursorrules"),
-    skills: path.join(home, ".cursor", "rules"),
+    skills: path.join(home, ".cursor", "skills"),
     mcp: path.join(home, ".cursor", "mcp.json"),
     rules: path.join(home, ".cursor", "rules"),
   };
@@ -73,6 +73,7 @@ async function detect(root: string): Promise<DetectionResult> {
   const found: string[] = [];
 
   if (await exists(p.config)) found.push(p.config);
+  if (await exists(p.skills)) found.push(p.skills);
   if (await exists(p.rules)) found.push(p.rules);
   if (await exists(p.mcp)) found.push(p.mcp);
 
@@ -84,11 +85,12 @@ async function read(root: string): Promise<PlatformConfig> {
 
   const agentInstructions = (await readFileOrNull(p.config)) ?? "";
   const mcpServers = await readMcpFromSettings(p.mcp, "mcpServers");
+  const skills = (await exists(p.skills)) ? await readSkillsFromDir(p.skills) : [];
 
   const rules: RuleEntry[] = [];
   if (await exists(p.rules)) {
-    const mdcFiles = await fg("*.mdc", { cwd: p.rules, absolute: true });
-    for (const file of mdcFiles) {
+    const ruleFiles = await fg("*.{mdc,md}", { cwd: p.rules, absolute: true });
+    for (const file of ruleFiles) {
       const raw = await readFileOrNull(file);
       if (!raw) continue;
       // Use default gray-matter parser (not SAFE_MATTER_OPTIONS) because .mdc files
@@ -100,7 +102,8 @@ async function read(root: string): Promise<PlatformConfig> {
       } catch {
         continue;
       }
-      const ruleName = path.basename(file, ".mdc");
+      const ext = path.extname(file);
+      const ruleName = path.basename(file, ext);
       // Map Cursor's globs/alwaysApply/description to portable format
       const fm = parsed.data as Record<string, unknown>;
       const portableFm: RuleFrontmatter = {
@@ -125,7 +128,7 @@ async function read(root: string): Promise<PlatformConfig> {
   return {
     adapterId: "cursor",
     agentInstructions,
-    skills: [],
+    skills,
     agents: [],
     mcpServers,
     rules,

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.8 (2026-04-06)
+
+### Fixed
+
+- Cursor adapter now reads `.md` rules in addition to `.mdc`. Real-world repos like `everything-claude-code` use plain `.md` format in `.cursor/rules/`, and all 39 of those rules were silently dropped.
+- Cursor adapter now reads skills from `.cursor/skills/*/SKILL.md`. Previously the skills path incorrectly pointed to `.cursor/rules/` and skills were hardcoded to an empty array, losing 14 skills across repos like `snyk-intellij-plugin` and `everything-claude-code`.
+
 ## 0.3.7 (2026-04-03)
 
 ### Fixed

@@ -37,11 +37,20 @@ describe("cursorAdapter", () => {
       expect(config.mcpServers).toHaveProperty("filesystem");
     });
 
-    it("reads .mdc rules into RuleEntry format", async () => {
+    it("reads both .mdc and .md rules into RuleEntry format", async () => {
       const config = await cursorAdapter.read(FIXTURE_DIR);
-      expect(config.rules).toHaveLength(1);
-      expect(config.rules[0].name).toBe("testing");
-      expect(config.rules[0].frontmatter.description).toBe("Testing rules");
+      expect(config.rules).toHaveLength(2);
+      const names = config.rules.map((r) => r.name).sort();
+      expect(names).toEqual(["coding-style", "testing"]);
+      expect(config.rules.find((r) => r.name === "testing")!.frontmatter.description).toBe("Testing rules");
+      expect(config.rules.find((r) => r.name === "coding-style")!.frontmatter.description).toBe("Coding style conventions");
+    });
+
+    it("reads skills from .cursor/skills/", async () => {
+      const config = await cursorAdapter.read(FIXTURE_DIR);
+      expect(config.skills).toHaveLength(1);
+      expect(config.skills[0].name).toBe("browse");
+      expect(config.skills[0].frontmatter.description).toBe("Headless browser for QA");
     });
   });
 
