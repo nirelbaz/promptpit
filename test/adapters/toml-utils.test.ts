@@ -1,5 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { readMcpFromToml, writeMcpToToml } from "../../src/adapters/toml-utils.js";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { readMcpFromToml, writeMcpToToml, readAgentsFromToml } from "../../src/adapters/toml-utils.js";
 import type { McpConfig } from "../../src/shared/schema.js";
 
 describe("readMcpFromToml", () => {
@@ -141,5 +144,75 @@ args = ["server.js"]
     const result = writeMcpToToml("", servers);
     expect(result).toContain("[mcp_servers.fs]");
     expect(result).toContain('command = "npx"');
+  });
+});
+
+describe("readAgentsFromToml", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(path.join(tmpdir(), "pit-toml-agents-"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns empty array for nonexistent directory", async () => {
+    const agents = await readAgentsFromToml("/tmp/nonexistent-" + Date.now());
+    expect(agents).toEqual([]);
+  });
+
+  it("skips invalid TOML files", async () => {
+    await mkdir(tmpDir, { recursive: true });
+    await writeFile(path.join(tmpDir, "bad.toml"), "this is not = valid [toml");
+    const agents = await readAgentsFromToml(tmpDir);
+    expect(agents).toEqual([]);
+  });
+
+  it("skips agent with no developer_instructions and no description (validation fails)", async () => {
+    await writeFile(
+      path.join(tmpDir, "minimal.toml"),
+      'model = "gpt-5.4"\nsandbox_mode = "read-only"\n',
+    );
+    // No developer_instructions means no body to infer description from — Zod rejects
+    const agents = await readAgentsFromToml(tmpDir);
+    expect(agents).toEqual([]);
+  });
+
+  it("accepts agent with explicit description but no developer_instructions", async () => {
+    await writeFile(
+      path.join(tmpDir, "helper.toml"),
+      'model = "gpt-5.4"\ndescription = "A helpful assistant"\n',
+    );
+    const agents = await readAgentsFromToml(tmpDir);
+    expect(agents).toHaveLength(1);
+    expect(agents[0].name).toBe("helper");
+    expect(agents[0].frontmatter.description).toBe("A helpful assistant");
+  });
+
+  it("infers name from filename and description from instructions", async () => {
+    await mkdir(tmpDir, { recursive: true });
+    await writeFile(
+      path.join(tmpDir, "docs-researcher.toml"),
+      'model = "gpt-5.4"\n\ndeveloper_instructions = """\nVerify APIs against primary documentation.\nCite exact docs.\n"""\n',
+    );
+    const agents = await readAgentsFromToml(tmpDir);
+    expect(agents).toHaveLength(1);
+    expect(agents[0].name).toBe("docs-researcher");
+    expect(agents[0].frontmatter.description).toContain("Verify APIs");
+    expect(agents[0].content).toContain("Verify APIs");
+  });
+
+  it("preserves passthrough fields like sandbox_mode", async () => {
+    await mkdir(tmpDir, { recursive: true });
+    await writeFile(
+      path.join(tmpDir, "reviewer.toml"),
+      'model = "gpt-5.4"\nmodel_reasoning_effort = "high"\nsandbox_mode = "read-only"\n\ndeveloper_instructions = """\nReview code.\n"""\n',
+    );
+    const agents = await readAgentsFromToml(tmpDir);
+    const fm = agents[0].frontmatter as Record<string, unknown>;
+    expect(fm.model_reasoning_effort).toBe("high");
+    expect(fm.sandbox_mode).toBe("read-only");
   });
 });
