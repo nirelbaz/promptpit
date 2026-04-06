@@ -17,8 +17,7 @@ import {
   symlinkOrCopy,
 } from "../shared/utils.js";
 import { readSkillsFromDir, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, fileDryRunEntry, buildInlineContent } from "./adapter-utils.js";
-import { readAgentsFromToml } from "./toml-utils.js";
-import { readMcpFromToml, writeMcpToToml } from "./toml-utils.js";
+import { readAgentsFromToml, readMcpFromToml, writeMcpToToml } from "./toml-utils.js";
 
 function projectPaths(root: string) {
   return {

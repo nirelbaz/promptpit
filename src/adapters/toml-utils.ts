@@ -1,5 +1,6 @@
 import path from "node:path";
 import fg from "fast-glob";
+import matter from "gray-matter";
 import { parse, stringify } from "smol-toml";
 import type { McpConfig, McpServerConfig, AgentEntry } from "../shared/schema.js";
 import { readFileOrNull } from "../shared/utils.js";
@@ -132,10 +133,7 @@ export async function readAgentsFromToml(
     }
 
     // Build markdown content with frontmatter for portable round-trips
-    const fmLines = Object.entries(validation.data)
-      .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)
-      .join("\n");
-    const content = `---\n${fmLines}\n---\n\n${instructions}\n`;
+    const content = matter.stringify(instructions + "\n", validation.data);
 
     agents.push({
       name: agentName,
