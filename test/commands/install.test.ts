@@ -229,4 +229,49 @@ describe("installStack", () => {
     expect(adapterWithAgents!.agents).toHaveProperty("reviewer");
     expect(adapterWithAgents!.agents!["reviewer"]!.hash).toMatch(/^sha256:/);
   });
+
+  it("copilot manifest hashes translated agent content (not source)", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-copilot-"));
+    tmpDirs.push(target);
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(path.join(target, ".github"), { recursive: true });
+    await writeFile(path.join(target, ".github", "copilot-instructions.md"), "");
+
+    await installStack(VALID_STACK, target, {});
+
+    // Verify the on-disk .agent.md content matches the manifest hash
+    const { readManifest, computeHash } = await import("../../src/core/manifest.js");
+    const manifest = await readManifest(target);
+    const copilotRecord = manifest.installs[0]!.adapters["copilot"];
+    expect(copilotRecord).toBeDefined();
+    expect(copilotRecord!.agents).toHaveProperty("reviewer");
+
+    const onDisk = await readFile(
+      path.join(target, ".github", "agents", "reviewer.agent.md"),
+      "utf-8",
+    );
+    expect(computeHash(onDisk)).toBe(copilotRecord!.agents!["reviewer"]!.hash);
+  });
+
+  it("inline-agent manifest hashes buildInlineContent (instructions + agents)", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-inline-"));
+    tmpDirs.push(target);
+    // Standards adapter is always injected — just need AGENTS.md or CLAUDE.md
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    await installStack(VALID_STACK, target, {});
+
+    const { readManifest, computeHash } = await import("../../src/core/manifest.js");
+    const { extractMarkerContent } = await import("../../src/shared/markers.js");
+    const manifest = await readManifest(target);
+    const standardsRecord = manifest.installs[0]!.adapters["standards"];
+    expect(standardsRecord).toBeDefined();
+    expect(standardsRecord!.instructions).toBeDefined();
+
+    // The on-disk AGENTS.md marker content should match the manifest hash
+    const agentsMd = await readFile(path.join(target, "AGENTS.md"), "utf-8");
+    const markerContent = extractMarkerContent(agentsMd, "test-stack");
+    expect(markerContent).not.toBeNull();
+    expect(computeHash(markerContent!)).toBe(standardsRecord!.instructions!.hash);
+  });
 });
