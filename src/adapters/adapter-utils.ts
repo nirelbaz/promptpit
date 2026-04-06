@@ -3,7 +3,8 @@ import fg from "fast-glob";
 import matter from "gray-matter";
 import yaml from "js-yaml";
 import stripJsonComments from "strip-json-comments";
-import type { SkillEntry, RuleEntry, McpConfig, AgentEntry } from "../shared/schema.js";
+import type { SkillEntry, RuleEntry, McpConfig, McpServerConfig, AgentEntry } from "../shared/schema.js";
+import { computeMcpServerHash } from "../core/manifest.js";
 
 // .vscode/ and .cursor/ ecosystems use JSONC (JSON with // and /* */ comments)
 export function parseJsonc(raw: string): unknown {
@@ -241,11 +242,7 @@ export async function mergeMcpIntoJson(
   const existed = existingRaw != null;
   const currentMcp = (config.mcpServers as Record<string, unknown>) ?? {};
   if (!dryRun) {
-    for (const name of Object.keys(mcpServers)) {
-      if (name in currentMcp) {
-        warnings.push(`MCP server "${name}" already exists in ${filePath} — overwriting with stack version`);
-      }
-    }
+    warnMcpOverwrites(mcpServers, currentMcp as Record<string, McpServerConfig>, filePath, warnings);
   }
   config.mcpServers = { ...currentMcp, ...mcpServers };
   const newContent = JSON.stringify(config, null, 2) + "\n";
@@ -253,6 +250,23 @@ export async function mergeMcpIntoJson(
   if (dryRun) return { written: null, existed, oldContent: existingRaw ?? undefined, newContent };
   await writeFileEnsureDir(filePath, newContent);
   return { written: filePath, existed };
+}
+
+// Warn about MCP overwrites, but skip when content is identical (idempotent re-install).
+// Uses computeMcpServerHash for key-order-independent comparison.
+export function warnMcpOverwrites(
+  incoming: McpConfig,
+  existing: Record<string, McpServerConfig>,
+  label: string,
+  warnings: string[],
+): void {
+  for (const [name, server] of Object.entries(incoming)) {
+    if (name in existing) {
+      if (computeMcpServerHash(server) !== computeMcpServerHash(existing[name]!)) {
+        warnings.push(`MCP server "${name}" already exists in ${label} — overwriting with stack version`);
+      }
+    }
+  }
 }
 
 export function rethrowPermissionError(
@@ -326,7 +340,7 @@ export function markersDryRunEntry(
     file: filePath,
     action: result.existed ? "modify" : "create",
     detail: result.existed ? "update marker block" : "insert marker block",
-    ...(verbose && result.existed && {
+    ...(verbose && {
       oldContent: result.oldContent,
       newContent: result.content,
     }),
@@ -343,8 +357,8 @@ export function mcpDryRunEntry(
     file: filePath,
     action: mcpResult.existed ? "modify" : "create",
     detail: `add ${serverCount} MCP server${serverCount !== 1 ? "s" : ""}`,
-    ...(verbose && mcpResult.existed && mcpResult.oldContent != null && {
-      oldContent: mcpResult.oldContent,
+    ...(verbose && mcpResult.newContent != null && {
+      oldContent: mcpResult.oldContent ?? "",
       newContent: mcpResult.newContent,
     }),
   };

@@ -13,7 +13,7 @@ export interface MergedStack {
 type MergeResult = MergedStack & { warnings: string[] };
 
 // Check if an MCP server config has version-pinned package args (e.g., @modelcontextprotocol/server-github@2025.4.8)
-function hasVersionPins(server: unknown): boolean {
+export function hasVersionPins(server: unknown): boolean {
   const s = server as Record<string, unknown>;
   const args = s?.args;
   if (!Array.isArray(args)) return false;

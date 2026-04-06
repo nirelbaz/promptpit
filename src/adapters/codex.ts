@@ -8,7 +8,7 @@ import type {
   WriteOptions,
   DryRunEntry,
 } from "./types.js";
-import type { StackBundle } from "../shared/schema.js";
+import type { StackBundle, McpServerConfig } from "../shared/schema.js";
 import {
   readFileOrNull,
   writeFileEnsureDir,
@@ -16,7 +16,7 @@ import {
   removeFileOrSymlink,
   symlinkOrCopy,
 } from "../shared/utils.js";
-import { readSkillsFromDir, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, fileDryRunEntry, buildInlineContent } from "./adapter-utils.js";
+import { readSkillsFromDir, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, fileDryRunEntry, buildInlineContent, warnMcpOverwrites } from "./adapter-utils.js";
 import { readAgentsFromToml, readMcpFromToml, writeMcpToToml } from "./toml-utils.js";
 
 function projectPaths(root: string) {
@@ -130,11 +130,7 @@ async function write(
     if (Object.keys(stack.mcpServers).length > 0 && !opts.dryRun) {
       const existingToml = (await readFileOrNull(p.mcp)) ?? "";
       const existingMcp = readMcpFromToml(existingToml);
-      for (const name of Object.keys(stack.mcpServers)) {
-        if (name in existingMcp) {
-          warnings.push(`MCP server "${name}" already exists in config.toml — overwriting with stack version`);
-        }
-      }
+      warnMcpOverwrites(stack.mcpServers, existingMcp as Record<string, McpServerConfig>, "config.toml", warnings);
       const updated = writeMcpToToml(existingToml, stack.mcpServers);
       await writeFileEnsureDir(p.mcp, updated);
       filesWritten.push(p.mcp);
