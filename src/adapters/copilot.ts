@@ -126,7 +126,7 @@ async function read(root: string): Promise<PlatformConfig> {
   // Read scoped instructions as rules
   const rules: RuleEntry[] = [];
   if (await exists(p.rules)) {
-    const instructionFiles = await fg("*.instructions.md", {
+    const instructionFiles = await fg("**/*.instructions.md", {
       cwd: p.rules,
       absolute: true,
     });
@@ -140,7 +140,9 @@ async function read(root: string): Promise<PlatformConfig> {
       } catch {
         continue;
       }
-      const ruleName = path.basename(file, ".instructions.md");
+      // Include subdirectory in name to avoid collisions (e.g., review-guide/frontend → review-guide-frontend)
+      const relPath = path.relative(p.rules, file);
+      const ruleName = relPath.replace(/\.instructions\.md$/, "").replace(/[/\\]/g, "-");
       const fm = parsed.data as Record<string, unknown>;
       const portableFm: RuleFrontmatter = {
         name: ruleName,
