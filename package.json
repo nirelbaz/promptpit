@@ -39,6 +39,7 @@
     "js-yaml": "^4.1.0",
     "ora": "^9.3.0",
     "smol-toml": "^1.6.1",
+    "strip-json-comments": "^5.0.3",
     "zod": "^3.24.0"
   },
   "devDependencies": {
