@@ -277,6 +277,13 @@ describe("pit init", () => {
     expect(JSON.parse(raw).name).toBe("new-stack");
   });
 
+  it("--yes with invalid name throws validation error", async () => {
+    const dir = await makeTmpDir();
+    await expect(
+      initCommand(dir, { yes: true, name: "!!!invalid" }),
+    ).rejects.toThrow("Invalid stack config");
+  });
+
   it("--name is used as default in interactive mode", async () => {
     const dir = await makeTmpDir();
     // Empty answers = accept defaults; --name provides the default for stack name
