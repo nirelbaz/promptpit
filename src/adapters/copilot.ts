@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import fg from "fast-glob";
 import matter from "gray-matter";
 import yaml from "js-yaml";
-import { SAFE_MATTER_OPTIONS } from "./adapter-utils.js";
+import { SAFE_MATTER_OPTIONS, parseJsonc } from "./adapter-utils.js";
 import type {
   PlatformAdapter,
   PlatformConfig,
@@ -242,7 +242,7 @@ async function write(
       let config: Record<string, unknown> = {};
       if (existingRaw) {
         try {
-          config = JSON.parse(existingRaw);
+          config = parseJsonc(existingRaw) as Record<string, unknown>;
         } catch {
           warnings.push(`Could not parse existing ${p.mcp}, creating new`);
         }

@@ -3,6 +3,7 @@ import chalk from "chalk";
 import { readManifest, computeHash, computeMcpServerHash } from "../core/manifest.js";
 import { readFileOrNull } from "../shared/utils.js";
 import { readMcpFromToml } from "../adapters/toml-utils.js";
+import { parseJsonc } from "../adapters/adapter-utils.js";
 import { extractMarkerContent, hasMarkers } from "../shared/markers.js";
 import type { InstallManifest, AdapterInstallRecord } from "../shared/schema.js";
 import { getAdapter } from "../adapters/registry.js";
@@ -210,7 +211,7 @@ async function checkAdapterStatus(
         if (mcpFormat === "toml") {
           mcpParsed = readMcpFromToml(mcpRaw) as Record<string, unknown>;
         } else {
-          const parsed = JSON.parse(mcpRaw);
+          const parsed = parseJsonc(mcpRaw) as Record<string, unknown>;
           mcpParsed = (parsed[mcpRootKey] ?? {}) as Record<string, unknown>;
         }
       } catch {

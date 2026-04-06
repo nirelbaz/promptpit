@@ -2,7 +2,13 @@ import path from "node:path";
 import fg from "fast-glob";
 import matter from "gray-matter";
 import yaml from "js-yaml";
+import stripJsonComments from "strip-json-comments";
 import type { SkillEntry, RuleEntry, McpConfig, AgentEntry } from "../shared/schema.js";
+
+// .vscode/ and .cursor/ ecosystems use JSONC (JSON with // and /* */ comments)
+export function parseJsonc(raw: string): unknown {
+  return JSON.parse(stripJsonComments(raw));
+}
 import { skillFrontmatterSchema, ruleFrontmatterSchema, agentFrontmatterSchema } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir } from "../shared/utils.js";
 import { log } from "../shared/io.js";
@@ -199,7 +205,7 @@ export async function readMcpFromSettings(
   if (!raw) return {};
 
   try {
-    const settings = JSON.parse(raw);
+    const settings = parseJsonc(raw) as Record<string, McpConfig>;
     return settings[mcpKey] ?? {};
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "unknown error";
@@ -227,7 +233,7 @@ export async function mergeMcpIntoJson(
   let config: Record<string, unknown> = {};
   if (existingRaw) {
     try {
-      config = JSON.parse(existingRaw);
+      config = parseJsonc(existingRaw) as Record<string, unknown>;
     } catch {
       warnings.push(`Could not parse existing ${filePath}, creating new`);
     }

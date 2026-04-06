@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { writeWithMarkers, readAgentsFromDir, formatAgentsInlineSection, buildInlineContent } from "../../src/adapters/adapter-utils.js";
+import { writeWithMarkers, readAgentsFromDir, readMcpFromSettings, formatAgentsInlineSection, buildInlineContent } from "../../src/adapters/adapter-utils.js";
 import type { AgentEntry } from "../../src/shared/schema.js";
 
 describe("writeWithMarkers", () => {
@@ -294,5 +294,34 @@ describe("formatAgentsInlineSection", () => {
   it("returns empty string for empty array", () => {
     const result = formatAgentsInlineSection([]);
     expect(result).toBe("");
+  });
+});
+
+describe("readMcpFromSettings", () => {
+  let dir: string;
+  beforeEach(async () => { dir = await mkdtemp(path.join(tmpdir(), "pit-mcp-")); });
+  afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
+
+  it("parses JSONC with line and block comments", async () => {
+    const jsonc = `{
+  // Line comment
+  "mcpServers": {
+    /* Block comment */
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem"]
+    }
+  }
+}`;
+    const file = path.join(dir, "mcp.json");
+    await writeFile(file, jsonc);
+    const result = await readMcpFromSettings(file);
+    expect(result).toHaveProperty("filesystem");
+    expect((result as Record<string, Record<string, unknown>>).filesystem.command).toBe("npx");
+  });
+
+  it("returns empty object for missing file", async () => {
+    const result = await readMcpFromSettings(path.join(dir, "nonexistent.json"));
+    expect(result).toEqual({});
   });
 });
