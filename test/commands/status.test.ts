@@ -970,6 +970,72 @@ describe("pit status", () => {
     expect(copilotAdapterStatus.agentDetails[0]!.path).toContain(".agent.md");
   });
 
+  it("copilot agent synced when manifest stores translated hash", async () => {
+    // BUG 11 fix: install must hash agentToGitHubAgent() output, not source content
+    const { agentToGitHubAgent } = await import("../../src/adapters/copilot.js");
+    const dir = await makeTmpDir();
+    const sourceContent = "---\nname: reviewer\ndescription: Security reviewer\ntools:\n  - Read\nmodel: o3\n---\n\nReview code.\n";
+    const translated = agentToGitHubAgent(sourceContent);
+
+    const agentsDir = path.join(dir, ".github", "agents");
+    await mkdir(agentsDir, { recursive: true });
+    await writeFile(path.join(agentsDir, "reviewer.agent.md"), translated);
+
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "my-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          copilot: {
+            agents: { reviewer: { hash: computeHash(translated) } },
+          },
+        },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await computeStatus(dir);
+    const copilot = result.stacks[0]!.adapters.find((a) => a.adapterId === "copilot")!;
+    expect(copilot.agentDetails[0]!.state).toBe("synced");
+  });
+
+  it("inline-agent instructions synced when manifest stores buildInlineContent hash", async () => {
+    // BUG 11 fix: inline-agent adapters embed agents in marker block
+    const { buildInlineContent } = await import("../../src/adapters/adapter-utils.js");
+    const dir = await makeTmpDir();
+    const instructions = "Use TypeScript.";
+    const agents = [{
+      name: "helper",
+      path: "agents/helper",
+      frontmatter: { name: "helper", description: "General helper" },
+      content: "---\nname: helper\ndescription: General helper\n---\n\nHelp with tasks.\n",
+    }];
+    const inlineContent = buildInlineContent(instructions, agents)!;
+    const agentsMd = insertMarkers("", inlineContent, "my-stack", "1.0.0", "standards");
+    await writeFile(path.join(dir, "AGENTS.md"), agentsMd);
+
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "my-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          standards: {
+            instructions: { hash: computeHash(inlineContent) },
+          },
+        },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await computeStatus(dir);
+    const standards = result.stacks[0]!.adapters.find((a) => a.adapterId === "standards")!;
+    expect(standards.instructionDetail!.state).toBe("synced");
+  });
+
   it("detects drifted copilot agent when .agent.md content changes", async () => {
     const dir = await makeTmpDir();
     const originalContent = "---\nname: reviewer\ndescription: Security reviewer\ntools:\n  - Read\n---\n\nOriginal body.\n";

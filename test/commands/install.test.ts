@@ -229,4 +229,80 @@ describe("installStack", () => {
     expect(adapterWithAgents!.agents).toHaveProperty("reviewer");
     expect(adapterWithAgents!.agents!["reviewer"]!.hash).toMatch(/^sha256:/);
   });
+
+  it("inline adapter hashes agents even when agentInstructions is empty", async () => {
+    // Covers the right branch of: agentInstructions || (agents.length > 0 && agents === "inline")
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-noinstrs-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    // Build a minimal stack with agents but no instructions
+    const { mkdir } = await import("node:fs/promises");
+    const stackDir = await mkdtemp(path.join(tmpdir(), "pit-stack-noinstrs-"));
+    tmpDirs.push(stackDir);
+    await writeFile(path.join(stackDir, "stack.json"), JSON.stringify({
+      name: "agents-only", version: "1.0.0", agents: ["agents/helper"],
+    }));
+    await mkdir(path.join(stackDir, "agents"), { recursive: true });
+    await writeFile(
+      path.join(stackDir, "agents", "helper.md"),
+      "---\nname: helper\ndescription: Helps\n---\n\nHelp.\n",
+    );
+
+    await installStack(stackDir, target, {});
+
+    const { readManifest } = await import("../../src/core/manifest.js");
+    const manifest = await readManifest(target);
+    const standardsRecord = manifest.installs[0]!.adapters["standards"];
+    expect(standardsRecord).toBeDefined();
+    // Standards (inline) should have instructions hash even with no agentInstructions,
+    // because agents are embedded in the marker block
+    expect(standardsRecord!.instructions).toBeDefined();
+    expect(standardsRecord!.instructions!.hash).toMatch(/^sha256:/);
+  });
+
+  it("copilot manifest hashes translated agent content (not source)", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-copilot-"));
+    tmpDirs.push(target);
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(path.join(target, ".github"), { recursive: true });
+    await writeFile(path.join(target, ".github", "copilot-instructions.md"), "");
+
+    await installStack(VALID_STACK, target, {});
+
+    // Verify the on-disk .agent.md content matches the manifest hash
+    const { readManifest, computeHash } = await import("../../src/core/manifest.js");
+    const manifest = await readManifest(target);
+    const copilotRecord = manifest.installs[0]!.adapters["copilot"];
+    expect(copilotRecord).toBeDefined();
+    expect(copilotRecord!.agents).toHaveProperty("reviewer");
+
+    const onDisk = await readFile(
+      path.join(target, ".github", "agents", "reviewer.agent.md"),
+      "utf-8",
+    );
+    expect(computeHash(onDisk)).toBe(copilotRecord!.agents!["reviewer"]!.hash);
+  });
+
+  it("inline-agent manifest hashes buildInlineContent (instructions + agents)", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-inline-"));
+    tmpDirs.push(target);
+    // Standards adapter is always injected — just need AGENTS.md or CLAUDE.md
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    await installStack(VALID_STACK, target, {});
+
+    const { readManifest, computeHash } = await import("../../src/core/manifest.js");
+    const { extractMarkerContent } = await import("../../src/shared/markers.js");
+    const manifest = await readManifest(target);
+    const standardsRecord = manifest.installs[0]!.adapters["standards"];
+    expect(standardsRecord).toBeDefined();
+    expect(standardsRecord!.instructions).toBeDefined();
+
+    // The on-disk AGENTS.md marker content should match the manifest hash
+    const agentsMd = await readFile(path.join(target, "AGENTS.md"), "utf-8");
+    const markerContent = extractMarkerContent(agentsMd, "test-stack");
+    expect(markerContent).not.toBeNull();
+    expect(computeHash(markerContent!)).toBe(standardsRecord!.instructions!.hash);
+  });
 });

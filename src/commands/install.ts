@@ -9,7 +9,8 @@ import { log, spinner, printDryRunReport } from "../shared/io.js";
 import { parseGitHubSource, cloneAndResolve } from "../sources/github.js";
 import { ruleToClaudeFormat } from "../adapters/claude-code.js";
 import { ruleToMdc } from "../adapters/cursor.js";
-import { ruleToInstructionsMd } from "../adapters/copilot.js";
+import { ruleToInstructionsMd, agentToGitHubAgent } from "../adapters/copilot.js";
+import { buildInlineContent } from "../adapters/adapter-utils.js";
 import type { WriteOptions, DryRunEntry } from "../adapters/types.js";
 import type { DryRunSection } from "../shared/io.js";
 import type { InstallEntry, AdapterInstallRecord } from "../shared/schema.js";
@@ -225,11 +226,15 @@ export async function installStack(
       for (const { adapter } of detected) {
         const record: AdapterInstallRecord = {};
 
-        // Hash instructions for adapters that write marker-based instruction files
-        if (bundle.agentInstructions) {
+        // Hash instructions — inline-agent adapters embed agents in the marker block,
+        // so hash what actually gets written to disk (buildInlineContent result)
+        if (bundle.agentInstructions || (bundle.agents.length > 0 && adapter.capabilities.agents === "inline")) {
           const configPath = adapter.paths.project(target).config;
           if (configPath) {
-            record.instructions = { hash: computeHash(bundle.agentInstructions.trim()) };
+            const written = adapter.capabilities.agents === "inline"
+              ? buildInlineContent(bundle.agentInstructions, bundle.agents) ?? ""
+              : bundle.agentInstructions;
+            record.instructions = { hash: computeHash(written.trim()) };
           }
         }
 
@@ -244,11 +249,13 @@ export async function installStack(
           }
         }
 
-        // Hash agents from in-memory content
-        if (bundle.agents.length > 0) {
+        // Hash agents — native adapters translate per-file, so hash translated content
+        if (bundle.agents.length > 0 && adapter.capabilities.agents === "native") {
           const agents: Record<string, { hash: string }> = {};
           for (const agent of bundle.agents) {
-            agents[agent.name] = { hash: computeHash(agent.content) };
+            let translated = agent.content;
+            if (adapter.id === "copilot") translated = agentToGitHubAgent(agent.content);
+            agents[agent.name] = { hash: computeHash(translated) };
           }
           if (Object.keys(agents).length > 0) {
             record.agents = agents;
