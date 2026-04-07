@@ -120,6 +120,7 @@ async function handleChanges(
         skills: [skill],
         agents: [],
         rules: [],
+        commands: [],
         mcpServers: {},
         envExample: {},
       };

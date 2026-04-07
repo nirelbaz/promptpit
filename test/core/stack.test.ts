@@ -148,3 +148,37 @@ describe("writeStack", () => {
     await rm(dir, { recursive: true });
   });
 });
+
+describe("commands read/write", () => {
+  it("readStack reads commands from .promptpit/commands/", async () => {
+    const bundle = await readStack(VALID_STACK);
+    expect(bundle.commands).toHaveLength(2);
+    const names = bundle.commands.map((c) => c.name).sort();
+    expect(names).toEqual(["dev/start", "review"]);
+  });
+
+  it("writeStack writes commands preserving directory structure", async () => {
+    const bundle = await readStack(VALID_STACK);
+    const outDir = await mkdtemp(path.join(tmpdir(), "pit-stack-write-"));
+
+    await writeStack(outDir, bundle);
+
+    const reviewContent = await readFile(path.join(outDir, "commands", "review.md"), "utf-8");
+    expect(reviewContent).toContain("Review the following code");
+
+    const devStartContent = await readFile(path.join(outDir, "commands", "dev", "start.md"), "utf-8");
+    expect(devStartContent).toContain("Start the development server");
+
+    await rm(outDir, { recursive: true, force: true });
+  });
+
+  it("readStack handles missing commands directory", async () => {
+    const tmpStack = await mkdtemp(path.join(tmpdir(), "pit-nocommands-"));
+    await writeFile(path.join(tmpStack, "stack.json"), JSON.stringify({
+      name: "test", version: "1.0.0",
+    }));
+    const bundle = await readStack(tmpStack);
+    expect(bundle.commands).toEqual([]);
+    await rm(tmpStack, { recursive: true, force: true });
+  });
+});
