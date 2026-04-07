@@ -95,14 +95,13 @@ describe("agent translation", () => {
     expect(result).toContain("Review code.");
   });
 
-  it("drops the model field when translating to GitHub .agent.md", () => {
+  it("preserves the model field when translating to GitHub .agent.md", () => {
     const content = "---\nname: coder\ndescription: Coding agent\nmodel: claude-opus-4-5\ntools:\n  - Write\n---\n\nWrite code.\n";
     const result = agentToGitHubAgent(content);
     expect(result).toContain("name: coder");
     expect(result).toContain("description: Coding agent");
-    // model must be stripped — Copilot doesn't support per-agent model selection
-    expect(result).not.toContain("model:");
-    expect(result).not.toContain("claude-opus");
+    // model is supported in IDE agent context (VS Code, JetBrains, Eclipse, Xcode)
+    expect(result).toContain("model:");
     expect(result).toContain("Write code.");
   });
 });
