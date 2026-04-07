@@ -3,7 +3,7 @@ import fg from "fast-glob";
 import matter from "gray-matter";
 import yaml from "js-yaml";
 import stripJsonComments from "strip-json-comments";
-import type { SkillEntry, RuleEntry, McpConfig, McpServerConfig, AgentEntry } from "../shared/schema.js";
+import type { SkillEntry, RuleEntry, McpConfig, McpServerConfig, AgentEntry, CommandEntry } from "../shared/schema.js";
 import { computeMcpServerHash } from "../core/manifest.js";
 
 // .vscode/ and .cursor/ ecosystems use JSONC (JSON with // and /* */ comments)
@@ -161,6 +161,46 @@ export async function readRulesFromDir(
     });
   }
   return rules;
+}
+
+export async function readCommandsFromDir(
+  commandsDir: string,
+  opts: { glob?: string; ext?: string } = {},
+): Promise<CommandEntry[]> {
+  const pattern = opts.glob ?? "**/*.md";
+  const ext = opts.ext ?? ".md";
+
+  const commandFiles = await fg(pattern, {
+    cwd: commandsDir,
+    absolute: true,
+  }).catch(() => [] as string[]);
+
+  const commands: CommandEntry[] = [];
+  for (const file of commandFiles) {
+    const raw = await readFileOrNull(file);
+    if (!raw) continue;
+
+    const relPath = path.relative(commandsDir, file);
+    const commandName = relPath.endsWith(ext)
+      ? relPath.slice(0, -ext.length)
+      : relPath.slice(0, -path.extname(relPath).length);
+
+    commands.push({
+      name: commandName,
+      path: `commands/${commandName}`,
+      content: raw,
+    });
+  }
+  return commands;
+}
+
+export function detectCommandParamSyntax(
+  content: string,
+): "claude-code" | "cursor" | "copilot" | null {
+  if (/\$ARGUMENTS/.test(content)) return "claude-code";
+  if (/\$\{input:[^}]+\}/.test(content)) return "copilot";
+  if (/\$\d+/.test(content)) return "cursor";
+  return null;
 }
 
 // Strip YAML frontmatter fences without re-parsing through gray-matter

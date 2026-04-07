@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { writeWithMarkers, readAgentsFromDir, readMcpFromSettings, formatAgentsInlineSection, buildInlineContent } from "../../src/adapters/adapter-utils.js";
+import { writeWithMarkers, readAgentsFromDir, readMcpFromSettings, formatAgentsInlineSection, buildInlineContent, readCommandsFromDir, detectCommandParamSyntax } from "../../src/adapters/adapter-utils.js";
 import type { AgentEntry } from "../../src/shared/schema.js";
 
 describe("writeWithMarkers", () => {
@@ -337,5 +337,80 @@ describe("readMcpFromSettings", () => {
   it("returns empty object for missing file", async () => {
     const result = await readMcpFromSettings(path.join(dir, "nonexistent.json"));
     expect(result).toEqual({});
+  });
+});
+
+describe("readCommandsFromDir", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(path.join(tmpdir(), "pit-commands-"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("reads flat .md files", async () => {
+    await writeFile(path.join(tmpDir, "review.md"), "Review this code: $ARGUMENTS");
+    await writeFile(path.join(tmpDir, "deploy.md"), "Deploy to production");
+    const commands = await readCommandsFromDir(tmpDir);
+    expect(commands).toHaveLength(2);
+    const names = commands.map((c) => c.name).sort();
+    expect(names).toEqual(["deploy", "review"]);
+  });
+
+  it("reads nested directories preserving path", async () => {
+    await mkdir(path.join(tmpDir, "dev"), { recursive: true });
+    await writeFile(path.join(tmpDir, "dev", "start.md"), "Start dev server");
+    await writeFile(path.join(tmpDir, "dev", "test.md"), "Run tests");
+    const commands = await readCommandsFromDir(tmpDir);
+    expect(commands).toHaveLength(2);
+    const names = commands.map((c) => c.name).sort();
+    expect(names).toEqual(["dev/start", "dev/test"]);
+  });
+
+  it("reads deeply nested directories", async () => {
+    await mkdir(path.join(tmpDir, "team", "backend"), { recursive: true });
+    await writeFile(path.join(tmpDir, "team", "backend", "deploy.md"), "Deploy backend");
+    const commands = await readCommandsFromDir(tmpDir);
+    expect(commands).toHaveLength(1);
+    expect(commands[0]!.name).toBe("team/backend/deploy");
+    expect(commands[0]!.path).toBe("commands/team/backend/deploy");
+  });
+
+  it("returns empty array for missing directory", async () => {
+    const commands = await readCommandsFromDir(path.join(tmpDir, "nonexistent"));
+    expect(commands).toEqual([]);
+  });
+
+  it("returns empty array for empty directory", async () => {
+    const commands = await readCommandsFromDir(tmpDir);
+    expect(commands).toEqual([]);
+  });
+
+  it("reads .prompt.md files when ext option is provided", async () => {
+    await writeFile(path.join(tmpDir, "review.prompt.md"), "---\ndescription: Review code\n---\nReview this");
+    const commands = await readCommandsFromDir(tmpDir, { glob: "**/*.prompt.md", ext: ".prompt.md" });
+    expect(commands).toHaveLength(1);
+    expect(commands[0]!.name).toBe("review");
+  });
+});
+
+describe("detectCommandParamSyntax", () => {
+  it("detects Claude Code $ARGUMENTS", () => {
+    expect(detectCommandParamSyntax("Review: $ARGUMENTS")).toBe("claude-code");
+  });
+
+  it("detects Cursor positional $1", () => {
+    expect(detectCommandParamSyntax("Deploy $1 to $2")).toBe("cursor");
+  });
+
+  it("detects Copilot ${input:x}", () => {
+    expect(detectCommandParamSyntax("Review ${input:file}")).toBe("copilot");
+  });
+
+  it("returns null for no params", () => {
+    expect(detectCommandParamSyntax("Just do the thing")).toBeNull();
   });
 });
