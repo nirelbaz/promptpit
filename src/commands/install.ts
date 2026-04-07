@@ -293,9 +293,7 @@ export async function installStack(
           for (const command of bundle.commands) {
             commands[command.name] = { hash: computeHash(command.content) };
           }
-          if (Object.keys(commands).length > 0) {
-            record.commands = commands;
-          }
+          record.commands = commands;
         }
 
         if (record.instructions || record.skills || record.agents || record.rules || record.mcp || record.commands) {

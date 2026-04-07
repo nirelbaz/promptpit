@@ -164,6 +164,7 @@ function checkDrift(statusResult: StatusResult): CheckResult["drift"] {
         ...adapter.ruleDetails.map((d) => ({ detail: d, artifact: "rule" })),
         ...adapter.agentDetails.map((d) => ({ detail: d, artifact: "agent" })),
         ...adapter.mcpDetails.map((d) => ({ detail: d, artifact: "mcp" })),
+        ...adapter.commandDetails.map((d) => ({ detail: d, artifact: "command" })),
       ];
 
       for (const { detail, artifact } of tagged) {

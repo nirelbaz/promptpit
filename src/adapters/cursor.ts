@@ -201,10 +201,6 @@ async function write(
         await writeFileEnsureDir(dest, command.content);
         filesWritten.push(dest);
       }
-    }
-
-    // Warn about mismatched param syntax
-    for (const command of stack.commands) {
       const syntax = detectCommandParamSyntax(command.content);
       if (syntax && syntax !== "cursor") {
         warnings.push(

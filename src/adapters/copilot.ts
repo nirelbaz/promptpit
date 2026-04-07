@@ -83,12 +83,6 @@ export function ruleToInstructionsMd(ruleContent: string): string {
   return matter.stringify(parsed.content.trim() + "\n", { applyTo });
 }
 
-// Translate portable command to Copilot .prompt.md format
-// Body content stays verbatim — no param syntax translation
-export function commandToPromptMd(commandContent: string): string {
-  return commandContent;
-}
-
 // Translate Copilot .prompt.md back to portable format
 // Strip Copilot-specific frontmatter fields (model, tools, agent), keep description
 export function promptMdToCommand(promptContent: string): string {
@@ -197,7 +191,7 @@ async function read(root: string): Promise<PlatformConfig> {
   }
 
   const rawCommands = await readCommandsFromDir(
-    (p as any).prompts,
+    p.prompts!,
     { glob: "**/*.prompt.md", ext: ".prompt.md" },
   );
   const commands = rawCommands.map((cmd) => ({
@@ -284,18 +278,13 @@ async function write(
 
     // Write commands to .github/prompts/*.prompt.md
     for (const command of stack.commands) {
-      const promptContent = commandToPromptMd(command.content);
-      const dest = path.join((p as any).prompts, `${command.name}.prompt.md`);
+      const dest = path.join(p.prompts!, `${command.name}.prompt.md`);
       if (opts.dryRun) {
         dryRunEntries.push(fileDryRunEntry(dest, await exists(dest), "translate to .prompt.md"));
       } else {
-        await writeFileEnsureDir(dest, promptContent);
+        await writeFileEnsureDir(dest, command.content);
         filesWritten.push(dest);
       }
-    }
-
-    // Warn about mismatched param syntax
-    for (const command of stack.commands) {
       const syntax = detectCommandParamSyntax(command.content);
       if (syntax && syntax !== "copilot") {
         warnings.push(

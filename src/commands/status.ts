@@ -197,12 +197,11 @@ async function checkAdapterStatus(
   const commandEntries = record.commands ?? {};
   const commandDetails: ArtifactDetail[] = [];
   if (Object.keys(commandEntries).length > 0 && adapter?.capabilities.commands) {
-    const commandsBase = adapterId === "copilot"
-      ? path.join(root, ".github", "prompts")
-      : (adapter?.paths.project(root).commands ?? path.join(root, ".claude", "commands"));
+    const paths = adapter.paths.project(root);
+    const commandsBase = paths.prompts ?? paths.commands ?? path.join(root, ".claude", "commands");
+    const ext = paths.prompts ? ".prompt.md" : ".md";
 
     for (const [commandName, commandRecord] of Object.entries(commandEntries)) {
-      const ext = adapterId === "copilot" ? ".prompt.md" : ".md";
       const commandFile = path.join(commandsBase, `${commandName}${ext}`);
       let commandState: ArtifactState = "synced";
       const content = await readFileOrNull(commandFile);

@@ -9,6 +9,7 @@ export interface PathSet {
   rules?: string;
   agents?: string;
   commands?: string;
+  prompts?: string;
 }
 
 export interface AdapterPaths {

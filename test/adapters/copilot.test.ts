@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdir, writeFile, readFile, rm, mkdtemp } from "node:fs/promises";
 import path from "node:path";
 import os, { tmpdir } from "node:os";
-import { copilotAdapter, skillToInstructionsMd, agentToGitHubAgent, ruleToInstructionsMd, commandToPromptMd, promptMdToCommand } from "../../src/adapters/copilot.js";
+import { copilotAdapter, skillToInstructionsMd, agentToGitHubAgent, ruleToInstructionsMd, promptMdToCommand } from "../../src/adapters/copilot.js";
 import { readStack } from "../../src/core/stack.js";
 
 const VALID_STACK = path.join(import.meta.dirname, "../__fixtures__/stacks/valid-stack");
@@ -296,20 +296,6 @@ describe("read commands", () => {
     expect(config.commands[0]!.name).toBe("review");
     expect(config.commands[0]!.content).toContain("description:");
     expect(config.commands[0]!.content).not.toContain("model:");
-  });
-});
-
-describe("commandToPromptMd", () => {
-  it("passes through plain content unchanged", () => {
-    const result = commandToPromptMd("Review this code: $ARGUMENTS");
-    expect(result).toBe("Review this code: $ARGUMENTS");
-  });
-
-  it("preserves existing frontmatter as-is", () => {
-    const input = "---\ndescription: Review code\n---\n\nReview this code";
-    const result = commandToPromptMd(input);
-    expect(result).toContain("description:");
-    expect(result).toContain("Review this code");
   });
 });
 
