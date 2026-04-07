@@ -109,7 +109,7 @@ export function mergeConfigs(
 
   const seenCommands = new Map<string, CommandEntry>();
   for (const config of configs) {
-    for (const command of config.commands) {
+    for (const command of (config.commands ?? [])) {
       if (!seenCommands.has(command.name)) {
         seenCommands.set(command.name, command);
       }
