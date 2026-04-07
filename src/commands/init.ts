@@ -83,6 +83,7 @@ export async function initCommand(
       writeFileEnsureDir(path.join(outputDir, "skills", ".gitkeep"), ""),
       writeFileEnsureDir(path.join(outputDir, "rules", ".gitkeep"), ""),
       writeFileEnsureDir(path.join(outputDir, "agents", ".gitkeep"), ""),
+      writeFileEnsureDir(path.join(outputDir, "commands", ".gitkeep"), ""),
       writeFileEnsureDir(path.join(outputDir, "mcp.json"), JSON.stringify({}, null, 2) + "\n"),
       writeFileEnsureDir(path.join(outputDir, ".env.example"), "# Add environment variables required by your stack\n"),
     ]);
@@ -140,6 +141,10 @@ export async function initCommand(
       writeFileEnsureDir(path.join(outputDir, "agents", ".gitkeep"), ""),
     );
 
+    writes.push(
+      writeFileEnsureDir(path.join(outputDir, "commands", ".gitkeep"), ""),
+    );
+
     if (includeMcp) {
       writes.push(
         writeFileEnsureDir(
@@ -169,6 +174,7 @@ export async function initCommand(
     steps.push("Add skills to .promptpit/skills/<name>/SKILL.md");
     steps.push("Add custom agents to .promptpit/agents/<name>.md");
     steps.push("Add conditional rules to .promptpit/rules/<name>.md");
+    steps.push("Add custom commands to .promptpit/commands/<name>.md");
     steps.push("Run 'pit validate' to check for issues");
     steps.push("Run 'pit install' to install the stack into your project");
 
