@@ -19,6 +19,7 @@ export const stackManifestSchema = z.object({
   skills: z.array(z.string()).optional(),
   agents: z.array(z.string()).optional(),
   rules: z.array(z.string()).optional(),
+  commands: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
   compatibility: z.array(z.string()).optional(),
 });
@@ -93,6 +94,22 @@ export interface RuleEntry {
   content: string;
 }
 
+// --- Command Frontmatter (optional) ---
+
+export const commandFrontmatterSchema = z.object({
+  description: z.string().optional(),
+}).passthrough();
+
+export type CommandFrontmatter = z.infer<typeof commandFrontmatterSchema>;
+
+// --- Command Entry ---
+
+export interface CommandEntry {
+  name: string;
+  path: string;
+  content: string;
+}
+
 // --- MCP Server Config ---
 
 export const mcpServerSchema = z.object({
@@ -126,6 +143,7 @@ export interface StackBundle {
   skills: SkillEntry[];
   agents: AgentEntry[];
   rules: RuleEntry[];
+  commands: CommandEntry[];
   mcpServers: McpConfig;
   envExample: Record<string, string>;
 }
@@ -165,6 +183,7 @@ const adapterInstallSchema = z.object({
   skills: z.record(artifactHashSchema).optional(),
   agents: z.record(artifactHashSchema).optional(),
   rules: z.record(artifactHashSchema).optional(),
+  commands: z.record(artifactHashSchema).optional(),
   mcp: z.record(artifactHashSchema).optional(),
 });
 
