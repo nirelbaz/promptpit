@@ -134,6 +134,63 @@ describe("cursorAdapter", () => {
   });
 });
 
+describe("cursor write commands", () => {
+  const tmpDirs: string[] = [];
+  afterEach(async () => {
+    for (const d of tmpDirs) await rm(d, { recursive: true, force: true });
+    tmpDirs.length = 0;
+  });
+
+  it("writes commands to .cursor/commands/ as .md files", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-cursor-cmd-write-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, ".cursorrules"), "");
+
+    const bundle = await readStack(path.resolve("test/__fixtures__/stacks/valid-stack"));
+    // Ensure the bundle has at least one command
+    expect(bundle.commands.length).toBeGreaterThan(0);
+
+    await cursorAdapter.write(target, bundle, {});
+
+    const commandFile = path.join(target, ".cursor", "commands", `${bundle.commands[0]!.name}.md`);
+    const content = await readFile(commandFile, "utf-8");
+    expect(content).toBeTruthy();
+  });
+
+  it("warns when command uses non-cursor param syntax ($ARGUMENTS)", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-cursor-cmd-warning-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, ".cursorrules"), "");
+
+    const bundle = await readStack(path.resolve("test/__fixtures__/stacks/valid-stack"));
+    // Override commands with a Claude Code-syntax command
+    bundle.commands = [{
+      name: "review",
+      path: "commands/review",
+      content: "Review the changes: $ARGUMENTS",
+    }];
+
+    const result = await cursorAdapter.write(target, bundle, {});
+    const warning = result.warnings.find((w) => w.includes("$ARGUMENTS") || w.includes("claude-code") || w.includes("param syntax"));
+    expect(warning).toBeDefined();
+    expect(warning).toContain("review");
+  });
+
+  it("dry-run lists command files without writing them", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-cursor-cmd-dryrun-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, ".cursorrules"), "");
+
+    const bundle = await readStack(path.resolve("test/__fixtures__/stacks/valid-stack"));
+    expect(bundle.commands.length).toBeGreaterThan(0);
+
+    const result = await cursorAdapter.write(target, bundle, { dryRun: true });
+    expect(result.filesWritten).toHaveLength(0);
+    const commandEntry = result.dryRunEntries!.find((e) => e.file.includes(".cursor/commands"));
+    expect(commandEntry).toBeDefined();
+  });
+});
+
 describe("cursor inline agent writing", () => {
   const tmpDirs: string[] = [];
   afterEach(async () => {

@@ -329,3 +329,65 @@ describe("promptMdToCommand", () => {
     expect(result).not.toContain("---");
   });
 });
+
+describe("copilot write commands", () => {
+  let tmpDirLocal: string;
+
+  beforeEach(async () => {
+    tmpDirLocal = await mkdtemp(path.join(os.tmpdir(), "copilot-cmd-"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDirLocal, { recursive: true, force: true });
+  });
+
+  it("writes commands to .github/prompts/ as .prompt.md files", async () => {
+    const bundle = await readStack(VALID_STACK);
+    // Ensure valid-stack has commands
+    expect(bundle.commands.length).toBeGreaterThan(0);
+
+    await mkdir(path.join(tmpDirLocal, ".github"), { recursive: true });
+    await writeFile(path.join(tmpDirLocal, ".github", "copilot-instructions.md"), "# Test");
+
+    await copilotAdapter.write(tmpDirLocal, bundle, {});
+
+    const commandFile = path.join(
+      tmpDirLocal,
+      ".github",
+      "prompts",
+      `${bundle.commands[0]!.name}.prompt.md`,
+    );
+    const content = await readFile(commandFile, "utf-8");
+    expect(content).toBeTruthy();
+  });
+
+  it("warns when command uses non-copilot param syntax ($ARGUMENTS)", async () => {
+    const bundle = await readStack(VALID_STACK);
+    // Override commands with a Claude Code-syntax command
+    bundle.commands = [{
+      name: "review",
+      path: "commands/review",
+      content: "Review: $ARGUMENTS",
+    }];
+
+    await mkdir(path.join(tmpDirLocal, ".github"), { recursive: true });
+    await writeFile(path.join(tmpDirLocal, ".github", "copilot-instructions.md"), "# Test");
+
+    const result = await copilotAdapter.write(tmpDirLocal, bundle, {});
+    const warning = result.warnings.find((w) => w.includes("review") && w.includes("param syntax"));
+    expect(warning).toBeDefined();
+  });
+
+  it("dry-run lists .prompt.md command files without writing them", async () => {
+    const bundle = await readStack(VALID_STACK);
+    expect(bundle.commands.length).toBeGreaterThan(0);
+
+    await mkdir(path.join(tmpDirLocal, ".github"), { recursive: true });
+    await writeFile(path.join(tmpDirLocal, ".github", "copilot-instructions.md"), "# Test");
+
+    const result = await copilotAdapter.write(tmpDirLocal, bundle, { dryRun: true });
+    expect(result.filesWritten).toHaveLength(0);
+    const commandEntry = result.dryRunEntries!.find((e) => e.file.includes(".prompt.md"));
+    expect(commandEntry).toBeDefined();
+  });
+});

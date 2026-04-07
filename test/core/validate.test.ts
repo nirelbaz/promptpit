@@ -167,6 +167,24 @@ describe("validateStack", () => {
     }
   });
 
+  it("passes validation for command with valid optional description frontmatter", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-validate-cmd-valid-"));
+    try {
+      await writeFile(path.join(dir, "stack.json"), JSON.stringify({ name: "test", version: "1.0.0" }));
+      await mkdir(path.join(dir, "commands"), { recursive: true });
+      // Valid frontmatter: description is a string — should produce zero warnings
+      await writeFile(
+        path.join(dir, "commands", "deploy.md"),
+        "---\ndescription: Deploy the application to production\n---\n\nRun the deploy script.\n",
+      );
+      const result = await validateStack(dir);
+      const commandDiags = result.diagnostics.filter((d) => d.file.startsWith("commands/"));
+      expect(commandDiags).toHaveLength(0);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
   it("returns warnings for dangerous env names", async () => {
     const result = await validateStack(INVALID_STACK);
     const envWarnings = result.diagnostics.filter(

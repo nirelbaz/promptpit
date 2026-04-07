@@ -184,4 +184,21 @@ describe("commands merge", () => {
     const result = mergeConfigs(configs);
     expect(result.commands).toEqual([]);
   });
+
+  it("handles config without commands property (uses ?? [] fallback)", () => {
+    // When one config omits the commands key entirely, the ?? [] guard fires.
+    // Cast to bypass TypeScript to simulate an adapter that doesn't populate commands.
+    const configWithCommands: PlatformConfig = makeConfig({
+      adapterId: "claude-code",
+      commands: [{ name: "review", path: "commands/review", content: "Review code" }],
+    });
+    const configWithoutCommands: PlatformConfig = {
+      ...makeConfig({ adapterId: "cursor" }),
+      commands: undefined as unknown as [],
+    };
+
+    const result = mergeConfigs([configWithCommands, configWithoutCommands]);
+    expect(result.commands).toHaveLength(1);
+    expect(result.commands[0]!.name).toBe("review");
+  });
 });

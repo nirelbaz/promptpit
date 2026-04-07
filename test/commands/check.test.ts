@@ -333,6 +333,62 @@ describe("pit check", () => {
     expect(result.drift.issues.some((i) => i.type === "drifted" && i.artifact === "instructions")).toBe(true);
   });
 
+  it("fails when a command file is deleted (drift)", async () => {
+    const dir = await makeTmpDir();
+    await writeStackJson(dir);
+
+    // Manifest says command exists, but no file on disk
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "test-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          "claude-code": {
+            commands: { review: { hash: "sha256:abc" } },
+          },
+        },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await checkCommand(dir, {});
+    expect(result.pass).toBe(false);
+    expect(result.drift.pass).toBe(false);
+    expect(result.drift.issues.some((i) => i.artifact === "command" && i.type === "deleted")).toBe(true);
+  });
+
+  it("fails when a command file has drifted", async () => {
+    const dir = await makeTmpDir();
+    await writeStackJson(dir);
+
+    // Write command with different content than recorded hash
+    const commandsDir = path.join(dir, ".claude", "commands");
+    await mkdir(commandsDir, { recursive: true });
+    await writeFile(path.join(commandsDir, "review.md"), "Modified command content");
+
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "test-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          "claude-code": {
+            commands: { review: { hash: computeHash("Original command content") } },
+          },
+        },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await checkCommand(dir, {});
+    expect(result.pass).toBe(false);
+    expect(result.drift.pass).toBe(false);
+    expect(result.drift.issues.some((i) => i.artifact === "command" && i.type === "drifted")).toBe(true);
+  });
+
   it("fails when MCP server config drifted", async () => {
     const dir = await makeTmpDir();
     await writeStackJson(dir);

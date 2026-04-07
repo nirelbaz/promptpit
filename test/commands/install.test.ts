@@ -307,6 +307,30 @@ describe("installStack", () => {
     });
   });
 
+  it("commands are not recorded in manifest for adapters without commands capability", async () => {
+    // Standards and Codex have capabilities.commands = false — commands should not be hashed
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-cmd-nocap-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    await installStack(VALID_STACK, target, {});
+
+    const { readManifest } = await import("../../src/core/manifest.js");
+    const manifest = await readManifest(target);
+    const entry = manifest.installs[0]!;
+
+    // standards adapter does not support commands — its record must NOT contain commands
+    const standardsRecord = entry.adapters["standards"];
+    if (standardsRecord) {
+      expect(standardsRecord.commands).toBeUndefined();
+    }
+
+    // claude-code adapter DOES support commands — its record MUST contain commands
+    const claudeRecord = entry.adapters["claude-code"];
+    expect(claudeRecord).toBeDefined();
+    expect(claudeRecord!.commands).toBeDefined();
+  });
+
   it("inline-agent manifest hashes buildInlineContent (instructions + agents)", async () => {
     const target = await mkdtemp(path.join(tmpdir(), "pit-install-inline-"));
     tmpDirs.push(target);

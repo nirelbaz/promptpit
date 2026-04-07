@@ -395,6 +395,17 @@ describe("readCommandsFromDir", () => {
     expect(commands).toHaveLength(1);
     expect(commands[0]!.name).toBe("review");
   });
+
+  it("falls back to path.extname when file extension does not match the provided ext", async () => {
+    // glob pattern matches .md but ext option is .prompt.md — the file does NOT end with .prompt.md
+    // so the code falls back to relPath.slice(0, -path.extname(relPath).length)
+    await writeFile(path.join(tmpDir, "deploy.md"), "Deploy the app");
+    // Use a glob that matches .md but ext that does NOT match — exercises the else branch
+    const commands = await readCommandsFromDir(tmpDir, { glob: "**/*.md", ext: ".prompt.md" });
+    expect(commands).toHaveLength(1);
+    // Name should be stripped of the actual extension (.md), not the provided ext
+    expect(commands[0]!.name).toBe("deploy");
+  });
 });
 
 describe("detectCommandParamSyntax", () => {

@@ -253,4 +253,69 @@ describe("claudeCodeAdapter", () => {
       expect(config.rules[0].frontmatter.description).toBe("Lint rules");
     });
   });
+
+  describe("write commands param syntax warning", () => {
+    const tmpDirs: string[] = [];
+
+    afterEach(async () => {
+      for (const dir of tmpDirs) {
+        await rm(dir, { recursive: true, force: true });
+      }
+      tmpDirs.length = 0;
+    });
+
+    it("warns when command uses Cursor-style $1 param syntax", async () => {
+      const target = await mkdtemp(path.join(tmpdir(), "pit-cc-cmd-cursorsyntax-"));
+      tmpDirs.push(target);
+      await writeFile(path.join(target, "CLAUDE.md"), "");
+
+      const bundle = await readStack(path.resolve("test/__fixtures__/stacks/valid-stack"));
+      // Override commands with a Cursor-syntax command
+      bundle.commands = [{
+        name: "deploy",
+        path: "commands/deploy",
+        content: "Deploy $1 to $2 environment",
+      }];
+
+      const result = await claudeCodeAdapter.write(target, bundle, {});
+      const warning = result.warnings.find((w) => w.includes("deploy") && w.includes("param syntax"));
+      expect(warning).toBeDefined();
+      expect(warning).toContain("cursor");
+    });
+
+    it("warns when command uses Copilot-style ${input:x} param syntax", async () => {
+      const target = await mkdtemp(path.join(tmpdir(), "pit-cc-cmd-copilotsyntax-"));
+      tmpDirs.push(target);
+      await writeFile(path.join(target, "CLAUDE.md"), "");
+
+      const bundle = await readStack(path.resolve("test/__fixtures__/stacks/valid-stack"));
+      bundle.commands = [{
+        name: "review",
+        path: "commands/review",
+        content: "Review ${input:filename} carefully",
+      }];
+
+      const result = await claudeCodeAdapter.write(target, bundle, {});
+      const warning = result.warnings.find((w) => w.includes("review") && w.includes("param syntax"));
+      expect(warning).toBeDefined();
+      expect(warning).toContain("copilot");
+    });
+
+    it("does not warn for commands with $ARGUMENTS (native Claude Code syntax)", async () => {
+      const target = await mkdtemp(path.join(tmpdir(), "pit-cc-cmd-nativesyntax-"));
+      tmpDirs.push(target);
+      await writeFile(path.join(target, "CLAUDE.md"), "");
+
+      const bundle = await readStack(path.resolve("test/__fixtures__/stacks/valid-stack"));
+      bundle.commands = [{
+        name: "review",
+        path: "commands/review",
+        content: "Review: $ARGUMENTS",
+      }];
+
+      const result = await claudeCodeAdapter.write(target, bundle, {});
+      const warning = result.warnings.find((w) => w.includes("review") && w.includes("param syntax"));
+      expect(warning).toBeUndefined();
+    });
+  });
 });
