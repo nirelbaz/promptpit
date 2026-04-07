@@ -120,12 +120,14 @@ export async function collectStack(
       skills: mergeResult.skills.map((s) => s.path),
       agents: mergeResult.agents.map((a) => a.path),
       rules: mergeResult.rules.map((r) => r.path),
+      commands: mergeResult.commands.map((c) => c.path),
       compatibility: detected.map((d) => d.adapter.id),
     },
     agentInstructions: mergeResult.agentInstructions,
     skills: mergeResult.skills,
     agents: mergeResult.agents,
     rules: mergeResult.rules,
+    commands: mergeResult.commands,
     mcpServers: stripped,
     envExample,
   };
@@ -144,6 +146,9 @@ export async function collectStack(
     }
     for (const rule of bundle.rules) {
       filePaths.push(path.join(outputDir, "rules", `${rule.name}.md`));
+    }
+    for (const command of bundle.commands) {
+      filePaths.push(path.join(outputDir, "commands", `${command.name}.md`));
     }
     if (Object.keys(bundle.mcpServers).length > 0) {
       filePaths.push(path.join(outputDir, "mcp.json"));
@@ -169,6 +174,7 @@ export async function collectStack(
     const skillCount = bundle.skills.length;
     const agentCount = bundle.agents.length;
     const ruleCount = bundle.rules.length;
+    const commandCount = bundle.commands.length;
     const mcpCount = Object.keys(bundle.mcpServers).length;
     const secretCount = Object.keys(bundle.envExample).length;
     log.info(
@@ -176,6 +182,7 @@ export async function collectStack(
         `${skillCount} skill${skillCount !== 1 ? "s" : ""}, ` +
         `${agentCount} agent${agentCount !== 1 ? "s" : ""}, ` +
         `${ruleCount} rule${ruleCount !== 1 ? "s" : ""}, ` +
+        `${commandCount} command${commandCount !== 1 ? "s" : ""}, ` +
         `${mcpCount} MCP server${mcpCount !== 1 ? "s" : ""}, ` +
         `${secretCount} secret${secretCount !== 1 ? "s" : ""} stripped`,
     );
@@ -187,7 +194,7 @@ export async function collectStack(
   writeSpin.succeed(`Stack written to ${outputDir}`);
 
   log.success(
-    `Collected: ${mergeResult.skills.length} skills, ${mergeResult.agents.length} agents, ${mergeResult.rules.length} rules, ${Object.keys(stripped).length} MCP servers, ${Object.keys(envExample).length} secrets stripped`,
+    `Collected: ${mergeResult.skills.length} skills, ${mergeResult.agents.length} agents, ${mergeResult.rules.length} rules, ${mergeResult.commands.length} commands, ${Object.keys(stripped).length} MCP servers, ${Object.keys(envExample).length} secrets stripped`,
   );
   log.info(
     "Next: Run 'pit validate' to check for issues, then 'git add .promptpit && git commit'.",

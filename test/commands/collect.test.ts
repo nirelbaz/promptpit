@@ -61,6 +61,27 @@ describe("collectStack", () => {
     await rm(emptyDir, { recursive: true });
   });
 
+  describe("collect commands", () => {
+    it("includes commands in collected bundle", async () => {
+      const projectDir = await mkdtemp(path.join(tmpdir(), "pit-collect-commands-"));
+      const commandsDir = path.join(projectDir, ".claude", "commands");
+      await mkdir(commandsDir, { recursive: true });
+      await writeFile(path.join(commandsDir, "review.md"), "Review: $ARGUMENTS");
+      await writeFile(path.join(projectDir, "CLAUDE.md"), "# Test");
+
+      const outputDir = path.join(projectDir, ".promptpit");
+      await collectStack(projectDir, outputDir);
+
+      const stackJson = JSON.parse(await readFile(path.join(outputDir, "stack.json"), "utf-8"));
+      expect(stackJson.commands).toContain("commands/review");
+
+      const commandContent = await readFile(path.join(outputDir, "commands", "review.md"), "utf-8");
+      expect(commandContent).toContain("$ARGUMENTS");
+
+      await rm(projectDir, { recursive: true });
+    });
+  });
+
   it("dry-run with agents lists agent files in report", async () => {
     // Build a minimal project with a Claude config and an agent file so collect
     // detects agents and includes them in the dry-run entry list.
