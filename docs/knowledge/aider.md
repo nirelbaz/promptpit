@@ -2,51 +2,72 @@
 tool: aider
 display-name: Aider
 status: tracked
-last-verified: 1970-01-01
+last-verified: 2026-04-07
 doc-urls:
-  - https://aider.chat/docs
+  - https://aider.chat/docs/config.html
+  - https://aider.chat/docs/usage/conventions.html
+  - https://github.com/Aider-AI/aider
 ---
 
 ## Configuration
 
 ### Instructions
-- Needs research via /refresh-knowledge
+- Main config: `.aider.conf.yml` (searched: home dir → git repo root → current dir; later files win)
+- Conventions: `CONVENTIONS.md` (loaded via `read:` in config or `--read` flag)
+- Model settings: `.aider.model.settings.yml` (same search order)
+- Env vars: `.env` file, all CLI flags have `AIDER_` env var equivalents
 
 ### Skills
-- Needs research via /refresh-knowledge
+- No native skill system
 
 ### MCP Servers
-- Needs research via /refresh-knowledge
+- No native MCP client support
+- Third-party MCP servers exist that wrap aider as a tool, but aider itself does not consume MCP servers
 
 ### Agents
-- Needs research via /refresh-knowledge
+- No agent system — aider is a CLI tool, not an IDE
 
 ### Rules
-- Needs research via /refresh-knowledge
+- No formal rules system — uses CONVENTIONS.md loaded via config
 
 ### Hooks
-- Needs research via /refresh-knowledge
+- Not supported
 
 ## Cross-Tool Reading
 
 ### Standards & Conventions Read
-- Needs research via /refresh-knowledge
+- Reads AGENTS.md: reported as supported (2026, unverified exact version)
+- Reads CONVENTIONS.md: native format
+- Reads .cursorrules: no
+- Reads CLAUDE.md: no
+- Reads .mcp.json: no
 
 ### Overlap Matrix
-| Config source | Read by this tool? | How it's used | Conflict risk |
+| Config source | Read by Aider? | How it's used | Conflict risk |
 |---|---|---|---|
+| AGENTS.md | likely yes | Instructions | Low — Aider's config is separate |
+| CONVENTIONS.md | yes (via --read) | Coding conventions | Aider-specific |
 
 ### Deduplication Notes
-- Needs research via /refresh-knowledge
+- Low duplication risk — Aider's config system is distinct from other tools
 
 ## Behavior
-- Needs research via /refresh-knowledge
+- Python-based CLI tool (pip/pipx install)
+- Reads config files in cascading order (home → repo root → cwd)
+- All CLI flags available as YAML config keys and AIDER_ env vars
 
 ## Ecosystem
-- Needs research via /refresh-knowledge
+- Very active open-source project
+- Releases roughly weekly during active development
+- v0.86.1 as of February 2026
+- Supports multiple LLM providers
 
 ## Edge Cases
-- Needs research via /refresh-knowledge
+- No IDE integration — purely terminal-based
+- No MCP client, unlike most modern AI coding tools
+- CONVENTIONS.md must be explicitly loaded via config
 
 ## Promptpit Gaps
-- No adapter exists yet — gaps will be identified after knowledge is populated
+- No adapter exists — low priority candidate due to minimal config overlap with other tools
+- No MCP client, no rules system, no skills — limited surface area for an adapter
+- AGENTS.md support (if confirmed) would be the main integration point
