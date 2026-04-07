@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.10 (2026-04-07)
+
+### Added
+
+- You can now collect, install, and sync slash commands across Claude Code, Cursor, and GitHub Copilot. Commands in `.claude/commands/`, `.cursor/commands/`, and `.github/prompts/` are bundled into `.promptpit/commands/` and installed to each tool's native path, with nested directory structures preserved.
+- Copilot `.prompt.md` frontmatter is translated during collect (description preserved, model/tools/agent stripped) and extension is handled automatically during install.
+- Install-time warnings when a command uses tool-specific param syntax ($ARGUMENTS, $1, ${input:x}) that may need manual adjustment for the target tool.
+- `pit status` tracks command drift. `pit check` verifies command freshness. `pit validate` checks command frontmatter. `pit init` scaffolds a `commands/` directory.
+
 ## 0.3.9 (2026-04-06)
 
 ### Fixed
