@@ -185,7 +185,7 @@ export const claudeCodeAdapter: PlatformAdapter = {
     rules: true,
     skillFormat: "skill.md",
     mcpStdio: true,
-    mcpRemote: false,
+    mcpRemote: true,
     mcpFormat: "json",
     mcpRootKey: "mcpServers",
     agentsmd: false,

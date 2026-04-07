@@ -74,6 +74,26 @@ PromptPit already parses Agent Skills frontmatter (`skillFrontmatterSchema` in `
 
 **BUG 26:** Validator CC-AG-009/CC-AG-003 false positives on Copilot/Codex-native tool and model names. Validator should be platform-aware or skip tool/model validation for non-Claude-origin agents.
 
+### Adapter audit findings (April 2026)
+
+Discovered via `/audit-adapters` command using the AI Stack Expert knowledge base. See `docs/knowledge/` for per-tool evidence.
+
+**MCP duplication (HIGH):** Claude Code reads `.mcp.json` natively. If Standards adapter writes MCP to `.mcp.json` AND Claude Code adapter writes to `.claude/settings.json`, servers appear twice. Same issue with Copilot reading `.mcp.json` + `.vscode/mcp.json`. Need a deduplication strategy: skip tool-specific MCP write when the tool natively reads `.mcp.json`, or skip Standards MCP write when tool-specific adapters handle it.
+
+**AGENTS.md instruction duplication (HIGH):** Standards adapter always writes to AGENTS.md. Copilot reads it (with `chat.useAgentsMdFile`), Cursor likely reads it (v2.3+). When both Standards and tool-specific adapters are active, instructions appear twice. Need conditional write logic — skip tool-native instruction write when the tool reads AGENTS.md natively, or make Standards write opt-out.
+
+**Cursor native SKILL.md (MEDIUM):** Cursor v2.4+ supports `.cursor/skills/<name>/SKILL.md` natively (Agent Skills standard). Adapter still translates to `.cursor/rules/*.mdc` — lossy translation that discards skill-specific frontmatter. Change `skillLinkStrategy` from `"translate-copy"` to `"symlink"` targeting `.cursor/skills/`.
+
+**Codex agent write format mismatch (MEDIUM):** Codex natively reads agents from `.codex/agents/*.toml` but the adapter writes agents inline in AGENTS.md via `buildInlineContent`. The read path uses `readAgentsFromToml` correctly, but write path produces Markdown. Consider writing native TOML agent files.
+
+**Copilot missing agent frontmatter (LOW):** `agentToGitHubAgent` only preserves name, description, tools, model. Copilot supports additional fields: `target`, `disable-model-invocation`, `user-invocable`, `mcp-servers`, `metadata`. These are silently dropped during translation.
+
+**Copilot skill reading (LOW):** `read()` returns `skills: []` but Copilot discovers skills from `.github/skills/`, `.claude/skills/`, `.agents/skills/`. At minimum `.github/skills/` should be read during collect.
+
+**Codex AGENTS.override.md (LOW):** Codex supports `AGENTS.override.md` which takes precedence over `AGENTS.md`. Not handled during collect — could miss overriding content.
+
+**Schema enrichment (LOW):** Claude Code has many new agent frontmatter fields (disallowedTools, permissionMode, maxTurns, skills, mcpServers, hooks, memory, background, effort, isolation, color, initialPrompt) and skill fields (argument-hint, disable-model-invocation, effort, hooks, paths, shell) not typed in Zod schema. They pass through via `.passthrough()` but are untyped.
+
 ### Collect commands directories
 `.claude/commands/*.md` and `.codex/commands/*.md` are slash commands / custom prompts. 46+ files across real-world repos (fit-framework, positron). Not currently collected. Needs a `commands/` section in the bundle schema and per-adapter translation. Also blocks `pit install` for command-based repos like [claude-dev-skill](https://github.com/hnaymyh123-henry/claude-dev-skill) — a single `/dev` workflow skill (Tech Lead orchestrating parallel Worker Agents) distributed as `en/commands/dev/*.md` files that install to `~/.claude/commands/`. No SKILL.md, no frontmatter, just plain `.md` prompts with a directory structure.
 
@@ -94,10 +114,16 @@ KurrentDB has a 25.1KB CLAUDE.md. No warning about unusually large instruction f
 These adapters are lower priority for the solo maintainer. Design the adapter interface to make community contribution easy, then invite contributions.
 
 ### Windsurf adapter (Tier 2)
-Instructions to `.windsurfrules` (legacy) or `.windsurf/rules/*.md` (modern, `trigger` frontmatter: always_on/manual/model_decision/glob). MCP to global only at `~/.codeium/windsurf/mcp_config.json` — warn user that project-level MCP is not supported. Skills to `.windsurf/rules/` (strip SKILL.md frontmatter, add trigger frontmatter). Detection: `~/.codeium/windsurf` exists. Also reads AGENTS.md natively.
+Instructions to `.windsurfrules` (legacy) or `.windsurf/rules/*.md` (modern, `trigger` frontmatter: always_on/manual/model_decision/glob). MCP to global only at `~/.codeium/windsurf/mcp_config.json` (root key `mcpServers`, env interpolation `${env:VAR}`, 100-tool limit) — warn user that project-level MCP is not supported. Skills via Agent Skills standard (January 2026). Detection: `~/.codeium/windsurf` exists. Reads AGENTS.md natively (including directory-scoped). Unique `trigger` field maps from portable `alwaysApply`/`globs`: always_on↔alwaysApply:true, glob↔globs set, model_decision↔description only. Character limits: 6K global, 12K workspace.
 
 ### Gemini CLI adapter (Tier 2)
 Instructions to `GEMINI.md` (supports `@path/to/file.md` import syntax), skills to `.gemini/skills/` (native SKILL.md, symlinked from `.agents/skills/`), MCP to `.gemini/settings.json` (merge into `mcpServers` key), agents to `.gemini/agents/*.md` (native agent support with name/kind/tools/model/max_turns). Detection: `~/.gemini` exists. Gemini can be configured to also read AGENTS.md and CLAUDE.md via `context.fileName` setting.
+
+### JetBrains Junie adapter (Tier 2)
+Instructions to `.junie/AGENTS.md` or `AGENTS.md` (project root). Guidelines also from `.junie/rules/*.md` (concatenated, no frontmatter) and `.junie/guidelines.md` (legacy). Skills to `.junie/skills/<name>/SKILL.md` (Agent Skills standard, March 2026). MCP to `.junie/mcp/mcp.json` (root key `mcpServers`, stdio + HTTP). Global: `~/.junie/mcp/mcp.json`, `~/.junie/skills/`. Detection: `.junie/` directory. Reads AGENTS.md natively (checked in priority: custom env var → `.junie/AGENTS.md` → `AGENTS.md`). Strong candidate — clean namespace, Agent Skills + MCP + AGENTS.md all supported.
+
+### Continue.dev adapter (Tier 2)
+Instructions via `.continue/config.yaml`. Rules to `.continue/rules/*.md` with richest frontmatter of any tool: `name`, `globs`, `regex`, `description`, `alwaysApply`. MCP to `.continue/mcpServers/*.yaml` (YAML format, but accepts Claude/Cursor JSON directly). Reads AGENTS.md. Detection: `.continue/` directory. The `regex` field is unique and would need handling. MCP YAML format differs from all other adapters.
 
 ## Phase 3 — Ecosystem Bridge (v0.5 -> v1.0)
 

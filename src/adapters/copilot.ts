@@ -51,7 +51,8 @@ export function skillToInstructionsMd(skillContent: string): string {
   return `---\napplyTo: "${applyTo}"\n---\n\n${parsed.content.trim()}\n`;
 }
 
-// model dropped — Copilot doesn't support per-agent model selection
+// Preserve most agent frontmatter for Copilot — model is supported in IDE context
+// (VS Code, JetBrains, Eclipse, Xcode) but stripped by cloud Coding Agent
 export function agentToGitHubAgent(agentContent: string): string {
   const parsed = matter(agentContent, SAFE_MATTER_OPTIONS as never);
   const fm = parsed.data as Record<string, unknown>;
@@ -60,6 +61,7 @@ export function agentToGitHubAgent(agentContent: string): string {
   if (fm.name) copilotFm.name = fm.name;
   if (fm.description) copilotFm.description = fm.description;
   if (fm.tools) copilotFm.tools = fm.tools;
+  if (fm.model) copilotFm.model = fm.model;
 
   const yamlStr = yaml.dump(copilotFm, { schema: yaml.JSON_SCHEMA }).trim();
 
