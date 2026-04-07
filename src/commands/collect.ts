@@ -44,8 +44,7 @@ export async function collectStack(
   if (detected.length === 0) {
     spin.fail("No AI tool configs found");
     throw new Error(
-      "No AI tool configs found in this project.\n\n" +
-        "Run 'pit init' to create a stack from scratch, or add a config file for one of:\n" +
+      "Run 'pit init' to create a stack from scratch, or add a config file for one of:\n" +
         "  Claude Code    CLAUDE.md or .claude/\n" +
         "  Cursor         .cursorrules or .cursor/\n" +
         "  Codex CLI      AGENTS.md or .codex/\n" +
