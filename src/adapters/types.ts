@@ -1,4 +1,4 @@
-import type { StackBundle, McpConfig, SkillEntry, AgentEntry, RuleEntry } from "../shared/schema.js";
+import type { StackBundle, McpConfig, SkillEntry, AgentEntry, RuleEntry, CommandEntry } from "../shared/schema.js";
 
 // --- Path Sets ---
 
@@ -8,6 +8,7 @@ export interface PathSet {
   mcp: string;
   rules?: string;
   agents?: string;
+  commands?: string;
 }
 
 export interface AdapterPaths {
@@ -27,6 +28,7 @@ export interface DetectionResult {
 export interface AdapterCapabilities {
   skillLinkStrategy: "symlink" | "translate-copy" | "none";
   rules: boolean;
+  commands: boolean;
   skillFormat: "skill.md" | "mdc" | "md";
   mcpStdio: boolean;
   mcpRemote: boolean;
@@ -46,6 +48,7 @@ export interface PlatformConfig {
   agents: AgentEntry[];
   mcpServers: McpConfig;
   rules: RuleEntry[];
+  commands: CommandEntry[];
 }
 
 // --- Write Options ---
