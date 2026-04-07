@@ -9,6 +9,7 @@ import {
   skillFrontmatterSchema,
   agentFrontmatterSchema,
   ruleFrontmatterSchema,
+  commandFrontmatterSchema,
 } from "../shared/schema.js";
 import { validateEnvNames } from "../core/security.js";
 import { readFileOrNull } from "../shared/utils.js";
@@ -54,12 +55,14 @@ export async function validateStack(stackDir: string): Promise<ValidateResult> {
   const skillsDir = path.join(stackDir, "skills");
   const agentsDir = path.join(stackDir, "agents");
   const rulesDir = path.join(stackDir, "rules");
-  const [manifestRaw, agentRaw, skillFiles, agentFiles, ruleFiles, mcpRaw, envRaw] = await Promise.all([
+  const commandsDir = path.join(stackDir, "commands");
+  const [manifestRaw, agentRaw, skillFiles, agentFiles, ruleFiles, commandFiles, mcpRaw, envRaw] = await Promise.all([
     readFileOrNull(path.join(stackDir, "stack.json")),
     readFileOrNull(path.join(stackDir, "agent.promptpit.md")),
     fg("*/SKILL.md", { cwd: skillsDir, absolute: true }).catch(() => [] as string[]),
     fg("*.md", { cwd: agentsDir, absolute: true }).catch(() => [] as string[]),
     fg("*.md", { cwd: rulesDir, absolute: true }).catch(() => [] as string[]),
+    fg("**/*.md", { cwd: commandsDir, absolute: true }).catch(() => [] as string[]),
     readFileOrNull(path.join(stackDir, "mcp.json")),
     readFileOrNull(path.join(stackDir, ".env.example")),
   ]);
@@ -168,6 +171,33 @@ export async function validateStack(stackDir: string): Promise<ValidateResult> {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "unknown error";
       addDiag(diagnostics, relPath, "error", `Invalid frontmatter: ${msg}`);
+    }
+  }
+
+  // --- commands/**/*.md (optional, warnings only) ---
+  const commandContents = await Promise.all(
+    commandFiles.map(async (file) => ({
+      file,
+      relPath: path.relative(commandsDir, file),
+      raw: await readFileOrNull(file),
+    })),
+  );
+  for (const { relPath, raw } of commandContents) {
+    const displayPath = `commands/${relPath}`;
+    if (!raw) continue;
+    try {
+      const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
+      if (Object.keys(parsed.data).length > 0) {
+        const result = commandFrontmatterSchema.safeParse(parsed.data);
+        if (!result.success) {
+          for (const issue of result.error.issues) {
+            addDiag(diagnostics, displayPath, "warning", `Frontmatter: ${issue.path.join(".")}: ${issue.message}`);
+          }
+        }
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "unknown error";
+      addDiag(diagnostics, displayPath, "warning", `Invalid frontmatter: ${msg}`);
     }
   }
 
