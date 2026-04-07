@@ -75,7 +75,7 @@ PromptPit already parses Agent Skills frontmatter (`skillFrontmatterSchema` in `
 **BUG 26:** Validator CC-AG-009/CC-AG-003 false positives on Copilot/Codex-native tool and model names. Validator should be platform-aware or skip tool/model validation for non-Claude-origin agents.
 
 ### Collect commands directories
-`.claude/commands/*.md` and `.codex/commands/*.md` are slash commands / custom prompts. 46+ files across real-world repos (fit-framework, positron). Not currently collected. Needs a `commands/` section in the bundle schema and per-adapter translation.
+`.claude/commands/*.md` and `.codex/commands/*.md` are slash commands / custom prompts. 46+ files across real-world repos (fit-framework, positron). Not currently collected. Needs a `commands/` section in the bundle schema and per-adapter translation. Also blocks `pit install` for command-based repos like [claude-dev-skill](https://github.com/hnaymyh123-henry/claude-dev-skill) — a single `/dev` workflow skill (Tech Lead orchestrating parallel Worker Agents) distributed as `en/commands/dev/*.md` files that install to `~/.claude/commands/`. No SKILL.md, no frontmatter, just plain `.md` prompts with a directory structure.
 
 ### Claude Code settings.json permissions/hooks
 spotlight has a rich `.claude/settings.json` with `permissions`, `hooks`, and `enabledMcpServers`. Only `mcpServers` is collected. Consider porting these as optional bundle sections.

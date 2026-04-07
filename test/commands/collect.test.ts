@@ -55,7 +55,7 @@ describe("collectStack", () => {
     const outDir = path.join(emptyDir, ".promptpit");
 
     await expect(collectStack(emptyDir, outDir)).rejects.toThrow(
-      "No AI tool configs found",
+      "Run 'pit init' to create a stack from scratch",
     );
 
     await rm(emptyDir, { recursive: true });
