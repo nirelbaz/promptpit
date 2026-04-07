@@ -284,6 +284,53 @@ describe("installStack", () => {
     expect(computeHash(onDisk)).toBe(copilotRecord!.agents!["reviewer"]!.hash);
   });
 
+  describe("install commands", () => {
+    it("installs commands to Claude Code .claude/commands/", async () => {
+      const target = await mkdtemp(path.join(tmpdir(), "pit-install-commands-"));
+      tmpDirs.push(target);
+      await writeFile(path.join(target, "CLAUDE.md"), "# Test");
+
+      const stackDir = path.resolve("test/__fixtures__/stacks/valid-stack");
+      await installStack(stackDir, target, {});
+
+      const reviewContent = await readFile(
+        path.join(target, ".claude", "commands", "review.md"),
+        "utf-8",
+      );
+      expect(reviewContent).toContain("Review the following code");
+
+      const devStartContent = await readFile(
+        path.join(target, ".claude", "commands", "dev", "start.md"),
+        "utf-8",
+      );
+      expect(devStartContent).toContain("Start the development server");
+    });
+  });
+
+  it("commands are not recorded in manifest for adapters without commands capability", async () => {
+    // Standards and Codex have capabilities.commands = false — commands should not be hashed
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-cmd-nocap-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    await installStack(VALID_STACK, target, {});
+
+    const { readManifest } = await import("../../src/core/manifest.js");
+    const manifest = await readManifest(target);
+    const entry = manifest.installs[0]!;
+
+    // standards adapter does not support commands — its record must NOT contain commands
+    const standardsRecord = entry.adapters["standards"];
+    if (standardsRecord) {
+      expect(standardsRecord.commands).toBeUndefined();
+    }
+
+    // claude-code adapter DOES support commands — its record MUST contain commands
+    const claudeRecord = entry.adapters["claude-code"];
+    expect(claudeRecord).toBeDefined();
+    expect(claudeRecord!.commands).toBeDefined();
+  });
+
   it("inline-agent manifest hashes buildInlineContent (instructions + agents)", async () => {
     const target = await mkdtemp(path.join(tmpdir(), "pit-install-inline-"));
     tmpDirs.push(target);

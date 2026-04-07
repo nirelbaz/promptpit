@@ -39,6 +39,7 @@ export interface AdapterStatus {
   ruleCount: number;
   mcpCount: number;
   agentCount: number;
+  commandCount: number;
   hasInstructions: boolean;
   state: ArtifactState;
   driftedFiles: string[];
@@ -48,6 +49,7 @@ export interface AdapterStatus {
   ruleDetails: ArtifactDetail[];
   mcpDetails: ArtifactDetail[];
   agentDetails: ArtifactDetail[];
+  commandDetails: ArtifactDetail[];
 }
 
 export interface StackStatus {
@@ -191,6 +193,33 @@ async function checkAdapterStatus(
     }
   }
 
+  // Check commands
+  const commandEntries = record.commands ?? {};
+  const commandDetails: ArtifactDetail[] = [];
+  if (Object.keys(commandEntries).length > 0 && adapter?.capabilities.commands) {
+    const paths = adapter.paths.project(root);
+    const commandsBase = paths.prompts ?? paths.commands ?? path.join(root, ".claude", "commands");
+    const ext = paths.prompts ? ".prompt.md" : ".md";
+
+    for (const [commandName, commandRecord] of Object.entries(commandEntries)) {
+      const commandFile = path.join(commandsBase, `${commandName}${ext}`);
+      let commandState: ArtifactState = "synced";
+      const content = await readFileOrNull(commandFile);
+      if (content == null) {
+        commandState = "deleted";
+        driftedFiles.push(commandFile);
+      } else {
+        const currentHash = computeHash(content);
+        if (currentHash !== commandRecord.hash) {
+          commandState = "drifted";
+          driftedFiles.push(commandFile);
+        }
+      }
+      worstState = escalateState(worstState, commandState);
+      commandDetails.push({ name: commandName, path: commandFile, state: commandState });
+    }
+  }
+
   // Check MCP — read file once, check each server's hash
   const mcpEntries = record.mcp ?? {};
   const mcpDetails: ArtifactDetail[] = [];
@@ -248,6 +277,7 @@ async function checkAdapterStatus(
     ruleCount: Object.keys(ruleEntries).length,
     mcpCount: Object.keys(mcpEntries).length,
     agentCount: Object.keys(agentEntries).length,
+    commandCount: Object.keys(commandEntries).length,
     hasInstructions: !!record.instructions,
     state: worstState,
     driftedFiles,
@@ -256,6 +286,7 @@ async function checkAdapterStatus(
     ruleDetails,
     mcpDetails,
     agentDetails,
+    commandDetails,
   };
 }
 
@@ -323,6 +354,7 @@ function formatAdapterSummary(a: AdapterStatus): string {
   if (a.skillCount > 0) parts.push(`${a.skillCount} skill${a.skillCount === 1 ? "" : "s"}`);
   if (a.agentCount > 0) parts.push(`${a.agentCount} agent${a.agentCount === 1 ? "" : "s"}`);
   if (a.ruleCount > 0) parts.push(`${a.ruleCount} rule${a.ruleCount === 1 ? "" : "s"}`);
+  if (a.commandCount > 0) parts.push(`${a.commandCount} command${a.commandCount === 1 ? "" : "s"}`);
   if (a.mcpCount > 0) parts.push(`${a.mcpCount} MCP`);
   return parts.join(", ");
 }
@@ -363,6 +395,9 @@ function formatDetailed(result: StatusResult, root: string, verbose: boolean): v
         for (const d of adapter.agentDetails) {
           printDetailLine(d, "agent", root);
         }
+        for (const d of adapter.commandDetails) {
+          printDetailLine(d, "command", root);
+        }
         for (const d of adapter.ruleDetails) {
           printDetailLine(d, "rule", root);
         }
@@ -382,6 +417,7 @@ function formatDetailed(result: StatusResult, root: string, verbose: boolean): v
           ...(a.instructionDetail ? [a.instructionDetail] : []),
           ...a.skillDetails,
           ...a.agentDetails,
+          ...a.commandDetails,
           ...a.ruleDetails,
           ...a.mcpDetails,
         ];

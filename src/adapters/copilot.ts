@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import fg from "fast-glob";
 import matter from "gray-matter";
 import yaml from "js-yaml";
-import { SAFE_MATTER_OPTIONS, parseJsonc } from "./adapter-utils.js";
+import { SAFE_MATTER_OPTIONS, parseJsonc, readCommandsFromDir, detectCommandParamSyntax } from "./adapter-utils.js";
 import type {
   PlatformAdapter,
   PlatformConfig,
@@ -23,6 +23,7 @@ function projectPaths(root: string) {
     mcp: path.join(root, ".vscode", "mcp.json"),
     rules: path.join(root, ".github", "instructions"),
     agents: path.join(root, ".github", "agents"),
+    prompts: path.join(root, ".github", "prompts"),
   };
 }
 
@@ -34,6 +35,7 @@ function userPaths() {
     mcp: path.join(home, ".vscode", "mcp.json"),
     rules: path.join(home, ".github", "instructions"),
     agents: path.join(home, ".github", "agents"),
+    prompts: path.join(home, ".github", "prompts"),
   };
 }
 
@@ -81,6 +83,31 @@ export function ruleToInstructionsMd(ruleContent: string): string {
   }
 
   return matter.stringify(parsed.content.trim() + "\n", { applyTo });
+}
+
+// Translate Copilot .prompt.md back to portable format
+// Strip Copilot-specific frontmatter fields (model, tools, agent), keep description
+export function promptMdToCommand(promptContent: string): string {
+  let parsed: matter.GrayMatterFile<string>;
+  try {
+    parsed = matter(promptContent, SAFE_MATTER_OPTIONS as never);
+  } catch {
+    return promptContent;
+  }
+
+  if (Object.keys(parsed.data).length === 0) {
+    return promptContent;
+  }
+
+  const portableFm: Record<string, unknown> = {};
+  const fm = parsed.data as Record<string, unknown>;
+  if (fm.description) portableFm.description = fm.description;
+
+  if (Object.keys(portableFm).length === 0) {
+    return parsed.content.trim();
+  }
+
+  return matter.stringify(parsed.content.trim() + "\n", portableFm);
 }
 
 // Infer MCP server type from config shape
@@ -165,6 +192,15 @@ async function read(root: string): Promise<PlatformConfig> {
     }
   }
 
+  const rawCommands = await readCommandsFromDir(
+    p.prompts!,
+    { glob: "**/*.prompt.md", ext: ".prompt.md" },
+  );
+  const commands = rawCommands.map((cmd) => ({
+    ...cmd,
+    content: promptMdToCommand(cmd.content),
+  }));
+
   return {
     adapterId: "copilot",
     agentInstructions,
@@ -172,6 +208,7 @@ async function read(root: string): Promise<PlatformConfig> {
     agents,
     mcpServers,
     rules,
+    commands,
   };
 }
 
@@ -241,6 +278,23 @@ async function write(
       }
     }
 
+    // Write commands to .github/prompts/*.prompt.md
+    for (const command of stack.commands) {
+      const dest = path.join(p.prompts!, `${command.name}.prompt.md`);
+      if (opts.dryRun) {
+        dryRunEntries.push(fileDryRunEntry(dest, await exists(dest), "translate to .prompt.md"));
+      } else {
+        await writeFileEnsureDir(dest, command.content);
+        filesWritten.push(dest);
+      }
+      const syntax = detectCommandParamSyntax(command.content);
+      if (syntax && syntax !== "copilot") {
+        warnings.push(
+          `Command "${command.name}" uses ${syntax} param syntax — may need manual adjustment for GitHub Copilot`,
+        );
+      }
+    }
+
     // Write MCP config to .vscode/mcp.json (root key: "servers", type field required)
     if (Object.keys(stack.mcpServers).length > 0) {
       const existingRaw = await readFileOrNull(p.mcp);
@@ -292,6 +346,7 @@ export const copilotAdapter: PlatformAdapter = {
     agentsmd: true,
     hooks: false,
     agents: "native",
+    commands: true,
   },
   detect,
   read,

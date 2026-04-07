@@ -3,7 +3,7 @@ import chalk from "chalk";
 import { readManifest } from "../core/manifest.js";
 import { tryReadStackManifest, tryReadMcpConfig } from "../core/stack.js";
 import type { InstallManifest, InstallEntry } from "../shared/schema.js";
-import { readSkillsFromDir, readAgentsFromDir, readRulesFromDir } from "../adapters/adapter-utils.js";
+import { readSkillsFromDir, readAgentsFromDir, readRulesFromDir, readCommandsFromDir } from "../adapters/adapter-utils.js";
 import { computeStatus } from "./status.js";
 import type { ArtifactState, StatusResult } from "./status.js";
 import { log } from "../shared/io.js";
@@ -40,7 +40,7 @@ export interface CheckResult {
 /** Collect all installed names for a given artifact key across all adapters */
 function collectInstalledNames(
   entry: InstallEntry,
-  key: "skills" | "mcp" | "agents" | "rules",
+  key: "skills" | "mcp" | "agents" | "rules" | "commands",
 ): Set<string> {
   const names = new Set<string>();
   for (const record of Object.values(entry.adapters)) {
@@ -134,6 +134,19 @@ async function checkFreshness(
     }
   }
 
+  // Check commands
+  const commandsDir = path.join(stackDir, "commands");
+  const stackCommands = await readCommandsFromDir(commandsDir);
+  const installedCommandNames = collectInstalledNames(entry, "commands");
+
+  for (const command of stackCommands) {
+    if (!installedCommandNames.has(command.name)) {
+      issues.push({
+        message: `Command "${command.name}" is in the stack but not installed.`,
+      });
+    }
+  }
+
   return { pass: issues.length === 0, issues };
 }
 
@@ -151,6 +164,7 @@ function checkDrift(statusResult: StatusResult): CheckResult["drift"] {
         ...adapter.ruleDetails.map((d) => ({ detail: d, artifact: "rule" })),
         ...adapter.agentDetails.map((d) => ({ detail: d, artifact: "agent" })),
         ...adapter.mcpDetails.map((d) => ({ detail: d, artifact: "mcp" })),
+        ...adapter.commandDetails.map((d) => ({ detail: d, artifact: "command" })),
       ];
 
       for (const { detail, artifact } of tagged) {

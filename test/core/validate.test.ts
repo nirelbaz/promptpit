@@ -141,6 +141,50 @@ describe("validateStack", () => {
     }
   });
 
+  it("passes validation for valid command files", async () => {
+    const result = await validateStack(VALID_STACK);
+    const commandDiags = result.diagnostics.filter((d) => d.file.startsWith("commands/"));
+    expect(commandDiags).toHaveLength(0);
+  });
+
+  it("returns warning for command file with invalid frontmatter", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-validate-cmd-"));
+    try {
+      await writeFile(path.join(dir, "stack.json"), JSON.stringify({ name: "test", version: "1.0.0" }));
+      await mkdir(path.join(dir, "commands"), { recursive: true });
+      // description must be a string — passing a number triggers a schema warning
+      await writeFile(
+        path.join(dir, "commands", "deploy.md"),
+        "---\ndescription: 42\n---\n\nDeploy the app.\n",
+      );
+      const result = await validateStack(dir);
+      const commandDiags = result.diagnostics.filter((d) => d.file.startsWith("commands/"));
+      expect(commandDiags.length).toBeGreaterThan(0);
+      expect(commandDiags[0]!.level).toBe("warning");
+      expect(commandDiags[0]!.message).toContain("description");
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  it("passes validation for command with valid optional description frontmatter", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-validate-cmd-valid-"));
+    try {
+      await writeFile(path.join(dir, "stack.json"), JSON.stringify({ name: "test", version: "1.0.0" }));
+      await mkdir(path.join(dir, "commands"), { recursive: true });
+      // Valid frontmatter: description is a string — should produce zero warnings
+      await writeFile(
+        path.join(dir, "commands", "deploy.md"),
+        "---\ndescription: Deploy the application to production\n---\n\nRun the deploy script.\n",
+      );
+      const result = await validateStack(dir);
+      const commandDiags = result.diagnostics.filter((d) => d.file.startsWith("commands/"));
+      expect(commandDiags).toHaveLength(0);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
   it("returns warnings for dangerous env names", async () => {
     const result = await validateStack(INVALID_STACK);
     const envWarnings = result.diagnostics.filter(

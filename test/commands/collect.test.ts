@@ -61,6 +61,60 @@ describe("collectStack", () => {
     await rm(emptyDir, { recursive: true });
   });
 
+  describe("collect commands", () => {
+    it("includes commands in collected bundle", async () => {
+      const projectDir = await mkdtemp(path.join(tmpdir(), "pit-collect-commands-"));
+      const commandsDir = path.join(projectDir, ".claude", "commands");
+      await mkdir(commandsDir, { recursive: true });
+      await writeFile(path.join(commandsDir, "review.md"), "Review: $ARGUMENTS");
+      await writeFile(path.join(projectDir, "CLAUDE.md"), "# Test");
+
+      const outputDir = path.join(projectDir, ".promptpit");
+      await collectStack(projectDir, outputDir);
+
+      const stackJson = JSON.parse(await readFile(path.join(outputDir, "stack.json"), "utf-8"));
+      expect(stackJson.commands).toContain("commands/review");
+
+      const commandContent = await readFile(path.join(outputDir, "commands", "review.md"), "utf-8");
+      expect(commandContent).toContain("$ARGUMENTS");
+
+      await rm(projectDir, { recursive: true });
+    });
+  });
+
+  it("dry-run with commands lists command files in report", async () => {
+    const projectDir = await mkdtemp(path.join(tmpdir(), "pit-collect-cmd-dryrun-"));
+    const outDir = path.join(projectDir, ".promptpit");
+
+    // Minimal CLAUDE.md so Claude Code adapter is detected
+    await writeFile(path.join(projectDir, "CLAUDE.md"), "# Instructions\n");
+    // Write a command file that collect will pick up
+    const commandsDir = path.join(projectDir, ".claude", "commands");
+    await mkdir(commandsDir, { recursive: true });
+    await writeFile(path.join(commandsDir, "deploy.md"), "Deploy the app: $ARGUMENTS\n");
+
+    const loggedPaths: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      loggedPaths.push(args.join(" "));
+    });
+
+    try {
+      await collectStack(projectDir, outDir, { dryRun: true });
+    } finally {
+      spy.mockRestore();
+    }
+
+    // Output dir must not have been created (dry-run)
+    const { existsSync } = await import("node:fs");
+    expect(existsSync(path.join(outDir, "stack.json"))).toBe(false);
+
+    // Verify dry-run log included the command file path
+    const allOutput = loggedPaths.join("\n");
+    expect(allOutput).toContain("deploy");
+
+    await rm(projectDir, { recursive: true });
+  });
+
   it("dry-run with agents lists agent files in report", async () => {
     // Build a minimal project with a Claude config and an agent file so collect
     // detects agents and includes them in the dry-run entry list.

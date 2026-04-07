@@ -11,6 +11,7 @@ function makeConfig(overrides: Partial<PlatformConfig> = {}): PlatformConfig {
     agents: [],
     mcpServers: {},
     rules: [],
+    commands: [],
     ...overrides,
   };
 }
@@ -130,5 +131,74 @@ describe("mergeConfigs MCP", () => {
     expect(result.warnings).toEqual(
       expect.arrayContaining([expect.stringContaining("postgres")]),
     );
+  });
+});
+
+describe("commands merge", () => {
+  it("deduplicates commands by name", () => {
+    const configs: PlatformConfig[] = [
+      {
+        adapterId: "claude-code",
+        agentInstructions: "",
+        skills: [],
+        agents: [],
+        mcpServers: {},
+        rules: [],
+        commands: [
+          { name: "review", path: "commands/review", content: "Review from Claude" },
+        ],
+      },
+      {
+        adapterId: "cursor",
+        agentInstructions: "",
+        skills: [],
+        agents: [],
+        mcpServers: {},
+        rules: [],
+        commands: [
+          { name: "review", path: "commands/review", content: "Review from Cursor" },
+          { name: "deploy", path: "commands/deploy", content: "Deploy" },
+        ],
+      },
+    ];
+
+    const result = mergeConfigs(configs);
+    expect(result.commands).toHaveLength(2);
+    expect(result.commands[0]!.content).toBe("Review from Claude");
+    expect(result.commands[1]!.name).toBe("deploy");
+  });
+
+  it("handles empty commands arrays", () => {
+    const configs: PlatformConfig[] = [
+      {
+        adapterId: "claude-code",
+        agentInstructions: "test",
+        skills: [],
+        agents: [],
+        mcpServers: {},
+        rules: [],
+        commands: [],
+      },
+    ];
+
+    const result = mergeConfigs(configs);
+    expect(result.commands).toEqual([]);
+  });
+
+  it("handles config without commands property (uses ?? [] fallback)", () => {
+    // When one config omits the commands key entirely, the ?? [] guard fires.
+    // Cast to bypass TypeScript to simulate an adapter that doesn't populate commands.
+    const configWithCommands: PlatformConfig = makeConfig({
+      adapterId: "claude-code",
+      commands: [{ name: "review", path: "commands/review", content: "Review code" }],
+    });
+    const configWithoutCommands: PlatformConfig = {
+      ...makeConfig({ adapterId: "cursor" }),
+      commands: undefined as unknown as [],
+    };
+
+    const result = mergeConfigs([configWithCommands, configWithoutCommands]);
+    expect(result.commands).toHaveLength(1);
+    expect(result.commands[0]!.name).toBe("review");
   });
 });

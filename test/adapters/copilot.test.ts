@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdir, writeFile, readFile, rm, mkdtemp } from "node:fs/promises";
 import path from "node:path";
 import os, { tmpdir } from "node:os";
-import { copilotAdapter, skillToInstructionsMd, agentToGitHubAgent, ruleToInstructionsMd } from "../../src/adapters/copilot.js";
+import { copilotAdapter, skillToInstructionsMd, agentToGitHubAgent, ruleToInstructionsMd, promptMdToCommand } from "../../src/adapters/copilot.js";
 import { readStack } from "../../src/core/stack.js";
 
 const VALID_STACK = path.join(import.meta.dirname, "../__fixtures__/stacks/valid-stack");
@@ -274,5 +274,119 @@ describe("copilot rules", () => {
     expect(securityRule).toContain("applyTo:");
     expect(securityRule).toContain("**");
     expect(securityRule).toContain("sanitize");
+  });
+});
+
+describe("read commands", () => {
+  it("reads .prompt.md files from .github/prompts/", async () => {
+    const promptsDir = path.join(tmpDir, ".github", "prompts");
+    await mkdir(promptsDir, { recursive: true });
+    await writeFile(
+      path.join(promptsDir, "review.prompt.md"),
+      "---\ndescription: Review code\nmodel: gpt-4o\n---\n\nReview this",
+    );
+    await writeFile(
+      path.join(tmpDir, ".github", "copilot-instructions.md"),
+      "# Instructions",
+    );
+
+    const config = await copilotAdapter.read(tmpDir);
+    expect(config.commands).toHaveLength(1);
+    expect(config.commands[0]!.name).toBe("review");
+    expect(config.commands[0]!.content).toContain("description:");
+    expect(config.commands[0]!.content).not.toContain("model:");
+  });
+});
+
+describe("promptMdToCommand", () => {
+  it("strips Copilot-specific frontmatter fields", () => {
+    const input = "---\ndescription: Review code\nmodel: gpt-4o\ntools:\n  - search/codebase\n---\n\nReview this code";
+    const result = promptMdToCommand(input);
+    expect(result).toContain("description:");
+    expect(result).not.toContain("model:");
+    expect(result).not.toContain("tools:");
+    expect(result).toContain("Review this code");
+  });
+
+  it("passes through content with no frontmatter", () => {
+    const input = "Just review the code";
+    const result = promptMdToCommand(input);
+    expect(result).toBe("Just review the code");
+  });
+
+  it("keeps description field in portable format", () => {
+    const input = "---\ndescription: Generate tests\nagent: agent\n---\n\nGenerate tests for this file";
+    const result = promptMdToCommand(input);
+    expect(result).toContain("description: Generate tests");
+    expect(result).not.toContain("agent:");
+  });
+
+  it("returns body only when all fields are Copilot-specific", () => {
+    const input = "---\nmodel: gpt-4o\nagent: agent\n---\n\nDo something";
+    const result = promptMdToCommand(input);
+    expect(result).toBe("Do something");
+    expect(result).not.toContain("---");
+  });
+});
+
+describe("copilot write commands", () => {
+  let tmpDirLocal: string;
+
+  beforeEach(async () => {
+    tmpDirLocal = await mkdtemp(path.join(os.tmpdir(), "copilot-cmd-"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDirLocal, { recursive: true, force: true });
+  });
+
+  it("writes commands to .github/prompts/ as .prompt.md files", async () => {
+    const bundle = await readStack(VALID_STACK);
+    // Ensure valid-stack has commands
+    expect(bundle.commands.length).toBeGreaterThan(0);
+
+    await mkdir(path.join(tmpDirLocal, ".github"), { recursive: true });
+    await writeFile(path.join(tmpDirLocal, ".github", "copilot-instructions.md"), "# Test");
+
+    await copilotAdapter.write(tmpDirLocal, bundle, {});
+
+    const commandFile = path.join(
+      tmpDirLocal,
+      ".github",
+      "prompts",
+      `${bundle.commands[0]!.name}.prompt.md`,
+    );
+    const content = await readFile(commandFile, "utf-8");
+    expect(content).toBeTruthy();
+  });
+
+  it("warns when command uses non-copilot param syntax ($ARGUMENTS)", async () => {
+    const bundle = await readStack(VALID_STACK);
+    // Override commands with a Claude Code-syntax command
+    bundle.commands = [{
+      name: "review",
+      path: "commands/review",
+      content: "Review: $ARGUMENTS",
+    }];
+
+    await mkdir(path.join(tmpDirLocal, ".github"), { recursive: true });
+    await writeFile(path.join(tmpDirLocal, ".github", "copilot-instructions.md"), "# Test");
+
+    const result = await copilotAdapter.write(tmpDirLocal, bundle, {});
+    const warning = result.warnings.find((w) => w.includes("review") && w.includes("param syntax"));
+    expect(warning).toBeDefined();
+  });
+
+  it("dry-run lists .prompt.md command files without writing them", async () => {
+    const bundle = await readStack(VALID_STACK);
+    expect(bundle.commands.length).toBeGreaterThan(0);
+
+    await mkdir(path.join(tmpDirLocal, ".github"), { recursive: true });
+    await writeFile(path.join(tmpDirLocal, ".github", "copilot-instructions.md"), "# Test");
+
+    const result = await copilotAdapter.write(tmpDirLocal, bundle, { dryRun: true });
+    expect(result.filesWritten).toHaveLength(0);
+    const commandEntry = result.dryRunEntries!.find((e) => e.file.includes(".prompt.md"));
+    expect(commandEntry).toBeDefined();
   });
 });

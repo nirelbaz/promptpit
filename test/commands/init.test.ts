@@ -91,6 +91,18 @@ describe("pit init", () => {
     expect(content).toBe("");
   });
 
+  it("creates commands/.gitkeep in non-interactive mode", async () => {
+    const dir = await makeTmpDir();
+
+    await initCommand(dir, { yes: true });
+
+    const content = await readFile(
+      path.join(dir, ".promptpit", "commands", ".gitkeep"),
+      "utf-8",
+    );
+    expect(content).toBe("");
+  });
+
   it("creates rules/.gitkeep always", async () => {
     const dir = await makeTmpDir();
     const prompter = fakePrompter(["test", "0.1.0", "", "", "n", "n", "n"]);

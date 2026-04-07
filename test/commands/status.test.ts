@@ -6,6 +6,7 @@ import { statusCommand, computeStatus } from "../../src/commands/status.js";
 import { writeManifest, computeHash, computeMcpServerHash } from "../../src/core/manifest.js";
 import { insertMarkers } from "../../src/shared/markers.js";
 import { writeMcpToToml } from "../../src/adapters/toml-utils.js";
+import { installStack } from "../../src/commands/install.js";
 import type { InstallManifest } from "../../src/shared/schema.js";
 
 describe("pit status", () => {
@@ -1064,5 +1065,175 @@ describe("pit status", () => {
     const result = await computeStatus(dir);
     const copilotAdapterStatus = result.stacks[0]!.adapters.find((a) => a.adapterId === "copilot")!;
     expect(copilotAdapterStatus.agentDetails[0]!.state).toBe("drifted");
+  });
+
+  // --- Command drift detection ---
+
+  describe("command drift detection", () => {
+    it("detects synced commands", async () => {
+      const tmpDir = await makeTmpDir();
+      await writeFile(path.join(tmpDir, "CLAUDE.md"), "# Test");
+      const stackDir = path.resolve("test/__fixtures__/stacks/valid-stack");
+      await installStack(stackDir, tmpDir, {});
+
+      const result = await computeStatus(tmpDir);
+      expect(result.stacks).toHaveLength(1);
+      const claudeAdapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "claude-code");
+      expect(claudeAdapter!.commandCount).toBeGreaterThan(0);
+      expect(claudeAdapter!.state).toBe("synced");
+    });
+
+    it("detects drifted commands", async () => {
+      const tmpDir = await makeTmpDir();
+      await writeFile(path.join(tmpDir, "CLAUDE.md"), "# Test");
+      const stackDir = path.resolve("test/__fixtures__/stacks/valid-stack");
+      await installStack(stackDir, tmpDir, {});
+
+      await writeFile(
+        path.join(tmpDir, ".claude", "commands", "review.md"),
+        "MODIFIED content",
+      );
+
+      const result = await computeStatus(tmpDir);
+      const claudeAdapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "claude-code");
+      expect(claudeAdapter!.state).not.toBe("synced");
+    });
+
+    it("detects deleted commands", async () => {
+      const tmpDir = await makeTmpDir();
+      const commandContent = "Deploy: $ARGUMENTS";
+      const manifest: InstallManifest = {
+        version: 1,
+        installs: [{
+          stack: "my-stack",
+          stackVersion: "1.0.0",
+          installedAt: new Date().toISOString(),
+          adapters: {
+            "claude-code": {
+              commands: { review: { hash: computeHash(commandContent) } },
+            },
+          },
+        }],
+      };
+      await writeManifest(tmpDir, manifest);
+
+      const result = await computeStatus(tmpDir);
+      const adapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "claude-code")!;
+      expect(adapter.commandCount).toBe(1);
+      expect(adapter.state).toBe("deleted");
+      expect(adapter.commandDetails[0]!.state).toBe("deleted");
+    });
+
+    it("detects synced copilot commands using .prompt.md extension via prompts path", async () => {
+      // Copilot uses paths.prompts → .github/prompts/ with .prompt.md extension
+      const tmpDir = await makeTmpDir();
+      const commandContent = "Deploy the app\n";
+      await mkdir(path.join(tmpDir, ".github", "prompts"), { recursive: true });
+      await writeFile(path.join(tmpDir, ".github", "prompts", "deploy.prompt.md"), commandContent);
+
+      const manifest: InstallManifest = {
+        version: 1,
+        installs: [{
+          stack: "my-stack",
+          stackVersion: "1.0.0",
+          installedAt: new Date().toISOString(),
+          adapters: {
+            copilot: {
+              commands: { deploy: { hash: computeHash(commandContent) } },
+            },
+          },
+        }],
+      };
+      await writeManifest(tmpDir, manifest);
+
+      const result = await computeStatus(tmpDir);
+      const adapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "copilot")!;
+      expect(adapter.commandCount).toBe(1);
+      expect(adapter.state).toBe("synced");
+      expect(adapter.commandDetails[0]!.state).toBe("synced");
+      // Verify the .prompt.md extension was used for the path
+      expect(adapter.commandDetails[0]!.path).toContain(".prompt.md");
+    });
+
+    it("detects drifted copilot commands with .prompt.md extension", async () => {
+      const tmpDir = await makeTmpDir();
+      const originalContent = "Deploy the app\n";
+      const modifiedContent = "Deploy to staging\n";
+      await mkdir(path.join(tmpDir, ".github", "prompts"), { recursive: true });
+      await writeFile(path.join(tmpDir, ".github", "prompts", "deploy.prompt.md"), modifiedContent);
+
+      const manifest: InstallManifest = {
+        version: 1,
+        installs: [{
+          stack: "my-stack",
+          stackVersion: "1.0.0",
+          installedAt: new Date().toISOString(),
+          adapters: {
+            copilot: {
+              commands: { deploy: { hash: computeHash(originalContent) } },
+            },
+          },
+        }],
+      };
+      await writeManifest(tmpDir, manifest);
+
+      const result = await computeStatus(tmpDir);
+      const adapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "copilot")!;
+      expect(adapter.state).toBe("drifted");
+      expect(adapter.commandDetails[0]!.state).toBe("drifted");
+    });
+
+    it("--verbose shows command names and paths", async () => {
+      const tmpDir = await makeTmpDir();
+      const commandContent = "Review the code: $ARGUMENTS\n";
+      await mkdir(path.join(tmpDir, ".claude", "commands"), { recursive: true });
+      await writeFile(path.join(tmpDir, ".claude", "commands", "review.md"), commandContent);
+
+      const manifest: InstallManifest = {
+        version: 1,
+        installs: [{
+          stack: "my-stack",
+          stackVersion: "1.0.0",
+          installedAt: new Date().toISOString(),
+          adapters: {
+            "claude-code": {
+              commands: { review: { hash: computeHash(commandContent) } },
+            },
+          },
+        }],
+      };
+      await writeManifest(tmpDir, manifest);
+
+      const output = await captureOutput(() => statusCommand(tmpDir, { verbose: true }));
+      expect(output).toContain("review");
+      expect(output).toContain("command");
+      expect(output).toContain(".claude/commands/review.md");
+    });
+
+    it("formatAdapterSummary includes command count in output", async () => {
+      const tmpDir = await makeTmpDir();
+      const commandContent = "Run tests\n";
+      await mkdir(path.join(tmpDir, ".claude", "commands"), { recursive: true });
+      await writeFile(path.join(tmpDir, ".claude", "commands", "test.md"), commandContent);
+
+      const manifest: InstallManifest = {
+        version: 1,
+        installs: [{
+          stack: "my-stack",
+          stackVersion: "1.0.0",
+          installedAt: new Date().toISOString(),
+          adapters: {
+            "claude-code": {
+              commands: { test: { hash: computeHash(commandContent) } },
+            },
+          },
+        }],
+      };
+      await writeManifest(tmpDir, manifest);
+
+      // Default (non-verbose) output also shows summary line with command count
+      const output = await captureOutput(() => statusCommand(tmpDir));
+      expect(output).toContain("command");
+    });
   });
 });

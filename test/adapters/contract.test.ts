@@ -137,5 +137,13 @@ describe.each(listAdapters().map((a) => [a.id, a] as const))(
       const config = await adapter.read(tmpDir);
       expect(Array.isArray(config.agents)).toBe(true);
     });
+
+    // 9. read() returns commands array
+    it("read() returns commands array in PlatformConfig", async () => {
+      const setup = ADAPTER_FIXTURES[id];
+      if (setup) await setup(tmpDir);
+      const config = await adapter.read(tmpDir);
+      expect(Array.isArray(config.commands)).toBe(true);
+    });
   },
 );

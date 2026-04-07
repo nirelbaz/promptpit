@@ -54,6 +54,7 @@ async function read(root: string): Promise<PlatformConfig> {
     agents: [],
     mcpServers,
     rules: [],
+    commands: [],
   };
 }
 
@@ -116,6 +117,7 @@ export const standardsAdapter: PlatformAdapter = {
     agentsmd: true,
     hooks: false,
     agents: "inline",
+    commands: false,
   },
   detect,
   read,
