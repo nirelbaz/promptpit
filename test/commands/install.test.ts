@@ -284,6 +284,29 @@ describe("installStack", () => {
     expect(computeHash(onDisk)).toBe(copilotRecord!.agents!["reviewer"]!.hash);
   });
 
+  describe("install commands", () => {
+    it("installs commands to Claude Code .claude/commands/", async () => {
+      const target = await mkdtemp(path.join(tmpdir(), "pit-install-commands-"));
+      tmpDirs.push(target);
+      await writeFile(path.join(target, "CLAUDE.md"), "# Test");
+
+      const stackDir = path.resolve("test/__fixtures__/stacks/valid-stack");
+      await installStack(stackDir, target, {});
+
+      const reviewContent = await readFile(
+        path.join(target, ".claude", "commands", "review.md"),
+        "utf-8",
+      );
+      expect(reviewContent).toContain("Review the following code");
+
+      const devStartContent = await readFile(
+        path.join(target, ".claude", "commands", "dev", "start.md"),
+        "utf-8",
+      );
+      expect(devStartContent).toContain("Start the development server");
+    });
+  });
+
   it("inline-agent manifest hashes buildInlineContent (instructions + agents)", async () => {
     const target = await mkdtemp(path.join(tmpdir(), "pit-install-inline-"));
     tmpDirs.push(target);

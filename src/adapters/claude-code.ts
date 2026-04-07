@@ -11,7 +11,7 @@ import type {
 import matter from "gray-matter";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists, removeFileOrSymlink, symlinkOrCopy } from "../shared/utils.js";
-import { SAFE_MATTER_OPTIONS, readSkillsFromDir, readAgentsFromDir, readRulesFromDir, readCommandsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry } from "./adapter-utils.js";
+import { SAFE_MATTER_OPTIONS, readSkillsFromDir, readAgentsFromDir, readRulesFromDir, readCommandsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry, detectCommandParamSyntax } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -163,6 +163,27 @@ async function write(
         const ruleContent = ruleToClaudeFormat(rule.content);
         await writeFileEnsureDir(dest, ruleContent);
         filesWritten.push(dest);
+      }
+    }
+
+    // Write commands to .claude/commands/
+    for (const command of stack.commands) {
+      const dest = path.join(p.commands!, `${command.name}.md`);
+      if (opts.dryRun) {
+        dryRunEntries.push(fileDryRunEntry(dest, await exists(dest)));
+      } else {
+        await writeFileEnsureDir(dest, command.content);
+        filesWritten.push(dest);
+      }
+    }
+
+    // Warn about mismatched param syntax
+    for (const command of stack.commands) {
+      const syntax = detectCommandParamSyntax(command.content);
+      if (syntax && syntax !== "claude-code") {
+        warnings.push(
+          `Command "${command.name}" uses ${syntax} param syntax — may need manual adjustment for Claude Code`,
+        );
       }
     }
 

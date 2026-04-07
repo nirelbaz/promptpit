@@ -13,7 +13,7 @@ import type {
 } from "./types.js";
 import type { StackBundle, RuleEntry, RuleFrontmatter } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
-import { readSkillsFromDir, readCommandsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry, buildInlineContent } from "./adapter-utils.js";
+import { readSkillsFromDir, readCommandsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry, buildInlineContent, detectCommandParamSyntax } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -189,6 +189,27 @@ async function write(
         const mdcContent = ruleToMdc(rule.content);
         await writeFileEnsureDir(dest, mdcContent);
         filesWritten.push(dest);
+      }
+    }
+
+    // Write commands to .cursor/commands/
+    for (const command of stack.commands) {
+      const dest = path.join(p.commands!, `${command.name}.md`);
+      if (opts.dryRun) {
+        dryRunEntries.push(fileDryRunEntry(dest, await exists(dest)));
+      } else {
+        await writeFileEnsureDir(dest, command.content);
+        filesWritten.push(dest);
+      }
+    }
+
+    // Warn about mismatched param syntax
+    for (const command of stack.commands) {
+      const syntax = detectCommandParamSyntax(command.content);
+      if (syntax && syntax !== "cursor") {
+        warnings.push(
+          `Command "${command.name}" uses ${syntax} param syntax — may need manual adjustment for Cursor`,
+        );
       }
     }
 

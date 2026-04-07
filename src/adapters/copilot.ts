@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import fg from "fast-glob";
 import matter from "gray-matter";
 import yaml from "js-yaml";
-import { SAFE_MATTER_OPTIONS, parseJsonc, readCommandsFromDir } from "./adapter-utils.js";
+import { SAFE_MATTER_OPTIONS, parseJsonc, readCommandsFromDir, detectCommandParamSyntax } from "./adapter-utils.js";
 import type {
   PlatformAdapter,
   PlatformConfig,
@@ -279,6 +279,28 @@ async function write(
         const instructionContent = ruleToInstructionsMd(rule.content);
         await writeFileEnsureDir(dest, instructionContent);
         filesWritten.push(dest);
+      }
+    }
+
+    // Write commands to .github/prompts/*.prompt.md
+    for (const command of stack.commands) {
+      const promptContent = commandToPromptMd(command.content);
+      const dest = path.join((p as any).prompts, `${command.name}.prompt.md`);
+      if (opts.dryRun) {
+        dryRunEntries.push(fileDryRunEntry(dest, await exists(dest), "translate to .prompt.md"));
+      } else {
+        await writeFileEnsureDir(dest, promptContent);
+        filesWritten.push(dest);
+      }
+    }
+
+    // Warn about mismatched param syntax
+    for (const command of stack.commands) {
+      const syntax = detectCommandParamSyntax(command.content);
+      if (syntax && syntax !== "copilot") {
+        warnings.push(
+          `Command "${command.name}" uses ${syntax} param syntax — may need manual adjustment for GitHub Copilot`,
+        );
       }
     }
 

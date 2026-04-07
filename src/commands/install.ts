@@ -287,7 +287,18 @@ export async function installStack(
           record.mcp = mcp;
         }
 
-        if (record.instructions || record.skills || record.agents || record.rules || record.mcp) {
+        // Hash commands
+        if (bundle.commands.length > 0 && adapter.capabilities.commands) {
+          const commands: Record<string, { hash: string }> = {};
+          for (const command of bundle.commands) {
+            commands[command.name] = { hash: computeHash(command.content) };
+          }
+          if (Object.keys(commands).length > 0) {
+            record.commands = commands;
+          }
+        }
+
+        if (record.instructions || record.skills || record.agents || record.rules || record.mcp || record.commands) {
           adapterRecords[adapter.id] = record;
         }
       }
