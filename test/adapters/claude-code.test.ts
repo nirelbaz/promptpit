@@ -163,6 +163,43 @@ describe("claudeCodeAdapter", () => {
     });
   });
 
+  describe("read commands", () => {
+    const tmpDirs: string[] = [];
+
+    afterEach(async () => {
+      for (const dir of tmpDirs) {
+        await rm(dir, { recursive: true, force: true });
+      }
+      tmpDirs.length = 0;
+    });
+
+    it("reads commands from .claude/commands/", async () => {
+      const tmpDir = await mkdtemp(path.join(tmpdir(), "pit-cc-commands-"));
+      tmpDirs.push(tmpDir);
+      const commandsDir = path.join(tmpDir, ".claude", "commands");
+      await mkdir(commandsDir, { recursive: true });
+      await writeFile(path.join(commandsDir, "review.md"), "Review: $ARGUMENTS");
+      await writeFile(path.join(tmpDir, "CLAUDE.md"), "# Test");
+
+      const config = await claudeCodeAdapter.read(tmpDir);
+      expect(config.commands).toHaveLength(1);
+      expect(config.commands[0]!.name).toBe("review");
+    });
+
+    it("reads nested commands preserving directory structure", async () => {
+      const tmpDir = await mkdtemp(path.join(tmpdir(), "pit-cc-commands-nested-"));
+      tmpDirs.push(tmpDir);
+      const commandsDir = path.join(tmpDir, ".claude", "commands", "dev");
+      await mkdir(commandsDir, { recursive: true });
+      await writeFile(path.join(commandsDir, "start.md"), "Start dev");
+      await writeFile(path.join(tmpDir, "CLAUDE.md"), "# Test");
+
+      const config = await claudeCodeAdapter.read(tmpDir);
+      expect(config.commands).toHaveLength(1);
+      expect(config.commands[0]!.name).toBe("dev/start");
+    });
+  });
+
   describe("rules", () => {
     const tmpDirs: string[] = [];
 

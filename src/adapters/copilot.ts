@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import fg from "fast-glob";
 import matter from "gray-matter";
 import yaml from "js-yaml";
-import { SAFE_MATTER_OPTIONS, parseJsonc } from "./adapter-utils.js";
+import { SAFE_MATTER_OPTIONS, parseJsonc, readCommandsFromDir } from "./adapter-utils.js";
 import type {
   PlatformAdapter,
   PlatformConfig,
@@ -23,6 +23,7 @@ function projectPaths(root: string) {
     mcp: path.join(root, ".vscode", "mcp.json"),
     rules: path.join(root, ".github", "instructions"),
     agents: path.join(root, ".github", "agents"),
+    prompts: path.join(root, ".github", "prompts"),
   };
 }
 
@@ -34,6 +35,7 @@ function userPaths() {
     mcp: path.join(home, ".vscode", "mcp.json"),
     rules: path.join(home, ".github", "instructions"),
     agents: path.join(home, ".github", "agents"),
+    prompts: path.join(home, ".github", "prompts"),
   };
 }
 
@@ -194,6 +196,15 @@ async function read(root: string): Promise<PlatformConfig> {
     }
   }
 
+  const rawCommands = await readCommandsFromDir(
+    (p as any).prompts,
+    { glob: "**/*.prompt.md", ext: ".prompt.md" },
+  );
+  const commands = rawCommands.map((cmd) => ({
+    ...cmd,
+    content: promptMdToCommand(cmd.content),
+  }));
+
   return {
     adapterId: "copilot",
     agentInstructions,
@@ -201,6 +212,7 @@ async function read(root: string): Promise<PlatformConfig> {
     agents,
     mcpServers,
     rules,
+    commands,
   };
 }
 
@@ -321,6 +333,7 @@ export const copilotAdapter: PlatformAdapter = {
     agentsmd: true,
     hooks: false,
     agents: "native",
+    commands: true,
   },
   detect,
   read,

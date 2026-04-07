@@ -13,7 +13,7 @@ import type {
 } from "./types.js";
 import type { StackBundle, RuleEntry, RuleFrontmatter } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
-import { readSkillsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry, buildInlineContent } from "./adapter-utils.js";
+import { readSkillsFromDir, readCommandsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry, buildInlineContent } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -21,6 +21,7 @@ function projectPaths(root: string) {
     skills: path.join(root, ".cursor", "skills"),
     mcp: path.join(root, ".cursor", "mcp.json"),
     rules: path.join(root, ".cursor", "rules"),
+    commands: path.join(root, ".cursor", "commands"),
   };
 }
 
@@ -31,6 +32,7 @@ function userPaths() {
     skills: path.join(home, ".cursor", "skills"),
     mcp: path.join(home, ".cursor", "mcp.json"),
     rules: path.join(home, ".cursor", "rules"),
+    commands: path.join(home, ".cursor", "commands"),
   };
 }
 
@@ -125,6 +127,8 @@ async function read(root: string): Promise<PlatformConfig> {
     }
   }
 
+  const commands = await readCommandsFromDir(p.commands!);
+
   return {
     adapterId: "cursor",
     agentInstructions,
@@ -132,6 +136,7 @@ async function read(root: string): Promise<PlatformConfig> {
     agents: [],
     mcpServers,
     rules,
+    commands,
   };
 }
 
@@ -215,6 +220,7 @@ export const cursorAdapter: PlatformAdapter = {
     agentsmd: true,
     hooks: false,
     agents: "inline",
+    commands: true,
   },
   detect,
   read,

@@ -11,7 +11,7 @@ import type {
 import matter from "gray-matter";
 import type { StackBundle } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists, removeFileOrSymlink, symlinkOrCopy } from "../shared/utils.js";
-import { SAFE_MATTER_OPTIONS, readSkillsFromDir, readAgentsFromDir, readRulesFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry } from "./adapter-utils.js";
+import { SAFE_MATTER_OPTIONS, readSkillsFromDir, readAgentsFromDir, readRulesFromDir, readCommandsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -20,6 +20,7 @@ function projectPaths(root: string) {
     mcp: path.join(root, ".claude", "settings.json"),
     agents: path.join(root, ".claude", "agents"),
     rules: path.join(root, ".claude", "rules"),
+    commands: path.join(root, ".claude", "commands"),
   };
 }
 
@@ -31,6 +32,7 @@ function userPaths() {
     mcp: path.join(home, ".claude", "settings.json"),
     agents: path.join(home, ".claude", "agents"),
     rules: path.join(home, ".claude", "rules"),
+    commands: path.join(home, ".claude", "commands"),
   };
 }
 
@@ -81,6 +83,7 @@ async function read(root: string): Promise<PlatformConfig> {
   const mcpServers = await readMcpFromSettings(p.mcp);
   const agents = await readAgentsFromDir(p.agents!);
   const rules = await readRulesFromDir(p.rules!);
+  const commands = await readCommandsFromDir(p.commands!);
 
   return {
     adapterId: "claude-code",
@@ -89,6 +92,7 @@ async function read(root: string): Promise<PlatformConfig> {
     agents,
     mcpServers,
     rules,
+    commands,
   };
 }
 
@@ -191,6 +195,7 @@ export const claudeCodeAdapter: PlatformAdapter = {
     agentsmd: false,
     hooks: true,
     agents: "native",
+    commands: true,
   },
   detect,
   read,

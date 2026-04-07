@@ -54,6 +54,27 @@ describe("cursorAdapter", () => {
     });
   });
 
+  describe("read commands", () => {
+    const tmpDirs: string[] = [];
+    afterEach(async () => {
+      for (const d of tmpDirs) await rm(d, { recursive: true, force: true });
+      tmpDirs.length = 0;
+    });
+
+    it("reads commands from .cursor/commands/", async () => {
+      const tmpDir = await mkdtemp(path.join(tmpdir(), "pit-cursor-commands-"));
+      tmpDirs.push(tmpDir);
+      const commandsDir = path.join(tmpDir, ".cursor", "commands");
+      await mkdir(commandsDir, { recursive: true });
+      await writeFile(path.join(commandsDir, "deploy.md"), "Deploy to prod");
+      await writeFile(path.join(tmpDir, ".cursorrules"), "rules");
+
+      const config = await cursorAdapter.read(tmpDir);
+      expect(config.commands).toHaveLength(1);
+      expect(config.commands[0]!.name).toBe("deploy");
+    });
+  });
+
   describe("write rules", () => {
     const tmpDirs: string[] = [];
     afterEach(async () => {

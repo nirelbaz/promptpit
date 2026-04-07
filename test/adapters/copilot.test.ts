@@ -278,6 +278,27 @@ describe("copilot rules", () => {
   });
 });
 
+describe("read commands", () => {
+  it("reads .prompt.md files from .github/prompts/", async () => {
+    const promptsDir = path.join(tmpDir, ".github", "prompts");
+    await mkdir(promptsDir, { recursive: true });
+    await writeFile(
+      path.join(promptsDir, "review.prompt.md"),
+      "---\ndescription: Review code\nmodel: gpt-4o\n---\n\nReview this",
+    );
+    await writeFile(
+      path.join(tmpDir, ".github", "copilot-instructions.md"),
+      "# Instructions",
+    );
+
+    const config = await copilotAdapter.read(tmpDir);
+    expect(config.commands).toHaveLength(1);
+    expect(config.commands[0]!.name).toBe("review");
+    expect(config.commands[0]!.content).toContain("description:");
+    expect(config.commands[0]!.content).not.toContain("model:");
+  });
+});
+
 describe("commandToPromptMd", () => {
   it("passes through plain content unchanged", () => {
     const result = commandToPromptMd("Review this code: $ARGUMENTS");
