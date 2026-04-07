@@ -74,8 +74,11 @@ PromptPit already parses Agent Skills frontmatter (`skillFrontmatterSchema` in `
 
 **BUG 26:** Validator CC-AG-009/CC-AG-003 false positives on Copilot/Codex-native tool and model names. Validator should be platform-aware or skip tool/model validation for non-Claude-origin agents.
 
-### Collect commands directories
-`.claude/commands/*.md` and `.codex/commands/*.md` are slash commands / custom prompts. 46+ files across real-world repos (fit-framework, positron). Not currently collected. Needs a `commands/` section in the bundle schema and per-adapter translation. Also blocks `pit install` for command-based repos like [claude-dev-skill](https://github.com/hnaymyh123-henry/claude-dev-skill) — a single `/dev` workflow skill (Tech Lead orchestrating parallel Worker Agents) distributed as `en/commands/dev/*.md` files that install to `~/.claude/commands/`. No SKILL.md, no frontmatter, just plain `.md` prompts with a directory structure.
+### ~~Collect commands directories~~
+**Completed:** v0.4.0 (2026-04-07). Portable commands in `.promptpit/commands/**/*.md` with nested directory support. Collected from Claude Code (`.claude/commands/`), Cursor (`.cursor/commands/`), and Copilot (`.github/prompts/*.prompt.md`). Copilot frontmatter translated (description preserved, model/tools/agent stripped). Install-time warnings when source param syntax ($ARGUMENTS, $1, ${input:x}) doesn't match target adapter. Full drift detection in `pit status`, freshness checking in `pit check`, validation in `pit validate`, and scaffolding in `pit init`. ~38 new tests.
+
+### Command param syntax translation
+Translate `$ARGUMENTS` (Claude Code) ↔ `$1` (Cursor) ↔ `${input:arguments}` (Copilot) during install. Currently commands are copied verbatim with warnings when source syntax doesn't match the target adapter. Single-param translation is clean, but multi-param ($1/$2/$3 → $ARGUMENTS) is lossy. Regex approach has false positive risks ($1 matching inside $10). Deferred until user demand validates the need. Consider AST-level placeholder detection instead of regex.
 
 ### Claude Code settings.json permissions/hooks
 spotlight has a rich `.claude/settings.json` with `permissions`, `hooks`, and `enabledMcpServers`. Only `mcpServers` is collected. Consider porting these as optional bundle sections.
