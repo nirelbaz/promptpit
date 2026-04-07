@@ -222,6 +222,34 @@ describe("pit check", () => {
     expect(result.freshness.issues.some((i) => i.message.includes("linting"))).toBe(true);
   });
 
+  it("fails when stack has a command not in installed.json", async () => {
+    const dir = await makeTmpDir();
+    const commandContent = "---\nname: deploy\ndescription: Deploy the app\n---\n\nRun deploy.";
+
+    await writeStackJson(dir);
+    // Write command into the stack bundle at .promptpit/commands/deploy.md
+    const commandsDir = path.join(dir, ".promptpit", "commands");
+    await mkdir(commandsDir, { recursive: true });
+    await writeFile(path.join(commandsDir, "deploy.md"), commandContent);
+
+    // Manifest exists but has no commands recorded
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "test-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: { "claude-code": {} },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await checkCommand(dir, {});
+    expect(result.pass).toBe(false);
+    expect(result.freshness.pass).toBe(false);
+    expect(result.freshness.issues.some((i) => i.message.includes("deploy"))).toBe(true);
+  });
+
   it("fails when stack has MCP server not in installed.json", async () => {
     const dir = await makeTmpDir();
     const mcpServers = { "my-server": { command: "node", args: ["s.js"] } };
