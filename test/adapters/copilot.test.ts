@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdir, writeFile, readFile, rm, mkdtemp } from "node:fs/promises";
 import path from "node:path";
 import os, { tmpdir } from "node:os";
-import { copilotAdapter, skillToInstructionsMd, agentToGitHubAgent, ruleToInstructionsMd } from "../../src/adapters/copilot.js";
+import { copilotAdapter, skillToInstructionsMd, agentToGitHubAgent, ruleToInstructionsMd, commandToPromptMd, promptMdToCommand } from "../../src/adapters/copilot.js";
 import { readStack } from "../../src/core/stack.js";
 
 const VALID_STACK = path.join(import.meta.dirname, "../__fixtures__/stacks/valid-stack");
@@ -275,5 +275,50 @@ describe("copilot rules", () => {
     expect(securityRule).toContain("applyTo:");
     expect(securityRule).toContain("**");
     expect(securityRule).toContain("sanitize");
+  });
+});
+
+describe("commandToPromptMd", () => {
+  it("passes through plain content unchanged", () => {
+    const result = commandToPromptMd("Review this code: $ARGUMENTS");
+    expect(result).toBe("Review this code: $ARGUMENTS");
+  });
+
+  it("preserves existing frontmatter as-is", () => {
+    const input = "---\ndescription: Review code\n---\n\nReview this code";
+    const result = commandToPromptMd(input);
+    expect(result).toContain("description:");
+    expect(result).toContain("Review this code");
+  });
+});
+
+describe("promptMdToCommand", () => {
+  it("strips Copilot-specific frontmatter fields", () => {
+    const input = "---\ndescription: Review code\nmodel: gpt-4o\ntools:\n  - search/codebase\n---\n\nReview this code";
+    const result = promptMdToCommand(input);
+    expect(result).toContain("description:");
+    expect(result).not.toContain("model:");
+    expect(result).not.toContain("tools:");
+    expect(result).toContain("Review this code");
+  });
+
+  it("passes through content with no frontmatter", () => {
+    const input = "Just review the code";
+    const result = promptMdToCommand(input);
+    expect(result).toBe("Just review the code");
+  });
+
+  it("keeps description field in portable format", () => {
+    const input = "---\ndescription: Generate tests\nagent: agent\n---\n\nGenerate tests for this file";
+    const result = promptMdToCommand(input);
+    expect(result).toContain("description: Generate tests");
+    expect(result).not.toContain("agent:");
+  });
+
+  it("returns body only when all fields are Copilot-specific", () => {
+    const input = "---\nmodel: gpt-4o\nagent: agent\n---\n\nDo something";
+    const result = promptMdToCommand(input);
+    expect(result).toBe("Do something");
+    expect(result).not.toContain("---");
   });
 });

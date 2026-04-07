@@ -81,6 +81,37 @@ export function ruleToInstructionsMd(ruleContent: string): string {
   return matter.stringify(parsed.content.trim() + "\n", { applyTo });
 }
 
+// Translate portable command to Copilot .prompt.md format
+// Body content stays verbatim — no param syntax translation
+export function commandToPromptMd(commandContent: string): string {
+  return commandContent;
+}
+
+// Translate Copilot .prompt.md back to portable format
+// Strip Copilot-specific frontmatter fields (model, tools, agent), keep description
+export function promptMdToCommand(promptContent: string): string {
+  let parsed: matter.GrayMatterFile<string>;
+  try {
+    parsed = matter(promptContent, SAFE_MATTER_OPTIONS as never);
+  } catch {
+    return promptContent;
+  }
+
+  if (Object.keys(parsed.data).length === 0) {
+    return promptContent;
+  }
+
+  const portableFm: Record<string, unknown> = {};
+  const fm = parsed.data as Record<string, unknown>;
+  if (fm.description) portableFm.description = fm.description;
+
+  if (Object.keys(portableFm).length === 0) {
+    return parsed.content.trim();
+  }
+
+  return matter.stringify(parsed.content.trim() + "\n", portableFm);
+}
+
 // Infer MCP server type from config shape
 function inferServerType(
   server: Record<string, unknown>,
