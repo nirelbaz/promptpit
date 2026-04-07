@@ -160,6 +160,7 @@ describe("cursor inline agent writing", () => {
         },
       ],
       rules: [],
+      commands: [],
       mcpServers: {},
       envExample: {},
     };

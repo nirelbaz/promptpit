@@ -21,6 +21,7 @@ const BUNDLE: StackBundle = {
   ],
   agents: [],
   rules: [],
+  commands: [],
   mcpServers: { postgres: { command: "npx", args: ["-y", "pg"] } },
   envExample: {},
 };
