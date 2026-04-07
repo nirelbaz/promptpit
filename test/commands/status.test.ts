@@ -6,6 +6,7 @@ import { statusCommand, computeStatus } from "../../src/commands/status.js";
 import { writeManifest, computeHash, computeMcpServerHash } from "../../src/core/manifest.js";
 import { insertMarkers } from "../../src/shared/markers.js";
 import { writeMcpToToml } from "../../src/adapters/toml-utils.js";
+import { installStack } from "../../src/commands/install.js";
 import type { InstallManifest } from "../../src/shared/schema.js";
 
 describe("pit status", () => {
@@ -1064,5 +1065,38 @@ describe("pit status", () => {
     const result = await computeStatus(dir);
     const copilotAdapterStatus = result.stacks[0]!.adapters.find((a) => a.adapterId === "copilot")!;
     expect(copilotAdapterStatus.agentDetails[0]!.state).toBe("drifted");
+  });
+
+  // --- Command drift detection ---
+
+  describe("command drift detection", () => {
+    it("detects synced commands", async () => {
+      const tmpDir = await makeTmpDir();
+      await writeFile(path.join(tmpDir, "CLAUDE.md"), "# Test");
+      const stackDir = path.resolve("test/__fixtures__/stacks/valid-stack");
+      await installStack(stackDir, tmpDir, {});
+
+      const result = await computeStatus(tmpDir);
+      expect(result.stacks).toHaveLength(1);
+      const claudeAdapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "claude-code");
+      expect(claudeAdapter!.commandCount).toBeGreaterThan(0);
+      expect(claudeAdapter!.state).toBe("synced");
+    });
+
+    it("detects drifted commands", async () => {
+      const tmpDir = await makeTmpDir();
+      await writeFile(path.join(tmpDir, "CLAUDE.md"), "# Test");
+      const stackDir = path.resolve("test/__fixtures__/stacks/valid-stack");
+      await installStack(stackDir, tmpDir, {});
+
+      await writeFile(
+        path.join(tmpDir, ".claude", "commands", "review.md"),
+        "MODIFIED content",
+      );
+
+      const result = await computeStatus(tmpDir);
+      const claudeAdapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "claude-code");
+      expect(claudeAdapter!.state).not.toBe("synced");
+    });
   });
 });
