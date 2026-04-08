@@ -71,23 +71,25 @@ async function write(
   const version = stack.manifest.version;
 
   try {
-    const content = buildInlineContent(stack.agentInstructions, stack.agents);
-    if (content) {
-      const result = await writeWithMarkers(
-        p.config,
-        content,
-        stackName,
-        version,
-        "standards",
-        opts.dryRun,
-      );
-      if (result.written) filesWritten.push(result.written);
-      if (opts.dryRun) {
-        dryRunEntries.push(markersDryRunEntry(p.config, result, opts.verbose));
+    if (!opts.skipInstructions) {
+      const content = buildInlineContent(stack.agentInstructions, stack.agents);
+      if (content) {
+        const result = await writeWithMarkers(
+          p.config,
+          content,
+          stackName,
+          version,
+          "standards",
+          opts.dryRun,
+        );
+        if (result.written) filesWritten.push(result.written);
+        if (opts.dryRun) {
+          dryRunEntries.push(markersDryRunEntry(p.config, result, opts.verbose));
+        }
       }
     }
 
-    if (!opts.global) {
+    if (!opts.skipMcp && !opts.global) {
       const mcpResult = await mergeMcpIntoJson(p.mcp, stack.mcpServers, warnings, opts.dryRun);
       if (mcpResult.written) filesWritten.push(mcpResult.written);
       const mcpCount = Object.keys(stack.mcpServers).length;
