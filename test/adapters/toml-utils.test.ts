@@ -171,6 +171,36 @@ args = ["server.js"]
     expect(result).toContain("[mcp_servers.fs]");
     expect(result).toContain('command = "npx"');
   });
+
+  it("writes HTTP MCP servers with url field", () => {
+    const servers: McpConfig = {
+      exa: { url: "https://mcp.exa.ai/mcp" },
+    };
+    const result = writeMcpToToml("", servers);
+    expect(result).toContain("[mcp_servers.exa]");
+    expect(result).toContain('url = "https://mcp.exa.ai/mcp"');
+    expect(result).not.toContain("command");
+  });
+
+  it("writes HTTP MCP servers with serverUrl field", () => {
+    const servers: McpConfig = {
+      remote: { serverUrl: "https://api.example.com/mcp" },
+    };
+    const result = writeMcpToToml("", servers);
+    expect(result).toContain("[mcp_servers.remote]");
+    expect(result).toContain('serverUrl = "https://api.example.com/mcp"');
+  });
+
+  it("round-trips HTTP MCP servers through read/write", () => {
+    const servers: McpConfig = {
+      exa: { url: "https://mcp.exa.ai/mcp" },
+      github: { command: "npx", args: ["-y", "server-github"] },
+    };
+    const written = writeMcpToToml("", servers);
+    const reparsed = readMcpFromToml(written);
+    expect(reparsed.exa).toEqual({ url: "https://mcp.exa.ai/mcp" });
+    expect(reparsed.github).toEqual({ command: "npx", args: ["-y", "server-github"] });
+  });
 });
 
 describe("readAgentsFromToml", () => {

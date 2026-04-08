@@ -86,8 +86,11 @@ export function writeMcpToToml(
   const merged: Record<string, unknown> = { ...existing };
 
   for (const [name, server] of Object.entries(servers)) {
-    const entry: Record<string, unknown> = { command: server.command };
+    const entry: Record<string, unknown> = {};
+    if (server.command) entry.command = server.command;
     if (server.args) entry.args = server.args;
+    if (server.url) entry.url = server.url;
+    if (server.serverUrl) entry.serverUrl = server.serverUrl;
     if (server.env) entry.env = server.env;
     merged[name] = entry;
   }
