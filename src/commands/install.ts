@@ -366,6 +366,8 @@ export async function installStack(
         stackVersion: bundle.manifest.version,
         source: gh ? source : undefined,
         installedAt: new Date().toISOString(),
+        ...(opts.forceStandards && { installMode: "force-standards" as const }),
+        ...(opts.preferUniversal && { installMode: "prefer-universal" as const }),
         adapters: adapterRecords,
       };
 

@@ -62,6 +62,19 @@ describe("install dedup", () => {
       // But AGENTS.md should exist — Claude Code doesn't read it natively
       expect(existsSync(path.join(target, "AGENTS.md"))).toBe(true);
     });
+
+    it("does not record installMode in default mode", async () => {
+      const target = await mkdtemp(path.join(tmpdir(), "pit-dedup-manifest3-"));
+      tmpDirs.push(target);
+      await writeFile(path.join(target, "CLAUDE.md"), "# Existing");
+
+      await installStack(VALID_STACK, target, {});
+
+      const manifest = JSON.parse(
+        await readFile(path.join(target, ".promptpit", "installed.json"), "utf-8"),
+      );
+      expect(manifest.installs[0].installMode).toBeUndefined();
+    });
   });
 
   describe("--force-standards", () => {
@@ -78,6 +91,19 @@ describe("install dedup", () => {
         await readFile(path.join(target, ".claude", "settings.json"), "utf-8"),
       );
       expect(settings.mcpServers.postgres).toBeDefined();
+    });
+
+    it("records installMode in manifest", async () => {
+      const target = await mkdtemp(path.join(tmpdir(), "pit-dedup-manifest-"));
+      tmpDirs.push(target);
+      await writeFile(path.join(target, "CLAUDE.md"), "# Existing");
+
+      await installStack(VALID_STACK, target, { forceStandards: true });
+
+      const manifest = JSON.parse(
+        await readFile(path.join(target, ".promptpit", "installed.json"), "utf-8"),
+      );
+      expect(manifest.installs[0].installMode).toBe("force-standards");
     });
   });
 
@@ -100,6 +126,19 @@ describe("install dedup", () => {
       // CLAUDE.md should still have instructions
       const claude = await readFile(path.join(target, "CLAUDE.md"), "utf-8");
       expect(claude).toContain("promptpit:start:test-stack");
+    });
+
+    it("records installMode in manifest", async () => {
+      const target = await mkdtemp(path.join(tmpdir(), "pit-dedup-manifest2-"));
+      tmpDirs.push(target);
+      await writeFile(path.join(target, "CLAUDE.md"), "# Existing");
+
+      await installStack(VALID_STACK, target, { preferUniversal: true });
+
+      const manifest = JSON.parse(
+        await readFile(path.join(target, ".promptpit", "installed.json"), "utf-8"),
+      );
+      expect(manifest.installs[0].installMode).toBe("prefer-universal");
     });
   });
 
