@@ -177,19 +177,29 @@ export async function installStack(
         if (d.adapter.capabilities.nativelyReads?.instructions) instrReaders.push(d.adapter.displayName);
       }
 
+      const hasMcp = Object.keys(bundle.mcpServers).length > 0;
+      const hasInstructions = !!(bundle.agentInstructions || bundle.agents.length > 0);
+      let skippedAny = false;
+
       if (mcpReaders.length > 0) {
         writeOpts.skipMcp = true;
-        log.info(
-          `Standards: skipped .mcp.json (${mcpReaders.join(", ")} read${mcpReaders.length === 1 ? "s" : ""} it natively, causing duplicate MCP servers)`,
-        );
+        if (hasMcp) {
+          skippedAny = true;
+          log.info(
+            `Standards: skipped .mcp.json (${mcpReaders.join(", ")} read${mcpReaders.length === 1 ? "s" : ""} it natively, causing duplicate MCP servers)`,
+          );
+        }
       }
       if (instrReaders.length > 0) {
         writeOpts.skipInstructions = true;
-        log.info(
-          `Standards: skipped AGENTS.md (${instrReaders.join(", ")} read${instrReaders.length === 1 ? "s" : ""} it natively, causing duplicate instructions)`,
-        );
+        if (hasInstructions) {
+          skippedAny = true;
+          log.info(
+            `Standards: skipped AGENTS.md (${instrReaders.join(", ")} read${instrReaders.length === 1 ? "s" : ""} it natively, causing duplicate instructions)`,
+          );
+        }
       }
-      if (mcpReaders.length > 0 || instrReaders.length > 0) {
+      if (skippedAny) {
         log.info(
           "Tip: use --force-standards to write universal files even when detected tools read them natively",
         );
