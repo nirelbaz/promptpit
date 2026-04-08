@@ -21,6 +21,8 @@ export interface InstallOptions {
   dryRun?: boolean;
   force?: boolean;
   verbose?: boolean;
+  forceStandards?: boolean;
+  preferUniversal?: boolean;
 }
 
 export async function installStack(
@@ -117,6 +119,11 @@ export async function installStack(
       });
     }
 
+    // Dedup: prevent universal/tool-specific duplication
+    if (opts.forceStandards && opts.preferUniversal) {
+      throw new Error("--force-standards and --prefer-universal are mutually exclusive");
+    }
+
     // Write skills to canonical .agents/skills/ location
     let canonicalSkillPaths: Map<string, string> | undefined;
     const canonicalEntries: DryRunEntry[] = [];
@@ -142,7 +149,7 @@ export async function installStack(
       }
     }
 
-    // Write to each detected adapter
+    // Build writeOpts with dedup flags
     const writeOpts: WriteOptions = {
       dryRun: opts.dryRun,
       verbose: opts.verbose,
@@ -150,6 +157,51 @@ export async function installStack(
       global: opts.global,
       canonicalSkillPaths,
     };
+
+    if (opts.preferUniversal) {
+      writeOpts.preferUniversal = true;
+      // Warn about Copilot's opt-in AGENTS.md reading
+      const hasCopilot = detected.some((d) => d.adapter.id === "copilot");
+      if (hasCopilot) {
+        log.warn(
+          "Copilot: skipped .github/copilot-instructions.md — ensure chat.useAgentsMdFile is enabled in VS Code settings",
+        );
+      }
+    } else if (!opts.forceStandards) {
+      const toolAdapters = detected.filter((d) => d.adapter.id !== "standards");
+      const skipMcp = toolAdapters.some(
+        (d) => d.adapter.capabilities.nativelyReads?.mcp,
+      );
+      const skipInstructions = toolAdapters.some(
+        (d) => d.adapter.capabilities.nativelyReads?.instructions,
+      );
+
+      if (skipMcp) {
+        writeOpts.skipMcp = true;
+        const readers = toolAdapters
+          .filter((d) => d.adapter.capabilities.nativelyReads?.mcp)
+          .map((d) => d.adapter.displayName);
+        log.info(
+          `Standards: skipped .mcp.json (${readers.join(", ")} read${readers.length === 1 ? "s" : ""} it natively, causing duplicate MCP servers)`,
+        );
+      }
+      if (skipInstructions) {
+        writeOpts.skipInstructions = true;
+        const readers = toolAdapters
+          .filter((d) => d.adapter.capabilities.nativelyReads?.instructions)
+          .map((d) => d.adapter.displayName);
+        log.info(
+          `Standards: skipped AGENTS.md (${readers.join(", ")} read${readers.length === 1 ? "s" : ""} it natively, causing duplicate instructions)`,
+        );
+      }
+      if (skipMcp || skipInstructions) {
+        log.info(
+          "Tip: use --force-standards to write universal files even when detected tools read them natively",
+        );
+      }
+    }
+
+    // Write to each detected adapter
 
     const adapterSections: DryRunSection[] = [];
 
@@ -228,7 +280,11 @@ export async function installStack(
 
         // Hash instructions — inline-agent adapters embed agents in the marker block,
         // so hash what actually gets written to disk (buildInlineContent result)
-        if (bundle.agentInstructions || (bundle.agents.length > 0 && adapter.capabilities.agents === "inline")) {
+        // Skip recording if the adapter was told not to write instructions
+        const skipAdapterInstructions =
+          (adapter.id === "standards" && writeOpts.skipInstructions) ||
+          (adapter.id !== "standards" && writeOpts.preferUniversal && adapter.capabilities.nativelyReads?.instructions);
+        if (!skipAdapterInstructions && (bundle.agentInstructions || (bundle.agents.length > 0 && adapter.capabilities.agents === "inline"))) {
           const configPath = adapter.paths.project(target).config;
           if (configPath) {
             const written = adapter.capabilities.agents === "inline"
@@ -279,7 +335,11 @@ export async function installStack(
         }
 
         // Hash MCP for any adapter that supports it
-        if (adapter.capabilities.mcpStdio && Object.keys(bundle.mcpServers).length > 0) {
+        // Skip recording if the adapter was told not to write MCP
+        const skipAdapterMcp =
+          (adapter.id === "standards" && writeOpts.skipMcp) ||
+          (adapter.id !== "standards" && writeOpts.preferUniversal && adapter.capabilities.nativelyReads?.mcp);
+        if (!skipAdapterMcp && adapter.capabilities.mcpStdio && Object.keys(bundle.mcpServers).length > 0) {
           const mcp: Record<string, { hash: string }> = {};
           for (const [serverName, serverConfig] of Object.entries(bundle.mcpServers)) {
             mcp[serverName] = { hash: computeMcpServerHash(serverConfig) };
