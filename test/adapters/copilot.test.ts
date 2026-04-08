@@ -251,6 +251,37 @@ describe("copilot rules", () => {
     expect(names).toEqual(["lint", "review-guide-frontend", "review-guide-server"]);
   });
 
+  it("skips rule- prefix when unprefixed file already exists (avoids duplication)", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-copilot-dedup-"));
+    tmpDirs.push(target);
+    const instDir = path.join(target, ".github", "instructions");
+    await mkdir(instDir, { recursive: true });
+
+    // Pre-existing rule without prefix
+    await writeFile(
+      path.join(instDir, "testing.instructions.md"),
+      '---\napplyTo: "**/*.test.ts"\n---\n\nOld testing rules.\n',
+    );
+
+    const bundle = await readStack(
+      path.resolve("test/__fixtures__/stacks/valid-stack"),
+    );
+    bundle.rules = [{
+      name: "testing",
+      path: "rules/testing",
+      frontmatter: { name: "testing", description: "Testing conventions" },
+      content: "---\nname: testing\ndescription: Testing conventions\nglobs:\n  - \"**/*.test.ts\"\n---\n\nUse vitest.\n",
+    }];
+
+    await copilotAdapter.write(target, bundle, {});
+
+    const { readdir } = await import("node:fs/promises");
+    const files = await readdir(instDir);
+    const testingFiles = files.filter((f) => f.includes("testing"));
+    expect(testingFiles).toHaveLength(1);
+    expect(testingFiles[0]).toBe("testing.instructions.md");
+  });
+
   it("writes rules with rule- prefix", async () => {
     const target = await mkdtemp(path.join(tmpdir(), "pit-copilot-writerules-"));
     tmpDirs.push(target);

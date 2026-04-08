@@ -107,6 +107,37 @@ describe("cursorAdapter", () => {
       expect(securityRule).toContain("description: Security guidelines");
     });
 
+    it("skips rule- prefix when unprefixed file already exists (avoids duplication)", async () => {
+      const target = await mkdtemp(path.join(tmpdir(), "pit-cursor-dedup-"));
+      tmpDirs.push(target);
+      await writeFile(path.join(target, ".cursorrules"), "");
+      const rulesDir = path.join(target, ".cursor", "rules");
+      await mkdir(rulesDir, { recursive: true });
+
+      // Pre-existing rule without prefix (e.g. from pit collect or manual creation)
+      await writeFile(path.join(rulesDir, "testing.mdc"), "---\ndescription: Old testing\n---\nOld content.\n");
+
+      const bundle = await readStack(
+        path.resolve("test/__fixtures__/stacks/valid-stack"),
+      );
+      // Ensure we have a rule named "testing"
+      bundle.rules = [{
+        name: "testing",
+        path: "rules/testing",
+        frontmatter: { name: "testing", description: "Testing conventions" },
+        content: "---\nname: testing\ndescription: Testing conventions\nglobs:\n  - \"**/*.test.ts\"\n---\n\nUse vitest.\n",
+      }];
+
+      await cursorAdapter.write(target, bundle, {});
+
+      // Should write to the existing unprefixed file, NOT create rule-testing.mdc
+      const { readdir } = await import("node:fs/promises");
+      const files = await readdir(rulesDir);
+      const testingFiles = files.filter((f) => f.includes("testing"));
+      expect(testingFiles).toHaveLength(1);
+      expect(testingFiles[0]).toBe("testing.mdc");
+    });
+
     it("does not double-prefix rule names that already have rule-", async () => {
       const target = await mkdtemp(path.join(tmpdir(), "pit-cursor-nodup-"));
       tmpDirs.push(target);

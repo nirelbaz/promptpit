@@ -14,7 +14,7 @@ import type {
 } from "./types.js";
 import type { StackBundle, RuleEntry, RuleFrontmatter } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
-import { readAgentsFromDir, readMcpFromSettings, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry } from "./adapter-utils.js";
+import { readAgentsFromDir, readMcpFromSettings, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry, resolveRuleDest } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -267,8 +267,7 @@ async function write(
 
     // Write rules to .github/instructions/*.instructions.md
     for (const rule of stack.rules) {
-      const prefixedName = rule.name.startsWith("rule-") ? rule.name : `rule-${rule.name}`;
-      const dest = path.join(p.rules!, `${prefixedName}.instructions.md`);
+      const dest = await resolveRuleDest(p.rules!, rule.name, ".instructions.md");
       if (opts.dryRun) {
         dryRunEntries.push(fileDryRunEntry(dest, await exists(dest), "translate to .instructions.md"));
       } else {
