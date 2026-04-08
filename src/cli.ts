@@ -87,6 +87,14 @@ program
   .option("--dry-run", "Show what would be installed without writing")
   .option("-v, --verbose", "Show full diffs in dry-run output")
   .option("--force", "Overwrite existing content outside markers")
+  .option(
+    "--force-standards",
+    "Write .mcp.json and AGENTS.md even when detected tools read them natively",
+  )
+  .option(
+    "--prefer-universal",
+    "Use universal files (.mcp.json, AGENTS.md) instead of tool-specific equivalents",
+  )
   .addHelpText("after", `
 Examples:
   pit install                          # from .promptpit/ in current dir
@@ -99,7 +107,14 @@ Examples:
     async (
       source: string | undefined,
       target: string,
-      opts: { global?: boolean; dryRun?: boolean; force?: boolean; verbose?: boolean },
+      opts: {
+        global?: boolean;
+        dryRun?: boolean;
+        force?: boolean;
+        verbose?: boolean;
+        forceStandards?: boolean;
+        preferUniversal?: boolean;
+      },
     ) => {
       try {
         const resolvedSource = source ?? ".promptpit";

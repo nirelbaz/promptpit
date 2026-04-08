@@ -84,9 +84,9 @@ describe("E2E: install → status integration", () => {
         expect(adapter.skillCount).toBeGreaterThan(0);
         expect(adapter.mcpCount).toBeGreaterThan(0);
       } else if (adapter.adapterId === "standards") {
-        // Standards should have instructions and MCP
+        // Standards writes AGENTS.md but skips .mcp.json (Claude Code reads it natively)
         expect(adapter.hasInstructions).toBe(true);
-        expect(adapter.mcpCount).toBeGreaterThan(0);
+        expect(adapter.mcpCount).toBe(0);
       }
 
       // Every adapter should be synced right after install
@@ -95,7 +95,7 @@ describe("E2E: install → status integration", () => {
     }
   });
 
-  it(".mcp.json is created even when it didn't exist before install", async () => {
+  it(".mcp.json is skipped when Claude Code is detected (dedup)", async () => {
     const collectDir = await makeTmpDir("mcp-create-");
     const bundleDir = path.join(collectDir, ".promptpit");
     await collectStack(CLAUDE_PROJECT, bundleDir);
@@ -105,7 +105,29 @@ describe("E2E: install → status integration", () => {
     // No .mcp.json exists yet
     await installStack(bundleDir, targetDir, {});
 
-    // .mcp.json should now exist
+    // .mcp.json should NOT exist — Claude Code reads it natively, so Standards skips it
+    const { exists } = await import("../../src/shared/utils.js");
+    expect(await exists(path.join(targetDir, ".mcp.json"))).toBe(false);
+
+    // MCP should be in .claude/settings.json instead
+    const settingsRaw = await readFile(
+      path.join(targetDir, ".claude", "settings.json"),
+      "utf-8",
+    );
+    const settings = JSON.parse(settingsRaw);
+    expect(Object.keys(settings.mcpServers).length).toBeGreaterThan(0);
+  });
+
+  it(".mcp.json is created with --force-standards even when Claude Code is detected", async () => {
+    const collectDir = await makeTmpDir("mcp-force-");
+    const bundleDir = path.join(collectDir, ".promptpit");
+    await collectStack(CLAUDE_PROJECT, bundleDir);
+
+    const targetDir = await makeTmpDir("target-mcp-force-");
+    await writeFile(path.join(targetDir, "CLAUDE.md"), "# Project\n");
+    await installStack(bundleDir, targetDir, { forceStandards: true });
+
+    // .mcp.json should exist because --force-standards overrides dedup
     const mcpRaw = await readFile(path.join(targetDir, ".mcp.json"), "utf-8");
     const mcp = JSON.parse(mcpRaw);
     expect(mcp).toHaveProperty("mcpServers");

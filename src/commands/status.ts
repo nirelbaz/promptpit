@@ -56,6 +56,7 @@ export interface StackStatus {
   stack: string;
   version: string;
   source?: string;
+  installMode?: "force-standards" | "prefer-universal";
   adapters: AdapterStatus[];
   overallState: ArtifactState;
 }
@@ -319,6 +320,7 @@ export async function computeStatus(root: string): Promise<StatusResult> {
       stack: entry.stack,
       version: entry.stackVersion,
       source: entry.source,
+      installMode: entry.installMode,
       adapters,
       overallState,
     });
@@ -403,6 +405,39 @@ function formatDetailed(result: StatusResult, root: string, verbose: boolean): v
         for (const d of adapter.mcpDetails) {
           printDetailLine(d, "mcp", root);
         }
+      }
+    }
+
+    // Show explanatory messages when Standards skipped files due to dedup
+    // Only when install used default dedup (no explicit installMode override)
+    if (!stack.installMode) {
+      const stdRecord = stack.adapters.find((a) => a.adapterId === "standards");
+      const otherAdapters = stack.adapters.filter((a) => a.adapterId !== "standards");
+
+      // Explain skipped instructions: Standards has none but another adapter wrote them
+      if (
+        stdRecord &&
+        !stdRecord.hasInstructions &&
+        otherAdapters.some((a) => a.hasInstructions)
+      ) {
+        console.log(
+          chalk.dim(
+            "    ℹ standards         AGENTS.md not written — detected tools read it natively",
+          ),
+        );
+      }
+
+      // Explain skipped MCP: Standards has none but another adapter wrote MCP
+      if (
+        stdRecord &&
+        stdRecord.mcpCount === 0 &&
+        otherAdapters.some((a) => a.mcpCount > 0)
+      ) {
+        console.log(
+          chalk.dim(
+            "    ℹ standards         .mcp.json not written — detected tools read it natively",
+          ),
+        );
       }
     }
   }

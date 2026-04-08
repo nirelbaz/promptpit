@@ -153,19 +153,23 @@ async function write(
   const version = stack.manifest.version;
 
   try {
-    const content = buildInlineContent(stack.agentInstructions, stack.agents);
-    if (content) {
-      const result = await writeWithMarkers(
-        p.config,
-        content,
-        stackName,
-        version,
-        "cursor",
-        opts.dryRun,
-      );
-      if (result.written) filesWritten.push(result.written);
-      if (opts.dryRun) {
-        dryRunEntries.push(markersDryRunEntry(p.config, result, opts.verbose));
+    // Write instructions to .cursorrules
+    // (skip when preferUniversal — tool reads AGENTS.md natively)
+    if (!opts.preferUniversal || !cursorAdapter.capabilities.nativelyReads?.instructions) {
+      const content = buildInlineContent(stack.agentInstructions, stack.agents);
+      if (content) {
+        const result = await writeWithMarkers(
+          p.config,
+          content,
+          stackName,
+          version,
+          "cursor",
+          opts.dryRun,
+        );
+        if (result.written) filesWritten.push(result.written);
+        if (opts.dryRun) {
+          dryRunEntries.push(markersDryRunEntry(p.config, result, opts.verbose));
+        }
       }
     }
 
@@ -237,6 +241,7 @@ export const cursorAdapter: PlatformAdapter = {
     hooks: false,
     agents: "inline",
     commands: true,
+    nativelyReads: { instructions: true },
   },
   detect,
   read,

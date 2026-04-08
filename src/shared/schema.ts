@@ -194,6 +194,7 @@ const installEntrySchema = z.object({
   stackVersion: z.string(),
   source: z.string().optional(),
   installedAt: z.string(),
+  installMode: z.enum(["force-standards", "prefer-universal"]).optional(),
   adapters: z.record(adapterInstallSchema),
 });
 

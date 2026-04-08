@@ -95,19 +95,23 @@ async function write(
   const version = stack.manifest.version;
 
   try {
-    const content = buildInlineContent(stack.agentInstructions, stack.agents);
-    if (content) {
-      const result = await writeWithMarkers(
-        p.config,
-        content,
-        stackName,
-        version,
-        "codex",
-        opts.dryRun,
-      );
-      if (result.written) filesWritten.push(result.written);
-      if (opts.dryRun) {
-        dryRunEntries.push(markersDryRunEntry(p.config, result, opts.verbose));
+    // Write instructions to AGENTS.md
+    // (skip when preferUniversal — Standards writes AGENTS.md as the universal file)
+    if (!opts.preferUniversal || !codexAdapter.capabilities.nativelyReads?.instructions) {
+      const content = buildInlineContent(stack.agentInstructions, stack.agents);
+      if (content) {
+        const result = await writeWithMarkers(
+          p.config,
+          content,
+          stackName,
+          version,
+          "codex",
+          opts.dryRun,
+        );
+        if (result.written) filesWritten.push(result.written);
+        if (opts.dryRun) {
+          dryRunEntries.push(markersDryRunEntry(p.config, result, opts.verbose));
+        }
       }
     }
 
@@ -159,6 +163,7 @@ export const codexAdapter: PlatformAdapter = {
     hooks: false,
     agents: "inline",
     commands: false,
+    nativelyReads: { instructions: true },
   },
   detect,
   read,

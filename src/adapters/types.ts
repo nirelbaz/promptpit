@@ -38,6 +38,12 @@ export interface AdapterCapabilities {
   agentsmd: boolean;
   hooks: boolean;
   agents: "native" | "inline" | "none";
+  /** Universal files this tool reads natively (beyond what the adapter writes).
+   *  Used by install orchestrator to prevent duplication. */
+  nativelyReads?: {
+    mcp?: boolean;
+    instructions?: boolean;
+  };
 }
 
 // --- Platform Config (read from a single adapter) ---
@@ -60,6 +66,12 @@ export interface WriteOptions {
   force?: boolean;
   global?: boolean;
   canonicalSkillPaths?: Map<string, string>;
+  /** Standards adapter: skip writing .mcp.json (a detected tool reads it natively) */
+  skipMcp?: boolean;
+  /** Standards adapter: skip writing AGENTS.md (a detected tool reads it natively) */
+  skipInstructions?: boolean;
+  /** Tool adapters: skip writing tool-specific MCP/instructions when tool reads universal */
+  preferUniversal?: boolean;
 }
 
 // --- Dry-Run Reporting ---

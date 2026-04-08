@@ -147,3 +147,36 @@ describe.each(listAdapters().map((a) => [a.id, a] as const))(
     });
   },
 );
+
+describe("nativelyReads declarations", () => {
+  const adapters = listAdapters();
+
+  it("claude-code declares nativelyReads.mcp", () => {
+    const cc = adapters.find((a) => a.id === "claude-code")!;
+    expect(cc.capabilities.nativelyReads?.mcp).toBe(true);
+    expect(cc.capabilities.nativelyReads?.instructions).toBeUndefined();
+  });
+
+  it("copilot declares nativelyReads.instructions", () => {
+    const cop = adapters.find((a) => a.id === "copilot")!;
+    expect(cop.capabilities.nativelyReads?.instructions).toBe(true);
+    expect(cop.capabilities.nativelyReads?.mcp).toBeUndefined();
+  });
+
+  it("cursor declares nativelyReads.instructions", () => {
+    const cur = adapters.find((a) => a.id === "cursor")!;
+    expect(cur.capabilities.nativelyReads?.instructions).toBe(true);
+    expect(cur.capabilities.nativelyReads?.mcp).toBeUndefined();
+  });
+
+  it("codex declares nativelyReads.instructions", () => {
+    const cdx = adapters.find((a) => a.id === "codex")!;
+    expect(cdx.capabilities.nativelyReads?.instructions).toBe(true);
+    expect(cdx.capabilities.nativelyReads?.mcp).toBeUndefined();
+  });
+
+  it("standards has no nativelyReads", () => {
+    const std = adapters.find((a) => a.id === "standards")!;
+    expect(std.capabilities.nativelyReads).toBeUndefined();
+  });
+});
