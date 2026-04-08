@@ -183,12 +183,14 @@ async function write(
       }
     }
 
-    // Write MCP config
-    const mcpResult = await mergeMcpIntoJson(p.mcp, stack.mcpServers, warnings, opts.dryRun);
-    if (mcpResult.written) filesWritten.push(mcpResult.written);
-    const mcpCount = Object.keys(stack.mcpServers).length;
-    if (opts.dryRun && mcpCount > 0) {
-      dryRunEntries.push(mcpDryRunEntry(p.mcp, mcpCount, mcpResult, opts.verbose));
+    // Write MCP config (skip when preferUniversal — tool reads .mcp.json natively)
+    if (!opts.preferUniversal || !claudeCodeAdapter.capabilities.nativelyReads?.mcp) {
+      const mcpResult = await mergeMcpIntoJson(p.mcp, stack.mcpServers, warnings, opts.dryRun);
+      if (mcpResult.written) filesWritten.push(mcpResult.written);
+      const mcpCount = Object.keys(stack.mcpServers).length;
+      if (opts.dryRun && mcpCount > 0) {
+        dryRunEntries.push(mcpDryRunEntry(p.mcp, mcpCount, mcpResult, opts.verbose));
+      }
     }
   } catch (err: unknown) {
     rethrowPermissionError(err, !!opts.global, "Claude Code paths");

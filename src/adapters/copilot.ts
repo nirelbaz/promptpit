@@ -226,18 +226,21 @@ async function write(
 
   try {
     // Write instructions to .github/copilot-instructions.md
-    if (stack.agentInstructions) {
-      const result = await writeWithMarkers(
-        p.config,
-        stack.agentInstructions,
-        stackName,
-        version,
-        "copilot",
-        opts.dryRun,
-      );
-      if (result.written) filesWritten.push(result.written);
-      if (opts.dryRun) {
-        dryRunEntries.push(markersDryRunEntry(p.config, result, opts.verbose));
+    // (skip when preferUniversal — tool reads AGENTS.md natively)
+    if (!opts.preferUniversal || !copilotAdapter.capabilities.nativelyReads?.instructions) {
+      if (stack.agentInstructions) {
+        const result = await writeWithMarkers(
+          p.config,
+          stack.agentInstructions,
+          stackName,
+          version,
+          "copilot",
+          opts.dryRun,
+        );
+        if (result.written) filesWritten.push(result.written);
+        if (opts.dryRun) {
+          dryRunEntries.push(markersDryRunEntry(p.config, result, opts.verbose));
+        }
       }
     }
 
