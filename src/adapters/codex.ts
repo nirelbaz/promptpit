@@ -159,6 +159,7 @@ export const codexAdapter: PlatformAdapter = {
     hooks: false,
     agents: "inline",
     commands: false,
+    nativelyReads: { instructions: true },
   },
   detect,
   read,

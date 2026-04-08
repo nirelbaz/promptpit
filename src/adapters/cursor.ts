@@ -237,6 +237,7 @@ export const cursorAdapter: PlatformAdapter = {
     hooks: false,
     agents: "inline",
     commands: true,
+    nativelyReads: { instructions: true },
   },
   detect,
   read,

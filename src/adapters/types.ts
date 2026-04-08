@@ -38,6 +38,12 @@ export interface AdapterCapabilities {
   agentsmd: boolean;
   hooks: boolean;
   agents: "native" | "inline" | "none";
+  /** Universal files this tool reads natively (beyond what the adapter writes).
+   *  Used by install orchestrator to prevent duplication. */
+  nativelyReads?: {
+    mcp?: boolean;
+    instructions?: boolean;
+  };
 }
 
 // --- Platform Config (read from a single adapter) ---

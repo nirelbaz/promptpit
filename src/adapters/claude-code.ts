@@ -213,6 +213,7 @@ export const claudeCodeAdapter: PlatformAdapter = {
     hooks: true,
     agents: "native",
     commands: true,
+    nativelyReads: { mcp: true },
   },
   detect,
   read,

@@ -346,6 +346,7 @@ export const copilotAdapter: PlatformAdapter = {
     hooks: false,
     agents: "native",
     commands: true,
+    nativelyReads: { instructions: true },
   },
   detect,
   read,
