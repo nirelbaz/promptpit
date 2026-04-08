@@ -66,6 +66,12 @@ export interface WriteOptions {
   force?: boolean;
   global?: boolean;
   canonicalSkillPaths?: Map<string, string>;
+  /** Standards adapter: skip writing .mcp.json (a detected tool reads it natively) */
+  skipMcp?: boolean;
+  /** Standards adapter: skip writing AGENTS.md (a detected tool reads it natively) */
+  skipInstructions?: boolean;
+  /** Tool adapters: skip writing tool-specific MCP/instructions when tool reads universal */
+  preferUniversal?: boolean;
 }
 
 // --- Dry-Run Reporting ---
