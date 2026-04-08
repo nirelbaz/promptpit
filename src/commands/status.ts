@@ -3,7 +3,7 @@ import chalk from "chalk";
 import { readManifest, computeHash, computeMcpServerHash } from "../core/manifest.js";
 import { readFileOrNull } from "../shared/utils.js";
 import { readMcpFromToml } from "../adapters/toml-utils.js";
-import { parseJsonc } from "../adapters/adapter-utils.js";
+import { parseJsonc, resolveRuleDest } from "../adapters/adapter-utils.js";
 import { extractMarkerContent, hasMarkers } from "../shared/markers.js";
 import type { InstallManifest, AdapterInstallRecord } from "../shared/schema.js";
 import { getAdapter } from "../adapters/registry.js";
@@ -165,13 +165,12 @@ async function checkAdapterStatus(
   if (Object.keys(ruleEntries).length > 0) {
     const rulesPath = adapter?.paths.project(root).rules;
     for (const [ruleName, ruleRecord] of Object.entries(ruleEntries)) {
+      // resolveRuleDest checks unprefixed path first for cursor/copilot (dedup-aware)
       let ruleFile: string;
       if (adapterId === "cursor") {
-        const prefixed = ruleName.startsWith("rule-") ? ruleName : `rule-${ruleName}`;
-        ruleFile = path.join(rulesPath ?? root, `${prefixed}.mdc`);
+        ruleFile = await resolveRuleDest(rulesPath ?? root, ruleName, ".mdc");
       } else if (adapterId === "copilot") {
-        const prefixed = ruleName.startsWith("rule-") ? ruleName : `rule-${ruleName}`;
-        ruleFile = path.join(rulesPath ?? root, `${prefixed}.instructions.md`);
+        ruleFile = await resolveRuleDest(rulesPath ?? root, ruleName, ".instructions.md");
       } else {
         ruleFile = path.join(rulesPath ?? root, `${ruleName}.md`);
       }

@@ -74,7 +74,7 @@ export async function readStack(stackDir: string): Promise<StackBundle> {
   }
 
   const skillsDir = path.join(stackDir, "skills");
-  const skills = await readSkillsFromDir(skillsDir);
+  const skills = await readSkillsFromDir(skillsDir, { includeStandalone: true });
 
   const agentsDir = path.join(stackDir, "agents");
   const agents = await readAgentsFromDir(agentsDir);

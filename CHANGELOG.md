@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.11 (2026-04-08)
+
+### Fixed
+
+- HTTP MCP servers (like exa) are no longer silently lost when installing to Codex. `writeMcpToToml()` now writes `url` and `serverUrl` fields instead of only `command`/`args`/`env`.
+- Standalone `.md` skill files (not in a `*/SKILL.md` directory structure) are now discovered during collect. Repos like positron that use flat skill files no longer lose skills.
+- Installing into a repo that already has rules no longer creates `rule-` prefixed duplicates. If `testing.mdc` exists, pit writes there instead of creating `rule-testing.mdc` alongside it.
+- `pit status` no longer falsely reports rules as "deleted" after the dedup fix writes to the unprefixed path.
+
+### Added
+
+- `/pre-pr-check` command chains /review, AI Stack Expert adapter verification, and /simplify into a single pre-PR quality gate.
+
 ## 0.3.10 (2026-04-07)
 
 ### Added

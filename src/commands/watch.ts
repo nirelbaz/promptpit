@@ -94,7 +94,7 @@ async function handleChanges(
   const timestamp = chalk.dim(new Date().toLocaleTimeString());
 
   // Read skills once for the whole batch, read manifest once
-  const allSkills = await readSkillsFromDir(skillsDir);
+  const allSkills = await readSkillsFromDir(skillsDir, { includeStandalone: true });
   const manifest = await readManifest(root);
 
   for (const skillName of skillNames) {

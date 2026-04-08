@@ -1236,4 +1236,70 @@ describe("pit status", () => {
       expect(output).toContain("command");
     });
   });
+
+  it("finds cursor rules at unprefixed path when rule- prefixed path does not exist", async () => {
+    const dir = await makeTmpDir();
+
+    // Rule written to unprefixed path (as BUG 24 dedup fix does)
+    const rulesDir = path.join(dir, ".cursor", "rules");
+    await mkdir(rulesDir, { recursive: true });
+    const ruleContent = "---\ndescription: Testing conventions\nglobs:\n  - \"**/*.test.ts\"\n---\n\nUse vitest.\n";
+    await writeFile(path.join(rulesDir, "testing.mdc"), ruleContent);
+    await writeFile(path.join(dir, ".cursorrules"), "");
+
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "my-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          cursor: {
+            rules: { testing: { hash: computeHash(ruleContent) } },
+          },
+        },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await computeStatus(dir);
+    const cursorAdapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "cursor");
+    expect(cursorAdapter).toBeDefined();
+    const ruleDetail = cursorAdapter!.ruleDetails?.find((r) => r.name === "testing");
+    expect(ruleDetail).toBeDefined();
+    expect(ruleDetail!.state).toBe("synced");
+  });
+
+  it("finds copilot rules at unprefixed path when rule- prefixed path does not exist", async () => {
+    const dir = await makeTmpDir();
+
+    // Rule written to unprefixed path (as BUG 24 dedup fix does)
+    const instDir = path.join(dir, ".github", "instructions");
+    await mkdir(instDir, { recursive: true });
+    const ruleContent = "---\napplyTo: \"**/*.test.ts\"\n---\n\nUse vitest.\n";
+    await writeFile(path.join(instDir, "testing.instructions.md"), ruleContent);
+    await writeFile(path.join(dir, ".github", "copilot-instructions.md"), "# Test");
+
+    const manifest: InstallManifest = {
+      version: 1,
+      installs: [{
+        stack: "my-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          copilot: {
+            rules: { testing: { hash: computeHash(ruleContent) } },
+          },
+        },
+      }],
+    };
+    await writeManifest(dir, manifest);
+
+    const result = await computeStatus(dir);
+    const copilotAdapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "copilot");
+    expect(copilotAdapter).toBeDefined();
+    const ruleDetail = copilotAdapter!.ruleDetails?.find((r) => r.name === "testing");
+    expect(ruleDetail).toBeDefined();
+    expect(ruleDetail!.state).toBe("synced");
+  });
 });

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, readFile, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { writeWithMarkers, readAgentsFromDir, readMcpFromSettings, formatAgentsInlineSection, buildInlineContent, readCommandsFromDir, detectCommandParamSyntax } from "../../src/adapters/adapter-utils.js";
+import { writeWithMarkers, readAgentsFromDir, readSkillsFromDir, readMcpFromSettings, formatAgentsInlineSection, buildInlineContent, readCommandsFromDir, detectCommandParamSyntax } from "../../src/adapters/adapter-utils.js";
 import type { AgentEntry } from "../../src/shared/schema.js";
 
 describe("writeWithMarkers", () => {
@@ -125,6 +125,85 @@ describe("writeWithMarkers", () => {
     const content = await readFile(filePath, "utf-8");
     expect(content).toContain("promptpit:start:my-stack");
     expect(content).toContain("promptpit:end:my-stack");
+  });
+});
+
+describe("readSkillsFromDir", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(path.join(tmpdir(), "pit-skills-"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("reads */SKILL.md directory-based skills", async () => {
+    await mkdir(path.join(tmpDir, "my-skill"), { recursive: true });
+    await writeFile(
+      path.join(tmpDir, "my-skill", "SKILL.md"),
+      "---\nname: my-skill\ndescription: A skill\n---\n\nDo things.\n",
+    );
+    const skills = await readSkillsFromDir(tmpDir);
+    expect(skills).toHaveLength(1);
+    expect(skills[0]!.name).toBe("my-skill");
+  });
+
+  it("does NOT read standalone .md files by default", async () => {
+    await writeFile(
+      path.join(tmpDir, "review-upstream-merge.md"),
+      "---\nname: review-upstream-merge\ndescription: Review upstream merges\n---\n\nReview upstream merge PRs.\n",
+    );
+    const skills = await readSkillsFromDir(tmpDir);
+    expect(skills).toHaveLength(0);
+  });
+
+  it("reads standalone .md skill files when includeStandalone is true", async () => {
+    await writeFile(
+      path.join(tmpDir, "review-upstream-merge.md"),
+      "---\nname: review-upstream-merge\ndescription: Review upstream merges\n---\n\nReview upstream merge PRs.\n",
+    );
+    const skills = await readSkillsFromDir(tmpDir, { includeStandalone: true });
+    expect(skills).toHaveLength(1);
+    expect(skills[0]!.name).toBe("review-upstream-merge");
+    expect(skills[0]!.content).toContain("Review upstream merge PRs.");
+  });
+
+  it("reads both directory-based and standalone skills when includeStandalone is true", async () => {
+    await mkdir(path.join(tmpDir, "qa"), { recursive: true });
+    await writeFile(
+      path.join(tmpDir, "qa", "SKILL.md"),
+      "---\nname: qa\ndescription: QA skill\n---\n\nRun QA.\n",
+    );
+    await writeFile(
+      path.join(tmpDir, "review-merge.md"),
+      "---\nname: review-merge\ndescription: Review merges\n---\n\nReview.\n",
+    );
+    const skills = await readSkillsFromDir(tmpDir, { includeStandalone: true });
+    expect(skills).toHaveLength(2);
+    const names = skills.map((s) => s.name).sort();
+    expect(names).toEqual(["qa", "review-merge"]);
+  });
+
+  it("prefers directory-based SKILL.md over standalone .md with same name", async () => {
+    await mkdir(path.join(tmpDir, "qa"), { recursive: true });
+    await writeFile(
+      path.join(tmpDir, "qa", "SKILL.md"),
+      "---\nname: qa\ndescription: QA directory skill\n---\n\nDirectory version.\n",
+    );
+    await writeFile(
+      path.join(tmpDir, "qa.md"),
+      "---\nname: qa\ndescription: QA standalone skill\n---\n\nStandalone version.\n",
+    );
+    const skills = await readSkillsFromDir(tmpDir, { includeStandalone: true });
+    expect(skills).toHaveLength(1);
+    expect(skills[0]!.content).toContain("Directory version.");
+  });
+
+  it("returns empty array for missing directory", async () => {
+    const skills = await readSkillsFromDir("/tmp/nonexistent-skills-" + Date.now());
+    expect(skills).toEqual([]);
   });
 });
 
