@@ -168,33 +168,28 @@ export async function installStack(
         );
       }
     } else if (!opts.forceStandards) {
-      const toolAdapters = detected.filter((d) => d.adapter.id !== "standards");
-      const skipMcp = toolAdapters.some(
-        (d) => d.adapter.capabilities.nativelyReads?.mcp,
-      );
-      const skipInstructions = toolAdapters.some(
-        (d) => d.adapter.capabilities.nativelyReads?.instructions,
-      );
+      // Single pass: collect adapter names that natively read each universal file
+      const mcpReaders: string[] = [];
+      const instrReaders: string[] = [];
+      for (const d of detected) {
+        if (d.adapter.id === "standards") continue;
+        if (d.adapter.capabilities.nativelyReads?.mcp) mcpReaders.push(d.adapter.displayName);
+        if (d.adapter.capabilities.nativelyReads?.instructions) instrReaders.push(d.adapter.displayName);
+      }
 
-      if (skipMcp) {
+      if (mcpReaders.length > 0) {
         writeOpts.skipMcp = true;
-        const readers = toolAdapters
-          .filter((d) => d.adapter.capabilities.nativelyReads?.mcp)
-          .map((d) => d.adapter.displayName);
         log.info(
-          `Standards: skipped .mcp.json (${readers.join(", ")} read${readers.length === 1 ? "s" : ""} it natively, causing duplicate MCP servers)`,
+          `Standards: skipped .mcp.json (${mcpReaders.join(", ")} read${mcpReaders.length === 1 ? "s" : ""} it natively, causing duplicate MCP servers)`,
         );
       }
-      if (skipInstructions) {
+      if (instrReaders.length > 0) {
         writeOpts.skipInstructions = true;
-        const readers = toolAdapters
-          .filter((d) => d.adapter.capabilities.nativelyReads?.instructions)
-          .map((d) => d.adapter.displayName);
         log.info(
-          `Standards: skipped AGENTS.md (${readers.join(", ")} read${readers.length === 1 ? "s" : ""} it natively, causing duplicate instructions)`,
+          `Standards: skipped AGENTS.md (${instrReaders.join(", ")} read${instrReaders.length === 1 ? "s" : ""} it natively, causing duplicate instructions)`,
         );
       }
-      if (skipMcp || skipInstructions) {
+      if (mcpReaders.length > 0 || instrReaders.length > 0) {
         log.info(
           "Tip: use --force-standards to write universal files even when detected tools read them natively",
         );
