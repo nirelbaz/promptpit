@@ -6,9 +6,12 @@
 
 **Phased roadmap:** ~~Team Platform (v0.3)~~ -> Stack Composer (v0.5) -> Ecosystem Bridge (v1.0)
 
-**Landscape (April 2026):** AGENTS.md adopted by 60K+ repos (Linux Foundation). Vercel Agent Skills / skills.sh is the emerging skill package manager (45+ agents, Cloudflare `.well-known` RFC for discovery). .mcp.json converging as project-level MCP standard. Agent Skills spec is complementary, not competing — it defines the individual skill format, PromptPit adds composition (bundling instructions + skills + MCP + env as one distributable unit). PromptPit already parses Agent Skills frontmatter.
+**Landscape (April 2026):** AGENTS.md adopted as cross-tool convention (Linux Foundation, agreed by Google, OpenAI, Sourcegraph, Cursor, Factory — February 2026). Agent Skills spec (agentskills.io) defines the individual skill format; 30+ tools support it. skills.sh is the emerging skill package manager with Cloudflare `.well-known` RFC for discovery. `.mcp.json` supported by Claude Code and Copilot at the project level, but not yet a universal standard (Codex uses TOML, Cursor uses `.cursor/mcp.json`, others have their own paths).
 
-**Adapter tiers:** Tier 1 (creator-maintained): Claude Code, Cursor, Codex, Copilot. Tier 2 (community-contributed): Windsurf, Gemini, Junie, Continue.dev.
+**Adapter tiers:**
+- Tier 1 (creator-maintained): Claude Code, Cursor, Codex, Copilot
+- Tier 2 (community-contributed): Windsurf, Gemini, Junie, Continue.dev
+- Evaluated and deferred: Zed (first-match-wins limits utility), Cline (MCP in extension globalStorage, no project-level path), Roo Code (no rules frontmatter), Amazon Q (non-standard MCP format), Aider (minimal config surface)
 
 ## Known Bugs
 
@@ -26,16 +29,56 @@
 
 Discovered via `/audit-adapters` using the AI Stack Expert knowledge base. See `docs/knowledge/` for per-tool evidence.
 
-| # | Severity | Issue |
-|---|----------|-------|
-| 1 | HIGH | **MCP duplication:** Claude Code reads `.mcp.json` natively. Standards + Claude Code adapters both write MCP, causing servers to appear twice. Same for Copilot (`.mcp.json` + `.vscode/mcp.json`). Need dedup strategy. |
-| 2 | HIGH | **AGENTS.md instruction duplication:** Standards always writes AGENTS.md. Copilot and Cursor also read it natively. Both adapters active = instructions appear twice. Need conditional write logic. |
-| 3 | MEDIUM | **Cursor native SKILL.md:** Cursor v2.4+ supports `.cursor/skills/<name>/SKILL.md` natively. Adapter still translates to `.mdc` (lossy). Change `skillLinkStrategy` to `"symlink"` targeting `.cursor/skills/`. |
-| 4 | MEDIUM | **Codex agent write format mismatch:** Codex reads agents from `.codex/agents/*.toml` but adapter writes inline in AGENTS.md. Consider writing native TOML agent files. |
-| 5 | LOW | **Copilot missing agent frontmatter:** `agentToGitHubAgent` drops `target`, `disable-model-invocation`, `user-invocable`, `mcp-servers`, `metadata` fields. |
-| 6 | LOW | **Copilot skill reading:** `read()` returns `skills: []` but Copilot discovers skills from `.github/skills/`. Should be read during collect. |
-| 7 | LOW | **Codex AGENTS.override.md:** Codex supports `AGENTS.override.md` (takes precedence over AGENTS.md). Not handled during collect. |
-| 8 | LOW | **Schema enrichment:** Many new Claude Code agent/skill frontmatter fields not typed in Zod schema. They pass through via `.passthrough()` but are untyped. |
+| # | Severity | Issue | Status |
+|---|----------|-------|--------|
+| 1 | HIGH | **MCP duplication:** Claude Code reads `.mcp.json` natively. Standards + Claude Code adapters both write MCP, causing servers to appear twice. Same for Copilot (`.mcp.json` + `.vscode/mcp.json`). Fix: tool-specific adapter should skip MCP write when the tool reads `.mcp.json` natively and Standards is active, or write to `.mcp.json` instead of the tool-native path. | In progress |
+| 2 | HIGH | **AGENTS.md instruction duplication:** Standards always writes AGENTS.md. Copilot, Cursor, and Codex also read it natively. Both adapters active = instructions appear twice. Fix: skip tool-native instruction write when the tool reads AGENTS.md, or skip Standards write for that tool. | In progress |
+| 3 | HIGH | **Cursor native SKILL.md:** Cursor v2.4+ supports `.cursor/skills/<name>/SKILL.md` natively. Adapter still translates to `.mdc` (lossy — discards structured frontmatter like allowed-tools, user-invocable). Requires changing `skillLinkStrategy` to `"symlink"`, dropping `skillToMdc()` translation, and updating `skillFormat` capability. Bigger change than it sounds. | |
+| 4 | MEDIUM | **Codex agent write format mismatch:** Codex reads agents from `.codex/agents/*.toml` but adapter writes inline in AGENTS.md via `buildInlineContent`. Inline approach loses structured fields (`model_reasoning_effort`, `sandbox_mode`, `mcp_servers`, `nickname_candidates`). Real data loss, not just a format preference. | |
+| 5 | LOW | **Copilot missing agent frontmatter:** `agentToGitHubAgent` drops `target`, `disable-model-invocation`, `user-invocable`, `mcp-servers`, `metadata` fields. | |
+| 6 | LOW | **Copilot skill reading:** `read()` returns `skills: []` but Copilot discovers skills from `.github/skills/`. Should be read during collect. | |
+| 7 | LOW | **Codex AGENTS.override.md:** Codex supports `AGENTS.override.md` (takes precedence over AGENTS.md). Not handled during collect — could miss overriding content. | |
+| 8 | LOW | **Schema enrichment:** Many new Claude Code agent/skill frontmatter fields not typed in Zod schema. They pass through via `.passthrough()` but are untyped. | |
+
+## Adapter Gaps (not in audit, discovered during review)
+
+**Copilot reads CLAUDE.md** (with `chat.useClaudeMdFile` setting). If both Claude Code and Copilot adapters are active, instructions may appear twice in Copilot. Needs at minimum a documented warning, ideally conditional write logic.
+
+**`.claude/commands/` is deprecated** in favor of `.claude/skills/`. The commands feature (v0.3.10) reads from and writes to the deprecated path. Verify current Claude Code behavior and migrate if needed.
+
+**Claude Code `@path/to/file` import syntax** in CLAUDE.md is not resolved during collect. If a project's CLAUDE.md uses imports, collected instructions will contain the literal import directives instead of referenced content. Can produce incomplete stacks silently.
+
+**Gemini CLI knowledge file missing.** The Tier 2 adapter proposal is based on general knowledge, not verified research. Create `docs/knowledge/gemini.md` before building the adapter.
+
+**Zed adapter** worth noting: broadest cross-tool reading of any tool (reads `.cursorrules`, `.windsurfrules`, `.clinerules`, AGENTS.md, CLAUDE.md, GEMINI.md, `.github/copilot-instructions.md`). A Zed adapter might be as simple as writing a `.rules` file (highest priority in its first-match-wins system).
+
+## Recommended Execution Order
+
+### Tier 0 — Blocking (fix before Phase 2)
+1. ~~Audit #1 + #2 (MCP and AGENTS.md duplication)~~ — in progress
+2. BUG 23 (Codex TOML comment stripping — immediate user-visible drift)
+3. BUG 26 (Validator false positives — blocks valid stacks)
+4. Audit #3 (Cursor native SKILL.md — lossy translation, high impact)
+
+### Tier 1 — Correctness
+5. Audit #4 (Codex native TOML agents — data loss)
+6. Audit #5-8 (Copilot agent fields, skill reading, Codex override, schema enrichment)
+7. Verify `.claude/commands/` deprecation status
+8. Deduplication test coverage (integration tests for multi-adapter install scenarios)
+
+### Tier 2 — Phase 2 features
+9. Stack composition (`extends`) — headline feature
+10. Uninstall command — needed for safe stack iteration
+11. Update command — depends on composition logic
+12. Everything else in Phase 2
+
+### Tier 3 — Tier 2 adapters
+13. Junie — cleanest config (AGENTS.md + SKILL.md + MCP + rules), least friction
+14. Windsurf — good config, but global-only MCP requires a design decision (not just a warning)
+15. Continue.dev — note: accepts JSON configs directly in `.continue/mcpServers/`, simpler than YAML translation
+16. Gemini CLI — create knowledge file first, verify all claims before building
+
+---
 
 ## Phase 2 — Stack Composer (v0.3 -> v0.5)
 
@@ -45,13 +88,10 @@ Goal: let teams layer stacks on top of each other. Company base stack + team ove
 `"extends": ["github:company/base-stack@1.0.0"]` in stack.json. `pit install` recursively fetches and resolves the dependency graph. Base instructions merge first, team overrides layer on top. Provisional merge semantics: last-declared-wins with a warning on conflicts, explicit `overrides` block in stack.json for intentional resolution. This is the feature that makes multi-team setups practical.
 
 ### Diff command
-`pit diff` — show what changed between installed config and `.promptpit/` source. Natural byproduct of the merge/composition logic. Pairs with `pit status` and `pit update`.
+`pit diff` — show the actual text diff between installed config and `.promptpit/` source. Distinct from `pit status` (which shows hash-level drift). This is a UI feature, not a composition feature.
 
 ### Update command
 `pit update` — diff what changed in a stack since last install, apply only the delta. Needs version comparison and conflict resolution for user-modified content.
-
-### Embrace AGENTS.md as primary format
-With 60K+ repos adopting AGENTS.md as the cross-tool standard, PromptPit should read it as a primary input — not just generate it during install. Start with read-only parsing (behind feature flag until spec stabilizes), then graduate to full read/write.
 
 ### Formalize Agent Skills alignment
 PromptPit already parses Agent Skills frontmatter (`skillFrontmatterSchema` in `schema.ts`). Formalize: ensure full spec compliance (name: 1-64 chars lowercase alphanumeric + hyphens; description: 1-1024 chars), support optional `scripts/`, `references/`, `assets/` directories, and document that `.promptpit/` is "Agent Skills + composition."
@@ -76,16 +116,18 @@ KurrentDB has a 25.1KB CLAUDE.md. No warning about unusually large instruction f
 Design the adapter interface for easy community contribution, then invite contributions.
 
 ### Windsurf
-Instructions to `.windsurfrules` (legacy) or `.windsurf/rules/*.md` (modern, `trigger` frontmatter). MCP to global only at `~/.codeium/windsurf/mcp_config.json` — warn that project-level MCP is unsupported. Skills via Agent Skills standard. Reads AGENTS.md natively. Unique `trigger` field maps from portable `alwaysApply`/`globs`. Character limits: 6K global, 12K workspace.
+Instructions to `.windsurfrules` (legacy) or `.windsurf/rules/*.md` (modern, `trigger` frontmatter). MCP to global only at `~/.codeium/windsurf/mcp_config.json` — this is a design decision, not just a warning: every other adapter writes project-level MCP, so Windsurf needs either (a) write to user-level path by default, or (b) skip MCP with a warning. Skills via Agent Skills standard. Reads AGENTS.md natively. Unique `trigger` field maps from portable `alwaysApply`/`globs`. Character limits: 6K global, 12K workspace.
 
 ### Gemini CLI
+**Prerequisite:** Create `docs/knowledge/gemini.md` with verified research. Claims below are unverified.
+
 Instructions to `GEMINI.md` (supports `@path/to/file.md` imports). Skills to `.gemini/skills/` (native SKILL.md, symlinked). MCP to `.gemini/settings.json`. Agents to `.gemini/agents/*.md`. Detection: `~/.gemini` exists.
 
 ### JetBrains Junie
 Instructions to `.junie/AGENTS.md` or `AGENTS.md`. Guidelines from `.junie/rules/*.md` and `.junie/guidelines.md` (legacy). Skills to `.junie/skills/<name>/SKILL.md`. MCP to `.junie/mcp/mcp.json`. Detection: `.junie/` directory. Strong candidate — clean namespace, Agent Skills + MCP + AGENTS.md all supported.
 
 ### Continue.dev
-Instructions via `.continue/config.yaml`. Rules to `.continue/rules/*.md` with richest frontmatter (includes `regex` field — unique). MCP to `.continue/mcpServers/*.yaml`. Reads AGENTS.md. Detection: `.continue/` directory.
+Instructions via `.continue/config.yaml`. Rules to `.continue/rules/*.md` with richest frontmatter (includes `regex` field — unique). MCP to `.continue/mcpServers/` — accepts JSON configs from Claude/Cursor directly, so no YAML translation needed. Reads AGENTS.md. Detection: `.continue/` directory.
 
 ## Phase 3 — Ecosystem Bridge (v0.5 -> v1.0)
 
@@ -98,7 +140,7 @@ Expand GitHub source discovery: (1) `.claude-plugin/marketplace.json` skills pat
 `pit install github:owner/repo/path/to/skill[@ref]`. Path resolution after clone: directory with SKILL.md -> install skill, directory without -> scan subtree, file -> run through format reader, not found -> error.
 
 ### Format reader system
-Pluggable `FormatReader` interface: `id`, `extensions`, `canRead(path)`, `read(path): SkillEntry`. Ship readers for: `.mdc`, `.cursorrules`, `.clinerules`, `.windsurfrules`, `CONVENTIONS.md`, `.agent.md`, `.instructions.md`, `aiprompt.json`.
+Import from any tool's native format when installing from non-promptpit repos. Readers for: `.mdc`, `.cursorrules`, `.clinerules`, `.windsurfrules`, `CONVENTIONS.md`, `.agent.md`, `.instructions.md`, `aiprompt.json`. Note: adapters already read their native formats during collect — this is specifically for the `pit install github:repo` path where the repo isn't a promptpit stack.
 
 ### Smart catalog prompting
 When repo has >20 skills, prompt: install all / pick / cancel. `--all` flag skips prompt. Non-TTY without `--all` exits with error. If `marketplace.json` provides plugin groupings, offer bundles.
