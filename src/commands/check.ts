@@ -84,7 +84,7 @@ async function checkFreshness(
 
   // Check skills
   const skillsDir = path.join(stackDir, "skills");
-  const stackSkills = await readSkillsFromDir(skillsDir);
+  const stackSkills = await readSkillsFromDir(skillsDir, { includeStandalone: true });
   const installedSkillNames = collectInstalledNames(entry, "skills");
 
   for (const skill of stackSkills) {

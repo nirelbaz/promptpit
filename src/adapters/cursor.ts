@@ -13,7 +13,7 @@ import type {
 } from "./types.js";
 import type { StackBundle, RuleEntry, RuleFrontmatter } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
-import { readSkillsFromDir, readCommandsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry, buildInlineContent, detectCommandParamSyntax } from "./adapter-utils.js";
+import { readSkillsFromDir, readCommandsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry, buildInlineContent, detectCommandParamSyntax, resolveRuleDest } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -87,7 +87,7 @@ async function read(root: string): Promise<PlatformConfig> {
 
   const agentInstructions = (await readFileOrNull(p.config)) ?? "";
   const mcpServers = await readMcpFromSettings(p.mcp, "mcpServers");
-  const skills = (await exists(p.skills)) ? await readSkillsFromDir(p.skills) : [];
+  const skills = (await exists(p.skills)) ? await readSkillsFromDir(p.skills, { includeStandalone: true }) : [];
 
   const rules: RuleEntry[] = [];
   if (await exists(p.rules)) {
@@ -181,8 +181,7 @@ async function write(
     }
 
     for (const rule of stack.rules) {
-      const prefixedName = rule.name.startsWith("rule-") ? rule.name : `rule-${rule.name}`;
-      const dest = path.join(p.rules!, `${prefixedName}.mdc`);
+      const dest = await resolveRuleDest(p.rules!, rule.name, ".mdc");
       if (opts.dryRun) {
         dryRunEntries.push(fileDryRunEntry(dest, await exists(dest), "translate to .mdc"));
       } else {

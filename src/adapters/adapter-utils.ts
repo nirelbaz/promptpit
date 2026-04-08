@@ -11,7 +11,7 @@ export function parseJsonc(raw: string): unknown {
   return JSON.parse(stripJsonComments(raw));
 }
 import { skillFrontmatterSchema, ruleFrontmatterSchema, agentFrontmatterSchema } from "../shared/schema.js";
-import { readFileOrNull, writeFileEnsureDir } from "../shared/utils.js";
+import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
 import { log } from "../shared/io.js";
 import { hasMarkers, insertMarkers, replaceMarkerContent } from "../shared/markers.js";
 import type { DryRunEntry } from "./types.js";
@@ -28,33 +28,53 @@ export const SAFE_MATTER_OPTIONS = {
 
 export async function readSkillsFromDir(
   skillsDir: string,
+  opts?: { includeStandalone?: boolean },
 ): Promise<SkillEntry[]> {
-  const skillFiles = await fg("*/SKILL.md", {
+  const patterns = opts?.includeStandalone
+    ? ["*/SKILL.md", "*.md"]
+    : ["*/SKILL.md"];
+  const skillFiles = await fg(patterns, {
     cwd: skillsDir,
     absolute: true,
   });
 
   const skills: SkillEntry[] = [];
-  for (const file of skillFiles) {
+  const seen = new Set<string>();
+
+  // Directory-based skills first so they win name collisions with standalone files
+  const dirFiles = skillFiles.filter((f) => path.basename(f) === "SKILL.md");
+  const standaloneFiles = skillFiles.filter((f) => path.basename(f) !== "SKILL.md");
+
+  for (const file of dirFiles) {
     const raw = await readFileOrNull(file);
     if (!raw) continue;
-
     const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
     const validation = skillFrontmatterSchema.safeParse(parsed.data);
     if (!validation.success) {
-      const reasons = validation.error.errors.map((e) => e.message).join(", ");
-      log.warn(`Skipping ${file}: invalid frontmatter (${reasons})`);
+      log.warn(`Skipping ${file}: invalid frontmatter (${validation.error.errors.map((e) => e.message).join(", ")})`);
       continue;
     }
-
     const skillName = path.basename(path.dirname(file));
-    skills.push({
-      name: skillName,
-      path: `skills/${skillName}`,
-      frontmatter: validation.data,
-      content: raw,
-    });
+    if (seen.has(skillName)) continue;
+    seen.add(skillName);
+    skills.push({ name: skillName, path: `skills/${skillName}`, frontmatter: validation.data, content: raw });
   }
+
+  for (const file of standaloneFiles) {
+    const raw = await readFileOrNull(file);
+    if (!raw) continue;
+    const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
+    const validation = skillFrontmatterSchema.safeParse(parsed.data);
+    if (!validation.success) {
+      log.warn(`Skipping ${file}: invalid frontmatter (${validation.error.errors.map((e) => e.message).join(", ")})`);
+      continue;
+    }
+    const skillName = path.basename(file, ".md");
+    if (seen.has(skillName)) continue;
+    seen.add(skillName);
+    skills.push({ name: skillName, path: `skills/${skillName}`, frontmatter: validation.data, content: raw });
+  }
+
   return skills;
 }
 
@@ -307,6 +327,21 @@ export function warnMcpOverwrites(
       }
     }
   }
+}
+
+// Resolve rule destination path, preferring an existing unprefixed file over creating
+// a new rule-prefixed one (prevents duplication when re-installing over collected rules).
+export async function resolveRuleDest(
+  rulesDir: string,
+  ruleName: string,
+  ext: string,
+): Promise<string> {
+  const prefixedName = ruleName.startsWith("rule-") ? ruleName : `rule-${ruleName}`;
+  if (!ruleName.startsWith("rule-")) {
+    const unprefixedDest = path.join(rulesDir, `${ruleName}${ext}`);
+    if (await exists(unprefixedDest)) return unprefixedDest;
+  }
+  return path.join(rulesDir, `${prefixedName}${ext}`);
 }
 
 export function rethrowPermissionError(

@@ -65,7 +65,7 @@ async function read(root: string): Promise<PlatformConfig> {
 
   const [agentInstructions, skills, tomlContent, agents] = await Promise.all([
     readFileOrNull(p.config).then((r) => r ?? ""),
-    readSkillsFromDir(p.skills),
+    readSkillsFromDir(p.skills, { includeStandalone: true }),
     readFileOrNull(p.mcp).then((r) => r ?? ""),
     readAgentsFromToml(p.agents),
   ]);
