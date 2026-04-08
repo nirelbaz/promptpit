@@ -160,7 +160,7 @@ Copilot: skipped .github/copilot-instructions.md (using universal AGENTS.md — 
 ```typescript
 interface InstallEntry {
   // ... existing fields ...
-  installMode?: 'default' | 'force-standards' | 'prefer-universal';
+  installMode?: 'force-standards' | 'prefer-universal'; // absent = default mode
 }
 ```
 
@@ -203,7 +203,7 @@ No impact on: `pit collect`, `pit validate`, `pit watch`, `pit init`.
 | `src/adapters/standards.ts` | Respect `skipMcp` and `skipInstructions` in `write()` |
 | `src/commands/install.ts` | Orchestrator dedup logic, `--force-standards` / `--prefer-universal` flags, logging, tip |
 | `src/cli.ts` | Wire new CLI flags to install command |
-| `src/core/manifest.ts` | Add `installMode` to `InstallEntry` |
+| `src/shared/schema.ts` | Add `installMode` to `InstallEntry` |
 | `src/commands/status.ts` | Handle `installMode` in drift display |
 | `src/commands/check.ts` | Handle `installMode` for CI verification |
 | `test/adapters/contract.test.ts` | Test `nativelyReads` declarations |
