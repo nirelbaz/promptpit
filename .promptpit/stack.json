@@ -1,17 +1,33 @@
 {
   "name": "promptpit",
   "version": "0.1.0",
-  "description": "Portable AI agent stacks — collect, install, and share across Claude Code, Cursor, and more",
+  "description": "The composition layer for AI agent stacks — bundle, install, and sync instructions, skills, and MCP servers across every coding tool",
   "skills": [
     "skills/changelog",
     "skills/commit",
-    "skills/refactor",
     "skills/document",
-    "skills/debug",
+    "skills/refactor",
+    "skills/test",
     "skills/review",
-    "skills/test"
+    "skills/debug"
+  ],
+  "agents": [
+    "agents/ai-stack-expert"
+  ],
+  "rules": [],
+  "commands": [
+    "commands/audit-adapters",
+    "commands/pre-pr-check",
+    "commands/qa-real-world",
+    "commands/refresh-knowledge",
+    "commands/release",
+    "commands/version"
   ],
   "compatibility": [
-    "claude-code"
+    "claude-code",
+    "standards"
+  ],
+  "extends": [
+    "github:nirelbaz/promptpit-starter"
   ]
 }

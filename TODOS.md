@@ -25,6 +25,10 @@
 
 ~~**BUG 26:** Validator CC-AG-009/CC-AG-003 false positives on Copilot/Codex-native tool and model names. Validator should be platform-aware or skip tool/model validation for non-Claude-origin agents.~~ **Completed:** v0.3.12 (2026-04-09)
 
+~~**BUG 27:** `pit install --save` installs content AND saves to extends, then a subsequent `pit install` creates a second marker block.~~ **Completed:** `--save` now saves first, then resolves extends and installs once (one marker block).
+
+~~**BUG 28:** Merged instructions include the repo's own collected CLAUDE.md, creating recursive content duplication.~~ **Completed:** `mergeGraph` gains `skipRootInstructions` option, used by `--save` to exclude root's instructions from the marker (they're already in the target file).
+
 ## Adapter Audit Findings
 
 Discovered via `/audit-adapters` using the AI Stack Expert knowledge base. See `docs/knowledge/` for per-tool evidence.

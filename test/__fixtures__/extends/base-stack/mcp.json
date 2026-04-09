@@ -1,0 +1,6 @@
+{
+  "github-mcp": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-github"]
+  }
+}

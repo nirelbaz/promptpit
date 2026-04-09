@@ -8,6 +8,9 @@ coverage/
 .claude/*
 !.claude/commands/
 !.claude/agents/
+.agents/
+AGENTS.md
+.promptpit/installed.json
 .gstack/
 .research/
 HANDOFF.md

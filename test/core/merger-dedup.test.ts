@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergeConfigs } from "../../src/core/merger.js";
+import { mergeAdapterConfigs } from "../../src/core/merger.js";
 import type { PlatformConfig } from "../../src/adapters/types.js";
 
 function makeConfig(id: string, instructions: string): PlatformConfig {
@@ -14,7 +14,7 @@ function makeConfig(id: string, instructions: string): PlatformConfig {
 
 describe("merger instruction hash dedup", () => {
   it("keeps both when instructions differ", () => {
-    const result = mergeConfigs([
+    const result = mergeAdapterConfigs([
       makeConfig("claude-code", "Use TypeScript."),
       makeConfig("standards", "Use Python."),
     ]);
@@ -24,7 +24,7 @@ describe("merger instruction hash dedup", () => {
 
   it("deduplicates identical instructions", () => {
     const shared = "# Instructions\n\nUse strict mode.";
-    const result = mergeConfigs([
+    const result = mergeAdapterConfigs([
       makeConfig("claude-code", shared),
       makeConfig("standards", shared),
     ]);
@@ -33,7 +33,7 @@ describe("merger instruction hash dedup", () => {
   });
 
   it("treats whitespace-only differences as identical", () => {
-    const result = mergeConfigs([
+    const result = mergeAdapterConfigs([
       makeConfig("claude-code", "hello   world"),
       makeConfig("agents-md", "hello\n\nworld"),
     ]);
@@ -43,7 +43,7 @@ describe("merger instruction hash dedup", () => {
 
   it("keeps unique instructions from three adapters", () => {
     const shared = "Same content";
-    const result = mergeConfigs([
+    const result = mergeAdapterConfigs([
       makeConfig("claude-code", shared),
       makeConfig("standards", shared),
       makeConfig("cursor", "Different content"),
@@ -77,7 +77,7 @@ describe("merger MCP version pin preference", () => {
       rules: [],
     };
     // Unpinned first, pinned second — should prefer pinned
-    const result = mergeConfigs([unpinned, pinned]);
+    const result = mergeAdapterConfigs([unpinned, pinned]);
     const args = (result.mcpServers.github as Record<string, unknown>).args as string[];
     expect(args[1]).toContain("@2025.4.8");
     expect(result.warnings[0]).toContain("version-pinned");
@@ -104,7 +104,7 @@ describe("merger MCP version pin preference", () => {
       },
       rules: [],
     };
-    const result = mergeConfigs([pinned1, pinned2]);
+    const result = mergeAdapterConfigs([pinned1, pinned2]);
     const args = (result.mcpServers.github as Record<string, unknown>).args as string[];
     expect(args[1]).toContain("@1.0.0");
     expect(result.warnings[0]).toContain("keeping first");

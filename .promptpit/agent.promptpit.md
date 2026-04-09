@@ -1,20 +1,22 @@
 ---
 name: promptpit
 description: >-
-  Portable AI agent stacks — collect, install, and share across Claude Code,
-  Cursor, and more
+  The composition layer for AI agent stacks — bundle, install, and sync
+  instructions, skills, and MCP servers across every coding tool
 ---
+
+## From claude-code
 
 # CLAUDE.md
 
 ## Project
 
-PromptPit (`pit`) — a CLI tool that makes AI agent stacks portable across Claude Code, Cursor, and other AI coding tools. Two commands: `pit collect` (bundle configs) and `pit install` (install stacks).
+PromptPit (`pit`) — the composition layer for AI agent configuration. Bundles instructions, skills (Agent Skills spec), MCP servers, and env vars into one distributable stack that installs across Claude Code, Cursor, and other AI coding tools. Seven commands: `pit init` (scaffold a stack), `pit collect` (bundle configs), `pit install` (install stacks), `pit status` (show what's installed and drifted), `pit watch` (live-sync skill changes), `pit validate` (check stack validity), and `pit check` (CI sync verification). Translation is the entry point, stack management is the product.
 
 ## Commands
 
 ```bash
-npm test          # run tests (vitest, 74 tests)
+npm test          # run tests (vitest, 395 tests)
 npm run build     # build dist/cli.js (tsup, ESM)
 npm run lint      # TypeScript strict mode check
 npm run dev       # watch mode build
@@ -27,9 +29,9 @@ Adapter pattern with composition. Each AI tool is a plain object implementing `P
 ```
 src/
 ├── cli.ts              # Commander.js entry point
-├── commands/           # collect.ts, install.ts
-├── adapters/           # claude-code.ts, cursor.ts, registry.ts, types.ts, adapter-utils.ts
-├── core/               # stack.ts, merger.ts, security.ts
+├── commands/           # init.ts, collect.ts, install.ts, status.ts, watch.ts, validate.ts, check.ts
+├── adapters/           # claude-code.ts, cursor.ts, codex.ts, standards.ts, copilot.ts, registry.ts, types.ts, adapter-utils.ts, toml-utils.ts
+├── core/               # stack.ts, skill-store.ts, manifest.ts, merger.ts, security.ts, validate.ts
 ├── sources/            # github.ts (clone + auto-collect)
 └── shared/             # schema.ts (Zod + types), markers.ts, utils.ts, io.ts
 ```
@@ -44,10 +46,27 @@ src/
 - Idempotent markers include adapter ID: `<!-- promptpit:start:name:version:adapterId -->`
 - `.env` files are appended to, never overwritten
 - No `simple-git` dependency — uses `child_process.execFileSync` directly
+- Skills installed to `.agents/skills/` as canonical location, symlinked into tool-native paths (Claude Code), copied+translated for tools needing different formats (Cursor .mdc)
+- `AdapterCapabilities.skillLinkStrategy` declares each adapter's skill install strategy: `"symlink"`, `"translate-copy"`, or `"none"`
+- `AdapterCapabilities.mcpFormat` (`"json"` or `"toml"`) and `mcpRootKey` (e.g. `"mcpServers"`, `"servers"`, `"mcp_servers"`) declare how each adapter stores MCP config, used by `status.ts` for drift detection
+- `computeMcpServerHash()` in `manifest.ts` hashes only canonical MCP fields (command, args, env, url, serverUrl) with recursive key sorting, ignoring adapter-added fields like Copilot's `type`
+- Rules in `.promptpit/rules/*.md` use portable YAML frontmatter (`name`, `description`, `globs`, `alwaysApply`), translated per-adapter: Claude Code (`paths`), Cursor (`.mdc` with `rule-` prefix), Copilot (`.instructions.md` with `rule-` prefix and `applyTo`)
+- Install manifest hashes translated (post-adapter) rule content so `pit status` drift detection compares apples to apples
+- `AdapterCapabilities.agents` (`"native"` | `"inline"` | `"none"`) declares each adapter's agent handling: native adapters write per-file (Claude Code `.claude/agents/*.md`, Copilot `.github/agents/*.agent.md`), inline adapters embed agents in the instructions marker block via `buildInlineContent`
+- Copilot agent translation strips `model` field and uses `.agent.md` extension; `readAgentsFromDir` accepts `glob`/`ext` options for adapter-specific file patterns
 
 ## Testing
 
 Tests use vitest with real filesystem (not memfs) for E2E. Test fixtures in `test/__fixtures__/`. Contract tests in `test/adapters/contract.test.ts` are parameterized across all adapters (7 checks each).
+
+## Slash Commands
+
+```bash
+/version [X.Y.Z]   # bump version in package.json + add CHANGELOG entry
+/release            # tag and publish from main (runs all checks first)
+```
+
+`/version` on your feature branch before opening a PR. `/release` on main after merging.
 
 ## Before Pushing
 
@@ -59,49 +78,16 @@ npm test && npm run lint && npm run build
 
 All three must pass. No exceptions.
 
+When bumping the version in `package.json`, always add a corresponding entry to `CHANGELOG.md`.
+
+## gstack
+
+Use the `/browse` skill from gstack for all web browsing. Never use `mcp__claude-in-chrome__*` tools.
+
+Available skills: `/office-hours`, `/plan-ceo-review`, `/plan-eng-review`, `/plan-design-review`, `/design-consultation`, `/design-shotgun`, `/design-html`, `/review`, `/ship`, `/land-and-deploy`, `/canary`, `/benchmark`, `/browse`, `/connect-chrome`, `/qa`, `/qa-only`, `/design-review`, `/setup-browser-cookies`, `/setup-deploy`, `/retro`, `/investigate`, `/document-release`, `/codex`, `/cso`, `/autoplan`, `/careful`, `/freeze`, `/guard`, `/unfreeze`, `/gstack-upgrade`, `/learn`.
+
 ## Adding a New Adapter
 
 1. Create `src/adapters/{tool}.ts` — implement `PlatformAdapter` interface using functions from `adapter-utils.ts`
 2. Register in `src/adapters/registry.ts`
 3. Contract tests auto-include it — add a fixture setup in `ADAPTER_FIXTURES` in `contract.test.ts`
-
-
-<!-- promptpit:start:promptpit-starter:0.1.0:claude-code -->
-# Coding defaults
-
-## Code style
-
-- Explicit over clever. If someone reading your code has to pause and think about what a line does, rewrite it.
-- Small functions. If a function doesn't fit on a screen, split it.
-- Name things for what they do, not how they work. `getUserEmail` not `queryDatabaseForEmailField`.
-- No abbreviations in names unless they're universal (url, id, html). `msg` is not universal.
-
-## Git
-
-- Small, focused commits. One logical change per commit.
-- Write commit messages that explain why, not what. The diff shows what.
-- Conventional commits format: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`.
-
-## Testing
-
-- Write tests for new code. No exceptions.
-- Test behavior, not implementation. Your test should still pass if you refactor the internals.
-- One assertion per test when possible. A test named "handles edge cases" with 8 assertions is 8 tests pretending to be one.
-
-## Error handling
-
-- Handle errors at system boundaries (user input, API calls, file I/O). Trust internal code.
-- Never catch an error just to log it and rethrow. Either handle it or let it propagate.
-- Error messages should tell the user what happened and what to do about it.
-
-## Dependencies
-
-- Don't add a dependency for something you can write in 20 lines.
-- When you do add a dependency, check: is it maintained? Does it have known vulnerabilities? How big is it?
-
-## Refactoring
-
-- Don't refactor code you're not already changing. Stay focused.
-- Extract a function when you see the same logic three or more times.
-- Reduce nesting. Early returns over deeply nested if/else.
-<!-- promptpit:end:promptpit-starter -->

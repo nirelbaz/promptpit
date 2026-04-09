@@ -1,0 +1,9 @@
+{
+  "name": "team-stack",
+  "version": "1.0.0",
+  "description": "Frontend team stack",
+  "extends": ["../base-stack"],
+  "skills": ["skills/component-gen"],
+  "rules": ["rules/security"],
+  "compatibility": ["claude-code"]
+}

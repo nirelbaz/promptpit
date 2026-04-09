@@ -21,7 +21,15 @@ export function hasVersionPins(server: unknown): boolean {
   return args.some((a) => typeof a === "string" && /@\d/.test(a));
 }
 
-export function mergeConfigs(
+/**
+ * Merge configs from multiple adapters (Claude Code, Cursor, etc.) into one.
+ * Uses first-seen-wins for name collisions — adapters read the same content
+ * from different files, so the first occurrence is canonical.
+ *
+ * NOT the same as stack composition merge (mergeGraph in resolve.ts),
+ * which uses last-declared-wins for intentional layering.
+ */
+export function mergeAdapterConfigs(
   configs: PlatformConfig[],
 ): MergeResult {
   if (configs.length === 0) {

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { detectAdapters } from "../adapters/registry.js";
-import { mergeConfigs, hasVersionPins } from "../core/merger.js";
+import { mergeAdapterConfigs, hasVersionPins } from "../core/merger.js";
 import { stripSecrets } from "../core/security.js";
 import { writeStack } from "../core/stack.js";
 import { stripAllMarkerBlocks } from "../shared/markers.js";
@@ -31,6 +31,7 @@ async function detectProjectInfo(
 export interface CollectOptions {
   dryRun?: boolean;
   verbose?: boolean;
+  includeExtends?: boolean;
 }
 
 export async function collectStack(
@@ -100,7 +101,7 @@ export async function collectStack(
 
   readSpin.succeed("Configurations read");
 
-  const mergeResult = mergeConfigs(configs);
+  const mergeResult = mergeAdapterConfigs(configs);
 
   if (mergeResult.warnings && mergeResult.warnings.length > 0) {
     for (const w of mergeResult.warnings) {
@@ -112,6 +113,20 @@ export async function collectStack(
 
   const projectInfo = await detectProjectInfo(root);
 
+  // Preserve existing extends and instructionStrategy from stack.json
+  let preservedExtends: string[] | undefined;
+  let preservedInstructionStrategy: "concatenate" | "override" | undefined;
+  const existingManifestRaw = await readFileOrNull(path.join(outputDir, "stack.json"));
+  if (existingManifestRaw) {
+    try {
+      const existing = JSON.parse(existingManifestRaw);
+      preservedExtends = existing.extends;
+      preservedInstructionStrategy = existing.instructionStrategy;
+    } catch {
+      // Corrupt stack.json — skip preservation
+    }
+  }
+
   const bundle: StackBundle = {
     manifest: {
       name: projectInfo.name,
@@ -122,6 +137,8 @@ export async function collectStack(
       rules: mergeResult.rules.map((r) => r.path),
       commands: mergeResult.commands.map((c) => c.path),
       compatibility: detected.map((d) => d.adapter.id),
+      ...(preservedExtends && { extends: preservedExtends }),
+      ...(preservedInstructionStrategy && { instructionStrategy: preservedInstructionStrategy }),
     },
     agentInstructions: mergeResult.agentInstructions,
     skills: mergeResult.skills,
@@ -131,6 +148,32 @@ export async function collectStack(
     mcpServers: stripped,
     envExample,
   };
+
+  // Flatten extends into the bundle if requested
+  if (opts.includeExtends && bundle.manifest.extends?.length) {
+    const { resolveGraph, mergeGraph } = await import("../core/resolve.js");
+    const flattenSpin = spinner("Resolving extends...");
+    const graph = await resolveGraph(outputDir);
+    const merged = mergeGraph(graph, {
+      instructionStrategy: bundle.manifest.instructionStrategy ?? "concatenate",
+    });
+    flattenSpin.succeed(`Resolved ${graph.nodes.length - 1} extended stack(s)`);
+
+    for (const conflict of merged.conflicts) {
+      log.warn(`${conflict.type} "${conflict.name}" — using ${conflict.winner}`);
+    }
+
+    // Replace bundle content with merged, strip extends
+    const { extends: _, instructionStrategy: __, ...cleanManifest } = merged.bundle.manifest;
+    bundle.agentInstructions = merged.bundle.agentInstructions;
+    bundle.skills = merged.bundle.skills;
+    bundle.agents = merged.bundle.agents;
+    bundle.rules = merged.bundle.rules;
+    bundle.commands = merged.bundle.commands;
+    bundle.mcpServers = merged.bundle.mcpServers;
+    bundle.envExample = merged.bundle.envExample;
+    bundle.manifest = cleanManifest;
+  }
 
   if (opts.dryRun) {
     // Build list of files that would be written, checking existence in parallel

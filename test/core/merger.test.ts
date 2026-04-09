@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergeConfigs } from "../../src/core/merger.js";
+import { mergeAdapterConfigs } from "../../src/core/merger.js";
 import type { PlatformConfig } from "../../src/adapters/types.js";
 import type { AgentEntry } from "../../src/shared/schema.js";
 
@@ -28,7 +28,7 @@ function makeAgent(name: string): AgentEntry {
 describe("mergeConfigs", () => {
   it("passes through single config", () => {
     const config = makeConfig({ agentInstructions: "hello" });
-    const merged = mergeConfigs([config]);
+    const merged = mergeAdapterConfigs([config]);
     expect(merged.agentInstructions).toBe("hello");
   });
 
@@ -41,7 +41,7 @@ describe("mergeConfigs", () => {
       adapterId: "cursor",
       agentInstructions: "Cursor instructions",
     });
-    const merged = mergeConfigs([a, b]);
+    const merged = mergeAdapterConfigs([a, b]);
     expect(merged.agentInstructions).toContain("## From claude-code");
     expect(merged.agentInstructions).toContain("Claude instructions");
     expect(merged.agentInstructions).toContain("## From cursor");
@@ -75,7 +75,7 @@ describe("mergeConfigs", () => {
         },
       ],
     });
-    const merged = mergeConfigs([a, b]);
+    const merged = mergeAdapterConfigs([a, b]);
     expect(merged.skills).toHaveLength(2);
     expect(merged.skills.find((s) => s.name === "browse")?.content).toBe("A");
   });
@@ -87,7 +87,7 @@ describe("mergeConfigs agents", () => {
       adapterId: "claude-code",
       agents: [makeAgent("reviewer")],
     });
-    const result = mergeConfigs([config]);
+    const result = mergeAdapterConfigs([config]);
     expect(result.agents).toHaveLength(1);
     expect(result.agents[0]!.name).toBe("reviewer");
   });
@@ -101,14 +101,14 @@ describe("mergeConfigs agents", () => {
       adapterId: "copilot",
       agents: [makeAgent("reviewer"), makeAgent("deployer")],
     });
-    const result = mergeConfigs([config1, config2]);
+    const result = mergeAdapterConfigs([config1, config2]);
     expect(result.agents).toHaveLength(2);
     expect(result.agents.map((a) => a.name)).toEqual(["reviewer", "deployer"]);
   });
 
   it("handles empty agents", () => {
     const config: PlatformConfig = makeConfig({ adapterId: "test", agents: [] });
-    const result = mergeConfigs([config]);
+    const result = mergeAdapterConfigs([config]);
     expect(result.agents).toEqual([]);
   });
 });
@@ -124,7 +124,7 @@ describe("mergeConfigs MCP", () => {
         redis: { command: "redis" },
       },
     });
-    const result = mergeConfigs([a, b]);
+    const result = mergeAdapterConfigs([a, b]);
     expect(result.mcpServers).toHaveProperty("postgres");
     expect(result.mcpServers).toHaveProperty("redis");
     expect(result.mcpServers.postgres.command).toBe("pg-a");
@@ -162,7 +162,7 @@ describe("commands merge", () => {
       },
     ];
 
-    const result = mergeConfigs(configs);
+    const result = mergeAdapterConfigs(configs);
     expect(result.commands).toHaveLength(2);
     expect(result.commands[0]!.content).toBe("Review from Claude");
     expect(result.commands[1]!.name).toBe("deploy");
@@ -181,7 +181,7 @@ describe("commands merge", () => {
       },
     ];
 
-    const result = mergeConfigs(configs);
+    const result = mergeAdapterConfigs(configs);
     expect(result.commands).toEqual([]);
   });
 
@@ -197,7 +197,7 @@ describe("commands merge", () => {
       commands: undefined as unknown as [],
     };
 
-    const result = mergeConfigs([configWithCommands, configWithoutCommands]);
+    const result = mergeAdapterConfigs([configWithCommands, configWithoutCommands]);
     expect(result.commands).toHaveLength(1);
     expect(result.commands[0]!.name).toBe("review");
   });
