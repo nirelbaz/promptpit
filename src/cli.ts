@@ -184,6 +184,9 @@ Examples:
   pit validate                # validate .promptpit/ in current dir
   pit validate ./my-stack     # validate a specific stack
   pit validate --json         # machine-readable output
+
+Enhanced validation powered by agnix (https://github.com/nichochar/agnix) when installed.
+Install with: npm i -D agnix
 `)
   .action(async (dir: string, opts: { json?: boolean }) => {
     try {

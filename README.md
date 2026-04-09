@@ -144,9 +144,14 @@ See [TODOS.md](TODOS.md) for the full roadmap. The big milestones:
 - **v0.4 (Stack Composer):** Stack composition via `extends` in stack.json, `pit diff`, `pit update`, `pit uninstall`, selective install/collect, AGENTS.md as primary input.
 - **v1.0 (Ecosystem Bridge):** Multi-source install (skills.sh, SkillsMP, cursor.directory), `pit publish`, `pit search`.
 
+## Acknowledgments
+
+`pit validate` uses [agnix](https://github.com/nichochar/agnix) for 385+ adapter-specific checks when installed. Thanks to the agnix team for building a thorough agent config linter.
+
 ## Related
 
 - [Agent Skills](https://agentskills.io) - Open spec for portable AI agent skills
+- [agnix](https://github.com/nichochar/agnix) - Agent config linter with 385+ checks
 - [skills.sh](https://skills.sh) - Vercel's skill package manager
 - [gstack](https://github.com/garrytan/gstack) - AI coding skill stack for Claude Code
 - [promptpit-starter](https://github.com/nirelbaz/promptpit-starter) - Starter kit with 7 skills for Claude Code and Cursor
