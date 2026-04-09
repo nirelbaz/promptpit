@@ -164,6 +164,7 @@ export async function collectStack(
     }
 
     // Replace bundle content with merged, strip extends
+    const { extends: _, instructionStrategy: __, ...cleanManifest } = merged.bundle.manifest;
     bundle.agentInstructions = merged.bundle.agentInstructions;
     bundle.skills = merged.bundle.skills;
     bundle.agents = merged.bundle.agents;
@@ -171,14 +172,7 @@ export async function collectStack(
     bundle.commands = merged.bundle.commands;
     bundle.mcpServers = merged.bundle.mcpServers;
     bundle.envExample = merged.bundle.envExample;
-    bundle.manifest = {
-      ...merged.bundle.manifest,
-      extends: undefined as unknown as string[],
-      instructionStrategy: undefined as unknown as "concatenate" | "override",
-    };
-    // Clean up undefined fields
-    delete (bundle.manifest as Record<string, unknown>).extends;
-    delete (bundle.manifest as Record<string, unknown>).instructionStrategy;
+    bundle.manifest = cleanManifest;
   }
 
   if (opts.dryRun) {
