@@ -74,7 +74,36 @@ export async function installStack(
       `Stack: ${bundle.manifest.name}@${bundle.manifest.version}`,
     );
 
-    // Resolve extends if present (no-args install with extends in stack.json)
+    // --save: save to extends FIRST, then resolve the full chain
+    if (opts.save) {
+      const localStackJsonPath = path.join(target, ".promptpit", "stack.json");
+      const localRaw = await readFileOrNull(localStackJsonPath);
+      if (!localRaw) {
+        throw new Error(
+          'No stack.json found. Run "pit init" first, or install without --save.',
+        );
+      }
+      const localManifest = JSON.parse(localRaw);
+      const existingExtends: string[] = localManifest.extends ?? [];
+      if (!existingExtends.includes(source)) {
+        localManifest.extends = [...existingExtends, source];
+        await writeFileEnsureDir(
+          localStackJsonPath,
+          JSON.stringify(localManifest, null, 2) + "\n",
+        );
+        log.info(`Added "${source}" to extends in .promptpit/stack.json`);
+      } else {
+        log.info(`"${source}" already in extends, skipping.`);
+      }
+
+      // Now install from local .promptpit (which has the updated extends)
+      resolvedSource = path.resolve(target, ".promptpit");
+      const updatedBundle = await readStack(resolvedSource);
+      // Replace bundle reference for extends resolution below
+      Object.assign(bundle, updatedBundle);
+    }
+
+    // Resolve extends if present
     let finalBundle = bundle;
     let resolvedExtendsEntries: Array<{
       source: string;
@@ -87,8 +116,14 @@ export async function installStack(
       const resolveSpin = spinner("Resolving extends...");
       const { resolveGraph, mergeGraph } = await import("../core/resolve.js");
       const graph = await resolveGraph(resolvedSource);
+      // For --save: skip root instructions in the marker because they're already
+      // in the target file (we just saved to extends and are re-installing from
+      // the local .promptpit/ which was previously collected from the target).
+      // For plain no-args install: include root instructions (the bundle may
+      // have been created manually, not from collect).
       const merged = mergeGraph(graph, {
         instructionStrategy: bundle.manifest.instructionStrategy ?? "concatenate",
+        skipRootInstructions: !!opts.save,
       });
       resolveSpin.succeed(
         `Resolved ${graph.nodes.length - 1} extended stack(s)`,
@@ -426,29 +461,6 @@ export async function installStack(
       const updated = upsertInstall(manifest, entry);
       await writeManifest(target, updated);
       manifestSpin.succeed("Manifest updated");
-    }
-
-    // --save: append source to extends in local stack.json
-    if (opts.save) {
-      const localStackJsonPath = path.join(target, ".promptpit", "stack.json");
-      const localRaw = await readFileOrNull(localStackJsonPath);
-      if (!localRaw) {
-        throw new Error(
-          'No stack.json found. Run "pit init" first, or install without --save.',
-        );
-      }
-      const localManifest = JSON.parse(localRaw);
-      const existingExtends: string[] = localManifest.extends ?? [];
-      if (!existingExtends.includes(source)) {
-        localManifest.extends = [...existingExtends, source];
-        await writeFileEnsureDir(
-          localStackJsonPath,
-          JSON.stringify(localManifest, null, 2) + "\n",
-        );
-        log.info(`Added "${source}" to extends in .promptpit/stack.json`);
-      } else {
-        log.info(`"${source}" already in extends, skipping.`);
-      }
     }
 
     // Write .env file with placeholders (don't overwrite existing)

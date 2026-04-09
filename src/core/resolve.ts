@@ -196,6 +196,9 @@ export interface MergedStack {
 
 export interface MergeOptions {
   instructionStrategy?: "concatenate" | "override";
+  /** Skip root node's instructions in the merge (for local installs where
+   *  the root's instructions are already in the target file outside the marker). */
+  skipRootInstructions?: boolean;
 }
 
 // --- Merge implementation ---
@@ -206,6 +209,7 @@ export function mergeGraph(
 ): MergedStack {
   const nodes = graph.nodes;
   const strategy = options?.instructionStrategy ?? "concatenate";
+  const skipRootInstructions = options?.skipRootInstructions ?? false;
 
   // Single-node optimization: return directly with empty conflicts/sources
   if (nodes.length === 1) {
@@ -240,7 +244,8 @@ export function mergeGraph(
     const bundle = node.bundle;
 
     // Instructions
-    if (bundle.agentInstructions) {
+    const isRoot = node === rootNode;
+    if (bundle.agentInstructions && !(isRoot && skipRootInstructions)) {
       if (strategy === "concatenate") {
         instructionParts.push(
           `## From ${sourceName}\n\n${bundle.agentInstructions}`,
@@ -338,8 +343,11 @@ export function mergeGraph(
 
   // Build instructions
   let agentInstructions: string;
-  if (strategy === "override") {
+  if (strategy === "override" && !skipRootInstructions) {
     agentInstructions = rootNode.bundle.agentInstructions;
+  } else if (strategy === "override" && skipRootInstructions) {
+    // Override + skip root = no instructions in marker (root's are already in the file)
+    agentInstructions = "";
   } else {
     agentInstructions = instructionParts.join("\n\n");
   }
