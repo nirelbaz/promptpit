@@ -14,8 +14,8 @@ import {
   writeFileEnsureDir,
   exists,
 } from "../shared/utils.js";
-import { readSkillsFromDir, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, buildInlineContent, warnMcpOverwrites, writeSkillsNative } from "./adapter-utils.js";
-import { readAgentsFromToml, readMcpFromToml, writeMcpToToml } from "./toml-utils.js";
+import { readSkillsFromDir, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, fileDryRunEntry, warnMcpOverwrites, writeSkillsNative } from "./adapter-utils.js";
+import { readAgentsFromToml, readMcpFromToml, writeMcpToToml, agentToCodexToml } from "./toml-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -93,14 +93,13 @@ async function write(
   const version = stack.manifest.version;
 
   try {
-    // Write instructions to AGENTS.md
-    // (skip when preferUniversal — Standards writes AGENTS.md as the universal file)
+    // Write instructions to AGENTS.md (agents go to native .codex/agents/*.toml)
+    // Skip when preferUniversal — Standards writes AGENTS.md as the universal file
     if (!opts.preferUniversal || !codexAdapter.capabilities.nativelyReads?.instructions) {
-      const content = buildInlineContent(stack.agentInstructions, stack.agents);
-      if (content) {
+      if (stack.agentInstructions) {
         const result = await writeWithMarkers(
           p.config,
-          content,
+          stack.agentInstructions,
           stackName,
           version,
           "codex",
@@ -114,6 +113,18 @@ async function write(
     }
 
     await writeSkillsNative(p.skills, stack.skills, opts, dryRunEntries, filesWritten);
+
+    // Write agents to .codex/agents/*.toml (native format)
+    for (const agent of stack.agents) {
+      const dest = path.join(p.agents!, `${agent.name}.toml`);
+      if (opts.dryRun) {
+        dryRunEntries.push(fileDryRunEntry(dest, await exists(dest), "translate to .toml"));
+      } else {
+        const tomlContent = agentToCodexToml(agent.content);
+        await writeFileEnsureDir(dest, tomlContent);
+        filesWritten.push(dest);
+      }
+    }
 
     if (Object.keys(stack.mcpServers).length > 0 && !opts.dryRun) {
       const existingToml = (await readFileOrNull(p.mcp)) ?? "";
@@ -144,7 +155,7 @@ export const codexAdapter: PlatformAdapter = {
     mcpRootKey: "mcp_servers",
     agentsmd: true,
     hooks: false,
-    agents: "inline",
+    agents: "native",
     commands: false,
     nativelyReads: { instructions: true },
   },

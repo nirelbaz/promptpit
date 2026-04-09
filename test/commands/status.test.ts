@@ -876,9 +876,14 @@ describe("pit status", () => {
     expect(output).toContain(".claude/agents/tester.md");
   });
 
-  it("inline adapters do not report agent drift separately (codex)", async () => {
+  it("codex reports per-file agent drift for native TOML agents", async () => {
     const dir = await makeTmpDir();
-    // Codex is an inline adapter — agents are embedded in instructions, no per-file check
+    // Codex is a native adapter — agents are .codex/agents/*.toml files
+
+    // Create the agent TOML file with content that won't match the stored hash
+    const agentsDir = path.join(dir, ".codex", "agents");
+    await mkdir(agentsDir, { recursive: true });
+    await writeFile(path.join(agentsDir, "reviewer.toml"), 'name = "reviewer"\ndescription = "Code reviewer"\n');
 
     const manifest: InstallManifest = {
       version: 1,
@@ -888,7 +893,7 @@ describe("pit status", () => {
         installedAt: new Date().toISOString(),
         adapters: {
           codex: {
-            agents: { reviewer: { hash: "sha256:abc" } },
+            agents: { reviewer: { hash: "sha256:mismatched" } },
           },
         },
       }],
@@ -897,9 +902,9 @@ describe("pit status", () => {
 
     const result = await computeStatus(dir);
     const adapter = result.stacks[0]!.adapters.find((a) => a.adapterId === "codex")!;
-    // No per-file agent checks for inline adapters — agentDetails stays empty
-    expect(adapter.agentDetails).toHaveLength(0);
-    expect(adapter.state).toBe("synced");
+    // Native adapter checks per-file agents — should detect drift (hash mismatch)
+    expect(adapter.agentDetails).toHaveLength(1);
+    expect(adapter.agentDetails[0].state).toBe("drifted");
   });
 
   it("detects real drift in Copilot MCP", async () => {

@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { readMcpFromToml, writeMcpToToml, readAgentsFromToml } from "../../src/adapters/toml-utils.js";
+import { readMcpFromToml, writeMcpToToml, readAgentsFromToml, agentToCodexToml } from "../../src/adapters/toml-utils.js";
+import { parse as parseToml } from "smol-toml";
 import { computeMcpServerHash } from "../../src/core/manifest.js";
 import type { McpConfig } from "../../src/shared/schema.js";
 
@@ -467,5 +468,103 @@ describe("readAgentsFromToml", () => {
     const fm = agents[0].frontmatter as Record<string, unknown>;
     expect(fm.model_reasoning_effort).toBe("high");
     expect(fm.sandbox_mode).toBe("read-only");
+  });
+});
+
+describe("agentToCodexToml", () => {
+  it("converts agent with all standard fields to valid TOML", () => {
+    const md = `---
+name: reviewer
+description: Security code reviewer
+model: gpt-5.4
+tools:
+  - Read
+  - Grep
+---
+
+Review code for OWASP vulnerabilities.
+`;
+    const toml = agentToCodexToml(md);
+    const parsed = parseToml(toml) as Record<string, unknown>;
+    expect(parsed.name).toBe("reviewer");
+    expect(parsed.description).toBe("Security code reviewer");
+    expect(parsed.model).toBe("gpt-5.4");
+    expect(parsed.tools).toEqual(["Read", "Grep"]);
+    expect(parsed.developer_instructions).toBe("Review code for OWASP vulnerabilities.");
+  });
+
+  it("omits developer_instructions when body is empty", () => {
+    const md = `---
+name: helper
+description: A helpful assistant
+model: gpt-5.4
+---
+`;
+    const toml = agentToCodexToml(md);
+    const parsed = parseToml(toml) as Record<string, unknown>;
+    expect(parsed.name).toBe("helper");
+    expect(parsed.description).toBe("A helpful assistant");
+    expect(parsed).not.toHaveProperty("developer_instructions");
+  });
+
+  it("preserves Codex-specific passthrough fields", () => {
+    const md = `---
+name: explorer
+description: Codebase explorer
+model: gpt-5.4
+model_reasoning_effort: high
+sandbox_mode: read-only
+---
+
+Explore the codebase thoroughly.
+`;
+    const toml = agentToCodexToml(md);
+    const parsed = parseToml(toml) as Record<string, unknown>;
+    expect(parsed.model_reasoning_effort).toBe("high");
+    expect(parsed.sandbox_mode).toBe("read-only");
+    expect(parsed.developer_instructions).toBe("Explore the codebase thoroughly.");
+  });
+
+  it("round-trips through read → write → read", async () => {
+    // Create a temp dir with a TOML agent
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-toml-rt-"));
+    await writeFile(
+      path.join(dir, "researcher.toml"),
+      'name = "researcher"\ndescription = "Research agent"\nmodel = "gpt-5.4"\nmodel_reasoning_effort = "high"\n\ndeveloper_instructions = """\nVerify APIs against docs.\nCite exact sources.\n"""\n',
+    );
+
+    // Read TOML → portable format
+    const agents = await readAgentsFromToml(dir);
+    expect(agents).toHaveLength(1);
+
+    // Write portable → TOML
+    const toml = agentToCodexToml(agents[0].content);
+    const parsed = parseToml(toml) as Record<string, unknown>;
+
+    expect(parsed.name).toBe("researcher");
+    expect(parsed.description).toBe("Research agent");
+    expect(parsed.model).toBe("gpt-5.4");
+    expect(parsed.model_reasoning_effort).toBe("high");
+    expect(typeof parsed.developer_instructions).toBe("string");
+    expect((parsed.developer_instructions as string)).toContain("Verify APIs against docs.");
+
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("handles agent with tools array correctly", () => {
+    const md = `---
+name: coder
+description: Coding agent
+tools:
+  - Read
+  - Edit
+  - Bash
+---
+
+Write clean code.
+`;
+    const toml = agentToCodexToml(md);
+    const parsed = parseToml(toml) as Record<string, unknown>;
+    expect(parsed.tools).toEqual(["Read", "Edit", "Bash"]);
   });
 });
