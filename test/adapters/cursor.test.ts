@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { cursorAdapter, skillToMdc, ruleToMdc } from "../../src/adapters/cursor.js";
+import { cursorAdapter } from "../../src/adapters/cursor.js";
 import path from "node:path";
 import { mkdtemp, rm, readFile, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -262,20 +262,33 @@ describe("cursor inline agent writing", () => {
   });
 });
 
-describe("skillToMdc", () => {
-  it("converts SKILL.md content to .mdc format", () => {
-    const skillMd = `---
-name: browse
-description: Headless browser for QA
-user-invocable: true
----
+describe("cursor write skills", () => {
+  const tmpDirs: string[] = [];
+  afterEach(async () => {
+    for (const d of tmpDirs) await rm(d, { recursive: true, force: true });
+    tmpDirs.length = 0;
+  });
 
-# Browse Skill
+  it("writes skills to .cursor/skills/<name>/SKILL.md (native format)", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-cursor-skill-write-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, ".cursorrules"), "");
 
-Navigate pages and take screenshots.`;
+    const bundle = await readStack(path.resolve("test/__fixtures__/stacks/valid-stack"));
+    await cursorAdapter.write(target, bundle, {});
 
-    const mdc = skillToMdc(skillMd, "browse");
-    expect(mdc).toContain("description: Headless browser for QA");
-    expect(mdc).toContain("Navigate pages");
+    // Skill should be in .cursor/skills/, not .cursor/rules/
+    const skillContent = await readFile(
+      path.join(target, ".cursor", "skills", "browse", "SKILL.md"), "utf-8",
+    );
+    expect(skillContent).toContain("name: browse");
+    expect(skillContent).toContain("description: Headless browser");
+
+    // Should NOT create .mdc in rules directory
+    const { readdir } = await import("node:fs/promises");
+    const rulesDir = path.join(target, ".cursor", "rules");
+    const ruleFiles = await readdir(rulesDir).catch(() => [] as string[]);
+    const skillMdc = ruleFiles.filter((f) => f === "browse.mdc");
+    expect(skillMdc).toHaveLength(0);
   });
 });
