@@ -34,8 +34,11 @@ describe("installStack with extends", () => {
     await installStack(".promptpit", target, {});
 
     const claudeMd = await readFile(path.join(target, "CLAUDE.md"), "utf-8");
+    // Extended stack's instructions appear in the marker
     expect(claudeMd).toContain("OWASP");
-    expect(claudeMd).toContain("React 19");
+    // Root stack's instructions are NOT in the marker (they're the target file's own content)
+    // skipRootInstructions prevents recursive content duplication (BUG 28)
+    expect(claudeMd).not.toContain("React 19");
   });
 
   it("no-args install without extends works unchanged (regression)", async () => {

@@ -82,3 +82,45 @@ Available skills: `/office-hours`, `/plan-ceo-review`, `/plan-eng-review`, `/pla
 1. Create `src/adapters/{tool}.ts` — implement `PlatformAdapter` interface using functions from `adapter-utils.ts`
 2. Register in `src/adapters/registry.ts`
 3. Contract tests auto-include it — add a fixture setup in `ADAPTER_FIXTURES` in `contract.test.ts`
+
+<!-- promptpit:start:promptpit:0.1.0:claude-code -->
+## From promptpit-starter
+
+# Coding defaults
+
+## Code style
+
+- Explicit over clever. If someone reading your code has to pause and think about what a line does, rewrite it.
+- Small functions. If a function doesn't fit on a screen, split it.
+- Name things for what they do, not how they work. `getUserEmail` not `queryDatabaseForEmailField`.
+- No abbreviations in names unless they're universal (url, id, html). `msg` is not universal.
+
+## Git
+
+- Small, focused commits. One logical change per commit.
+- Write commit messages that explain why, not what. The diff shows what.
+- Conventional commits format: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`.
+
+## Testing
+
+- Write tests for new code. No exceptions.
+- Test behavior, not implementation. Your test should still pass if you refactor the internals.
+- One assertion per test when possible. A test named "handles edge cases" with 8 assertions is 8 tests pretending to be one.
+
+## Error handling
+
+- Handle errors at system boundaries (user input, API calls, file I/O). Trust internal code.
+- Never catch an error just to log it and rethrow. Either handle it or let it propagate.
+- Error messages should tell the user what happened and what to do about it.
+
+## Dependencies
+
+- Don't add a dependency for something you can write in 20 lines.
+- When you do add a dependency, check: is it maintained? Does it have known vulnerabilities? How big is it?
+
+## Refactoring
+
+- Don't refactor code you're not already changing. Stay focused.
+- Extract a function when you see the same logic three or more times.
+- Reduce nesting. Early returns over deeply nested if/else.
+<!-- promptpit:end:promptpit -->

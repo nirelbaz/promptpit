@@ -116,14 +116,13 @@ export async function installStack(
       const resolveSpin = spinner("Resolving extends...");
       const { resolveGraph, mergeGraph } = await import("../core/resolve.js");
       const graph = await resolveGraph(resolvedSource);
-      // For --save: skip root instructions in the marker because they're already
-      // in the target file (we just saved to extends and are re-installing from
-      // the local .promptpit/ which was previously collected from the target).
-      // For plain no-args install: include root instructions (the bundle may
-      // have been created manually, not from collect).
+      // Skip root instructions when installing from local .promptpit/ — they're
+      // already in the target file (produced by pit collect from the same file).
+      // For external installs (github: or other paths), include all instructions.
+      const isLocalSource = source === ".promptpit" || !!opts.save;
       const merged = mergeGraph(graph, {
         instructionStrategy: bundle.manifest.instructionStrategy ?? "concatenate",
-        skipRootInstructions: !!opts.save,
+        skipRootInstructions: isLocalSource,
       });
       resolveSpin.succeed(
         `Resolved ${graph.nodes.length - 1} extended stack(s)`,
