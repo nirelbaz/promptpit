@@ -56,17 +56,19 @@ program
   .option("-o, --output <path>", "Output directory", ".promptpit")
   .option("--dry-run", "Show what would be collected without writing")
   .option("-v, --verbose", "Show full diffs in dry-run output")
+  .option("--include-extends", "Fetch and flatten extends into the bundle")
   .addHelpText("after", `
 Examples:
   pit collect                 # bundle from current directory
   pit collect --dry-run       # preview what would be bundled
   pit collect --dry-run -v    # preview with full diffs
+  pit collect --include-extends  # flatten extends into the bundle
 `)
-  .action(async (dir: string, opts: { output: string; dryRun?: boolean; verbose?: boolean }) => {
+  .action(async (dir: string, opts: { output: string; dryRun?: boolean; verbose?: boolean; includeExtends?: boolean }) => {
     try {
       const root = path.resolve(dir);
       const outputDir = path.resolve(root, opts.output);
-      await collectStack(root, outputDir, { dryRun: opts.dryRun, verbose: opts.verbose });
+      await collectStack(root, outputDir, { dryRun: opts.dryRun, verbose: opts.verbose, includeExtends: opts.includeExtends });
     } catch (err: unknown) {
       if (err instanceof Error) {
         log.error(err.message);
@@ -95,6 +97,7 @@ program
     "--prefer-universal",
     "Use universal files (.mcp.json, AGENTS.md) instead of tool-specific equivalents",
   )
+  .option("--save", "Add the source to extends in .promptpit/stack.json")
   .addHelpText("after", `
 Examples:
   pit install                          # from .promptpit/ in current dir
@@ -102,6 +105,7 @@ Examples:
   pit install github:org/stack@v1.0    # from GitHub
   pit install --dry-run                # preview without writing
   pit install --global                 # install to user-level paths
+  pit install github:org/stack --save  # install + add to extends
 `)
   .action(
     async (
@@ -114,6 +118,7 @@ Examples:
         verbose?: boolean;
         forceStandards?: boolean;
         preferUniversal?: boolean;
+        save?: boolean;
       },
     ) => {
       try {
@@ -136,13 +141,15 @@ program
   .option("--json", "Output as JSON (porcelain mode)")
   .option("--short", "One-line summary per stack")
   .option("-v, --verbose", "Show detailed per-adapter inventory with file paths")
+  .option("--skip-upstream", "Skip checking upstream extends for updates (offline mode)")
   .addHelpText("after", `
 Examples:
   pit status                  # show sync state
   pit status --json           # machine-readable output
   pit status --short          # one-line summary
+  pit status --skip-upstream  # skip network checks (offline mode)
 `)
-  .action(async (dir: string, opts: { json?: boolean; short?: boolean; verbose?: boolean }) => {
+  .action(async (dir: string, opts: { json?: boolean; short?: boolean; verbose?: boolean; skipUpstream?: boolean }) => {
     try {
       const root = path.resolve(dir);
       await statusCommand(root, opts);
