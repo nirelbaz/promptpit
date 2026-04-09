@@ -129,6 +129,19 @@ describe("Codex CLI adapter", () => {
       expect(config.skills).toEqual([]);
       expect(config.mcpServers).toEqual({});
     });
+
+    it("prefers AGENTS.override.md over AGENTS.md", async () => {
+      await writeFile(path.join(tmpDir, "AGENTS.md"), "# Base instructions");
+      await writeFile(path.join(tmpDir, "AGENTS.override.md"), "# Override instructions");
+      const config = await codexAdapter.read(tmpDir);
+      expect(config.agentInstructions).toBe("# Override instructions");
+    });
+
+    it("falls back to AGENTS.md when no override exists", async () => {
+      await writeFile(path.join(tmpDir, "AGENTS.md"), "# Base instructions");
+      const config = await codexAdapter.read(tmpDir);
+      expect(config.agentInstructions).toBe("# Base instructions");
+    });
   });
 
   describe("write", () => {

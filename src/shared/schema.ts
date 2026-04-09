@@ -35,6 +35,19 @@ const stringOrArray = z.preprocess(
   z.array(z.string()),
 );
 
+/**
+ * Skill frontmatter schema.
+ *
+ * **Categorization policy:** Fields from the Agent Skills spec, shared by 2+
+ * tools, or commonly needed for faithful round-trip translation are explicitly
+ * typed. Truly exotic tool-specific fields pass through via `.passthrough()`.
+ *
+ * Typed: name, description, license, metadata, allowed-tools, context, agent,
+ *   user-invocable, model (existing); argument-hint, disable-model-invocation
+ *   (Agent Skills spec); effort, hooks, paths, shell (Claude Code, typed for
+ *   validation since they affect skill behavior).
+ * Passthrough: any other tool-specific fields.
+ */
 export const skillFrontmatterSchema = z.object({
   name: z.string().min(1),
   description: z.string().min(1),
@@ -45,17 +58,49 @@ export const skillFrontmatterSchema = z.object({
   agent: z.boolean().optional(),
   "user-invocable": z.boolean().optional(),
   model: z.string().optional(),
-});
+  // Additional typed fields (Agent Skills spec, or commonly needed for translation)
+  "argument-hint": z.string().optional(),
+  "disable-model-invocation": z.boolean().optional(),
+  effort: z.string().optional(),
+  hooks: z.unknown().optional(),
+  paths: stringOrArray.optional(),
+  shell: z.string().optional(),
+}).passthrough();
 
 export type SkillFrontmatter = z.infer<typeof skillFrontmatterSchema>;
 
 // --- Agent Frontmatter ---
 
+/**
+ * Agent frontmatter schema.
+ *
+ * **Categorization policy:** Fields shared by 2+ tools, affecting translation
+ * logic, or commonly needed for faithful round-trip preservation are explicitly
+ * typed. Truly exotic tool-specific fields (permissionMode, isolation,
+ * sandbox_mode, nickname_candidates, etc.) pass through via `.passthrough()`
+ * — they're preserved during round-trips but not validated.
+ *
+ * Typed: name, description, tools, model (core); disable-model-invocation,
+ *   user-invocable (Copilot + Claude Code skills); target, metadata (Copilot);
+ *   mcp-servers (Copilot + Claude Code); effort (Claude Code + Codex concept);
+ *   maxTurns (Claude Code, affects agent behavior).
+ * Passthrough: permissionMode, skills, background, isolation, color,
+ *   initialPrompt, disallowedTools, memory, nickname_candidates, sandbox_mode,
+ *   model_reasoning_effort, developer_instructions.
+ */
 export const agentFrontmatterSchema = z.object({
   name: z.string().min(1),
   description: z.string().min(1),
   tools: stringOrArray.optional(),
   model: z.string().optional(),
+  // Additional typed fields (cross-tool or affecting translation/behavior)
+  "disable-model-invocation": z.boolean().optional(),
+  "user-invocable": z.boolean().optional(),
+  target: z.string().optional(),
+  "mcp-servers": z.record(z.unknown()).optional(),
+  metadata: z.record(z.unknown()).optional(),
+  effort: z.string().optional(),
+  maxTurns: z.number().optional(),
 }).passthrough();
 
 export type AgentFrontmatter = z.infer<typeof agentFrontmatterSchema>;

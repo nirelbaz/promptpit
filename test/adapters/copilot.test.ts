@@ -104,6 +104,44 @@ describe("agent translation", () => {
     expect(result).toContain("model:");
     expect(result).toContain("Write code.");
   });
+
+  it("passes through all supported Copilot agent frontmatter fields", () => {
+    const content = `---
+name: secure-agent
+description: Security scanning agent
+tools:
+  - Read
+  - Grep
+model: gpt-4o
+target: github-copilot
+disable-model-invocation: true
+user-invocable: false
+mcp-servers:
+  security-scanner:
+    command: npx
+    args: ["-y", "security-mcp"]
+metadata:
+  category: security
+  version: "2.0"
+---
+
+Scan for vulnerabilities.
+`;
+    const result = agentToGitHubAgent(content);
+    expect(result).toContain("target:");
+    expect(result).toContain("disable-model-invocation:");
+    expect(result).toContain("user-invocable:");
+    expect(result).toContain("mcp-servers:");
+    expect(result).toContain("metadata:");
+    expect(result).toContain("Scan for vulnerabilities.");
+  });
+
+  it("handles agent content with no frontmatter", () => {
+    const content = "Review all pull requests for security issues.\n";
+    const result = agentToGitHubAgent(content);
+    expect(result).not.toContain("---");
+    expect(result).toContain("Review all pull requests");
+  });
 });
 
 describe("agent read/write", () => {
@@ -357,6 +395,27 @@ describe("promptMdToCommand", () => {
     const result = promptMdToCommand(input);
     expect(result).toBe("Do something");
     expect(result).not.toContain("---");
+  });
+});
+
+describe("skill reading", () => {
+  it("reads skills from .github/skills/ during collect", async () => {
+    const skillDir = path.join(tmpDir, ".github", "skills", "browse");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: browse\ndescription: Headless browser for QA\n---\n\n# Browse\n\nNavigate pages.\n",
+    );
+    const config = await copilotAdapter.read(tmpDir);
+    expect(config.skills).toHaveLength(1);
+    expect(config.skills[0]!.name).toBe("browse");
+  });
+
+  it("returns empty skills when .github/skills/ does not exist", async () => {
+    await mkdir(path.join(tmpDir, ".github"), { recursive: true });
+    await writeFile(path.join(tmpDir, ".github", "copilot-instructions.md"), "# Test");
+    const config = await copilotAdapter.read(tmpDir);
+    expect(config.skills).toEqual([]);
   });
 });
 

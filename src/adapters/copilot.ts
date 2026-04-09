@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import fg from "fast-glob";
 import matter from "gray-matter";
 import yaml from "js-yaml";
-import { SAFE_MATTER_OPTIONS, parseJsonc, readCommandsFromDir, detectCommandParamSyntax } from "./adapter-utils.js";
+import { SAFE_MATTER_OPTIONS, parseJsonc, readCommandsFromDir, readSkillsFromDir, detectCommandParamSyntax } from "./adapter-utils.js";
 import type {
   PlatformAdapter,
   PlatformConfig,
@@ -53,20 +53,18 @@ export function skillToInstructionsMd(skillContent: string): string {
   return `---\napplyTo: "${applyTo}"\n---\n\n${parsed.content.trim()}\n`;
 }
 
-// Preserve most agent frontmatter for Copilot — model is supported in IDE context
-// (VS Code, JetBrains, Eclipse, Xcode) but stripped by cloud Coding Agent
+// Pass through all agent frontmatter for Copilot — it ignores unknown fields gracefully.
+// model is supported in IDE context (VS Code, JetBrains, Eclipse, Xcode) but stripped
+// by the cloud Coding Agent, which is Copilot's concern, not ours.
 export function agentToGitHubAgent(agentContent: string): string {
   const parsed = matter(agentContent, SAFE_MATTER_OPTIONS as never);
   const fm = parsed.data as Record<string, unknown>;
 
-  const copilotFm: Record<string, unknown> = {};
-  if (fm.name) copilotFm.name = fm.name;
-  if (fm.description) copilotFm.description = fm.description;
-  if (fm.tools) copilotFm.tools = fm.tools;
-  if (fm.model) copilotFm.model = fm.model;
+  if (Object.keys(fm).length === 0) {
+    return parsed.content.trim() + "\n";
+  }
 
-  const yamlStr = yaml.dump(copilotFm, { schema: yaml.JSON_SCHEMA }).trim();
-
+  const yamlStr = yaml.dump(fm, { schema: yaml.JSON_SCHEMA }).trim();
   return `---\n${yamlStr}\n---\n\n${parsed.content.trim()}\n`;
 }
 
@@ -152,6 +150,10 @@ async function read(root: string): Promise<PlatformConfig> {
   // Read both *.agent.md and plain *.md — real-world repos use both formats
   const agents = await readAgentsFromDir(p.agents!, { glob: "*.md", ext: ".agent.md" });
 
+  // Read skills from .github/skills/ (Copilot's native Agent Skills location)
+  const nativeSkillsDir = path.join(root, ".github", "skills");
+  const skills = await readSkillsFromDir(nativeSkillsDir, { includeStandalone: true });
+
   // Read scoped instructions as rules
   const rules: RuleEntry[] = [];
   if (await exists(p.rules)) {
@@ -204,7 +206,7 @@ async function read(root: string): Promise<PlatformConfig> {
   return {
     adapterId: "copilot",
     agentInstructions,
-    skills: [],
+    skills,
     agents,
     mcpServers,
     rules,
