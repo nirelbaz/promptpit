@@ -1,6 +1,6 @@
 import path from "node:path";
 import { detectAdapters } from "../adapters/registry.js";
-import { mergeConfigs, hasVersionPins } from "../core/merger.js";
+import { mergeAdapterConfigs, hasVersionPins } from "../core/merger.js";
 import { stripSecrets } from "../core/security.js";
 import { writeStack } from "../core/stack.js";
 import { stripAllMarkerBlocks } from "../shared/markers.js";
@@ -100,7 +100,7 @@ export async function collectStack(
 
   readSpin.succeed("Configurations read");
 
-  const mergeResult = mergeConfigs(configs);
+  const mergeResult = mergeAdapterConfigs(configs);
 
   if (mergeResult.warnings && mergeResult.warnings.length > 0) {
     for (const w of mergeResult.warnings) {

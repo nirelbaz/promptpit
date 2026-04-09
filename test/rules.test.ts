@@ -6,7 +6,7 @@ import { readRulesFromDir } from "../src/adapters/adapter-utils.js";
 import { ruleToClaudeFormat } from "../src/adapters/claude-code.js";
 import { ruleToMdc } from "../src/adapters/cursor.js";
 import { ruleToInstructionsMd } from "../src/adapters/copilot.js";
-import { mergeConfigs } from "../src/core/merger.js";
+import { mergeAdapterConfigs } from "../src/core/merger.js";
 import { ruleFrontmatterSchema } from "../src/shared/schema.js";
 import type { PlatformConfig } from "../src/adapters/types.js";
 import type { RuleEntry } from "../src/shared/schema.js";
@@ -251,7 +251,7 @@ describe("merger rules dedup", () => {
     const a = makeConfig({ adapterId: "claude-code", rules: [makeRuleEntry("testing")] });
     const b = makeConfig({ adapterId: "cursor", rules: [makeRuleEntry("testing")] });
 
-    const merged = mergeConfigs([a, b]);
+    const merged = mergeAdapterConfigs([a, b]);
     expect(merged.rules).toHaveLength(1);
     expect(merged.rules[0].name).toBe("testing");
   });
@@ -260,7 +260,7 @@ describe("merger rules dedup", () => {
     const a = makeConfig({ adapterId: "claude-code", rules: [makeRuleEntry("testing")] });
     const b = makeConfig({ adapterId: "cursor", rules: [makeRuleEntry("frontend")] });
 
-    const merged = mergeConfigs([a, b]);
+    const merged = mergeAdapterConfigs([a, b]);
     expect(merged.rules).toHaveLength(2);
   });
 
@@ -273,7 +273,7 @@ describe("merger rules dedup", () => {
     const a = makeConfig({ adapterId: "a", rules: [ruleA] });
     const b = makeConfig({ adapterId: "b", rules: [ruleB] });
 
-    const merged = mergeConfigs([a, b]);
+    const merged = mergeAdapterConfigs([a, b]);
     expect(merged.rules[0].content).toBe("first");
   });
 });
