@@ -22,6 +22,8 @@ export const stackManifestSchema = z.object({
   commands: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
   compatibility: z.array(z.string()).optional(),
+  extends: z.array(z.string()).optional(),
+  instructionStrategy: z.enum(["concatenate", "override"]).optional(),
 });
 
 export type StackManifest = z.infer<typeof stackManifestSchema>;
@@ -234,12 +236,20 @@ const adapterInstallSchema = z.object({
 
 export type AdapterInstallRecord = z.infer<typeof adapterInstallSchema>;
 
+const resolvedExtendsEntrySchema = z.object({
+  source: z.string(),
+  version: z.string().optional(),
+  resolvedCommit: z.string().optional(),
+  resolvedAt: z.string(),
+});
+
 const installEntrySchema = z.object({
   stack: z.string().min(1),
   stackVersion: z.string(),
   source: z.string().optional(),
   installedAt: z.string(),
   installMode: z.enum(["force-standards", "prefer-universal"]).optional(),
+  resolvedExtends: z.array(resolvedExtendsEntrySchema).optional(),
   adapters: z.record(adapterInstallSchema),
 });
 
