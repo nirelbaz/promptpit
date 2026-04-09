@@ -25,6 +25,10 @@
 
 ~~**BUG 26:** Validator CC-AG-009/CC-AG-003 false positives on Copilot/Codex-native tool and model names. Validator should be platform-aware or skip tool/model validation for non-Claude-origin agents.~~ **Completed:** v0.3.12 (2026-04-09)
 
+**BUG 27:** `pit install --save` installs content AND saves to extends. A subsequent `pit install` (no-args, resolving extends) creates a second marker block without removing the first. Result: the extended stack's instructions appear twice in CLAUDE.md — once from the direct install and once from the merged install. Fix: when `pit install` resolves extends and writes the merged marker, it should remove any individual stack markers that are now subsumed by the merged result. Alternatively, `--save` should only save (not install), or should clean up its own marker before the extends-resolved install replaces it.
+
+**BUG 28:** When `pit install` resolves extends and merges instructions, the merged content includes the repo's own collected instructions (from `agent.promptpit.md`). These are a copy of CLAUDE.md (produced by `pit collect`). When written back into CLAUDE.md as a marker block, CLAUDE.md effectively contains itself — creating recursive content duplication. Fix: the extends-resolved install should only write the EXTENDED stacks' instructions into the marker block, not the local stack's own instructions (which are already in the file outside the marker). Or `mergeGraph` should exclude the root node's instructions from the merge when the root is the local `.promptpit/`.
+
 ## Adapter Audit Findings
 
 Discovered via `/audit-adapters` using the AI Stack Expert knowledge base. See `docs/knowledge/` for per-tool evidence.
