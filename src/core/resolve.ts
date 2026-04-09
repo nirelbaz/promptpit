@@ -72,7 +72,8 @@ export async function resolveGraph(
 
   try {
     // Walk the root stack's extends (adds all dependencies deepest-first)
-    await walk(stackDir, bundle, 0, []);
+    // Seed chain with root so cycle errors show: root → A → B → root
+    await walk(stackDir, bundle, 0, [path.resolve(stackDir)]);
 
     // Add root node last (merge order: deepest deps first, root last)
     result.push({ source: stackDir, stackDir, bundle, depth: 0 });
