@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.13 (2026-04-09)
+
+### Added
+
+- Codex agents are now written as native `.codex/agents/*.toml` files instead of being inlined in AGENTS.md. Structured fields like `sandbox_mode`, `model_reasoning_effort`, and `mcp_servers` are preserved instead of silently dropped.
+- Copilot agent translation now passes through all frontmatter fields (`target`, `disable-model-invocation`, `user-invocable`, `mcp-servers`, `metadata`) instead of dropping them.
+- `pit collect` now reads skills from Copilot's `.github/skills/` directory, which were previously invisible during collection.
+- Codex `AGENTS.override.md` is now read during collect with proper precedence over `AGENTS.md`.
+- New Claude Code agent and skill frontmatter fields are now typed in the Zod schema instead of relying on `.passthrough()`.
+
+### Changed
+
+- Multi-adapter dedup integration tests added, covering install mode overrides, manifest correctness, and full lifecycle scenarios.
+
 ## 0.3.12 (2026-04-09)
 
 ### Fixed
