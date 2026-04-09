@@ -110,14 +110,20 @@ export async function resolveGraph(
       );
     }
 
-    // Pre-fetch all siblings in parallel (resolve GitHub clones + local reads)
+    // Filter out already-visited entries before fetching (avoids wasted clones for diamond deps)
+    const entriesToFetch = extendsEntries.filter((entry) => {
+      const normalized = normalizeSource(entry, currentDir);
+      return !visited.has(normalized);
+    });
+
+    // Pre-fetch unvisited siblings in parallel (resolve GitHub clones + local reads)
     const fetched = await Promise.all(
-      extendsEntries.map((entry) => fetchEntry(entry, currentDir)),
+      entriesToFetch.map((entry) => fetchEntry(entry, currentDir)),
     );
 
     // Process in declared order (depth-first)
-    for (let i = 0; i < extendsEntries.length; i++) {
-      const entry = extendsEntries[i]!;
+    for (let i = 0; i < entriesToFetch.length; i++) {
+      const entry = entriesToFetch[i]!;
       const { normalized, stackDir: depDir, bundle: depBundle, resolvedCommit } = fetched[i]!;
 
       // Cycle detection: check the current DFS path
@@ -128,7 +134,7 @@ export async function resolveGraph(
         );
       }
 
-      // Diamond dedup: already fully processed this node
+      // Diamond dedup: may have been visited during recursion of a prior sibling
       if (visited.has(normalized)) {
         continue;
       }

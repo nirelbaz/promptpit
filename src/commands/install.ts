@@ -69,7 +69,7 @@ export async function installStack(
   try {
     const spin = spinner("Reading stack bundle...");
 
-    const bundle = await readStack(resolvedSource);
+    let bundle = await readStack(resolvedSource);
     spin.succeed(
       `Stack: ${bundle.manifest.name}@${bundle.manifest.version}`,
     );
@@ -99,8 +99,7 @@ export async function installStack(
       // Now install from local .promptpit (which has the updated extends)
       resolvedSource = path.resolve(target, ".promptpit");
       const updatedBundle = await readStack(resolvedSource);
-      // Replace bundle reference for extends resolution below
-      Object.assign(bundle, updatedBundle);
+      bundle = updatedBundle;
     }
 
     // Resolve extends if present
