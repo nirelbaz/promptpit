@@ -112,10 +112,16 @@ function findSectionRange(
     }
   }
 
-  // Exclude trailing blank lines so spacing between sections is preserved
+  // Exclude trailing blank/comment lines so inter-section comments
+  // (e.g. commented-out servers between active ones) are preserved
   let end = nextHeader;
-  while (end > start + 1 && lines[end - 1]!.trim() === "") {
-    end--;
+  while (end > start + 1) {
+    const line = lines[end - 1]!.trim();
+    if (line === "" || line.startsWith("#")) {
+      end--;
+    } else {
+      break;
+    }
   }
 
   return { start, end };

@@ -300,6 +300,32 @@ args = ["-y", "server-fs"]
     expect(result).toContain("[mcp_servers.fs] # file system server");
   });
 
+  it("preserves commented-out servers between active sections", () => {
+    const existing = `[mcp_servers.active]
+command = "npx"
+args = ["active-server"]
+
+# [mcp_servers.disabled]
+# command = "npx"
+# args = ["disabled-server"]
+
+[features]
+multi_agent = true
+`;
+    const servers: McpConfig = {
+      active: { command: "npx", args: ["active-v2"] },
+    };
+    const result = writeMcpToToml(existing, servers);
+    // Commented-out server preserved
+    expect(result).toContain("# [mcp_servers.disabled]");
+    expect(result).toContain('# command = "npx"');
+    // Features section preserved
+    expect(result).toContain("[features]");
+    expect(result).toContain("multi_agent = true");
+    // Active server updated
+    expect(result).toContain('args = ["active-v2"]');
+  });
+
   it("BUG-23 end-to-end: hash stability through write→read round-trip", () => {
     const existing = `# My Codex configuration
 model = "o4-mini"
