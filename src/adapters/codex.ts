@@ -61,8 +61,14 @@ async function detect(root: string): Promise<DetectionResult> {
 async function read(root: string): Promise<PlatformConfig> {
   const p = projectPaths(root);
 
+  // Codex uses AGENTS.override.md when present (takes precedence over AGENTS.md)
+  const overridePath = path.join(root, "AGENTS.override.md");
+  const overrideContent = await readFileOrNull(overridePath);
+
   const [agentInstructions, skills, tomlContent, agents] = await Promise.all([
-    readFileOrNull(p.config).then((r) => r ?? ""),
+    overrideContent != null
+      ? Promise.resolve(overrideContent)
+      : readFileOrNull(p.config).then((r) => r ?? ""),
     readSkillsFromDir(p.skills, { includeStandalone: true }),
     readFileOrNull(p.mcp).then((r) => r ?? ""),
     readAgentsFromToml(p.agents),
