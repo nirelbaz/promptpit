@@ -13,6 +13,7 @@ import {
 } from "../shared/schema.js";
 import { validateEnvNames } from "../core/security.js";
 import { readFileOrNull } from "../shared/utils.js";
+import { parseGitHubSource } from "../sources/github.js";
 import fg from "fast-glob";
 
 const execFileAsync = promisify(execFileCb);
@@ -53,6 +54,7 @@ export const CLAUDE_AGENT_RULES = new Set(["CC-AG-003", "CC-AG-009"]);
 export async function validateStack(stackDir: string): Promise<ValidateResult> {
   const diagnostics: Diagnostic[] = [];
   let compatibility: string[] | undefined;
+  let manifest: { extends?: string[]; instructionStrategy?: string } | undefined;
 
   // Fire agnix early so subprocess startup overlaps with file I/O
   const agnixPromise = runAgnix(stackDir);
@@ -91,6 +93,7 @@ export async function validateStack(stackDir: string): Promise<ValidateResult> {
         }
       } else {
         compatibility = result.data.compatibility;
+        manifest = result.data;
       }
     }
   }
@@ -241,6 +244,38 @@ export async function validateStack(stackDir: string): Promise<ValidateResult> {
     for (const name of validateEnvNames(envVars)) {
       addDiag(diagnostics, ".env.example", "warning", `Dangerous env name: ${name}`);
     }
+  }
+
+  // --- extends entries (syntax only, no resolution) ---
+  if (manifest?.extends) {
+    const seen = new Set<string>();
+    for (const entry of manifest.extends) {
+      if (seen.has(entry)) {
+        addDiag(diagnostics, "stack.json", "warning", `Duplicate extends entry: "${entry}"`);
+      }
+      seen.add(entry);
+
+      const gh = parseGitHubSource(entry);
+      if (!gh && !entry.startsWith(".") && !entry.startsWith("/")) {
+        addDiag(
+          diagnostics,
+          "stack.json",
+          "warning",
+          `Extends entry "${entry}" is not a recognized format. ` +
+          `Expected github:owner/repo[@ref] or a relative/absolute path.`,
+        );
+      }
+    }
+  }
+
+  // --- instructionStrategy without extends ---
+  if (manifest?.instructionStrategy && (!manifest.extends || manifest.extends.length === 0)) {
+    addDiag(
+      diagnostics,
+      "stack.json",
+      "warning",
+      `instructionStrategy "${manifest.instructionStrategy}" is set but extends is empty — it has no effect.`,
+    );
   }
 
   // --- agnix (optional) ---
