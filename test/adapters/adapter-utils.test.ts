@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, readFile, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { writeWithMarkers, readAgentsFromDir, readSkillsFromDir, readMcpFromSettings, formatAgentsInlineSection, buildInlineContent, readCommandsFromDir, detectCommandParamSyntax } from "../../src/adapters/adapter-utils.js";
+import { writeWithMarkers, readAgentsFromDir, readSkillsFromDir, readRulesFromDir, readMcpFromSettings, formatAgentsInlineSection, buildInlineContent, readCommandsFromDir, detectCommandParamSyntax } from "../../src/adapters/adapter-utils.js";
 import type { AgentEntry } from "../../src/shared/schema.js";
 
 describe("writeWithMarkers", () => {
@@ -484,6 +484,63 @@ describe("readCommandsFromDir", () => {
     expect(commands).toHaveLength(1);
     // Name should be stripped of the actual extension (.md), not the provided ext
     expect(commands[0]!.name).toBe("deploy");
+  });
+});
+
+describe("malformed YAML frontmatter handling", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(path.join(tmpdir(), "pit-malformed-yaml-"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("readAgentsFromDir skips agents with unparseable YAML instead of crashing", async () => {
+    // Real-world case: description with unescaped colons on a single line
+    await writeFile(
+      path.join(tmpDir, "bad-agent.md"),
+      '---\nname: bad\ndescription: Use this agent when:\\nuser: "hello"\\nassistant: "hi"\nmodel: opus\ncolor: yellow\n---\n\nBody.\n',
+    );
+    await writeFile(
+      path.join(tmpDir, "good-agent.md"),
+      "---\nname: good\ndescription: A valid agent\n---\n\nWorks fine.\n",
+    );
+    const agents = await readAgentsFromDir(tmpDir);
+    expect(agents).toHaveLength(1);
+    expect(agents[0]!.name).toBe("good-agent");
+  });
+
+  it("readSkillsFromDir skips skills with unparseable YAML instead of crashing", async () => {
+    await mkdir(path.join(tmpDir, "bad-skill"), { recursive: true });
+    await writeFile(
+      path.join(tmpDir, "bad-skill", "SKILL.md"),
+      '---\nname: bad\ndescription: example:\\nuser: "test"\n---\n\nBody.\n',
+    );
+    await mkdir(path.join(tmpDir, "good-skill"), { recursive: true });
+    await writeFile(
+      path.join(tmpDir, "good-skill", "SKILL.md"),
+      "---\nname: good-skill\ndescription: A valid skill\n---\n\nWorks.\n",
+    );
+    const skills = await readSkillsFromDir(tmpDir);
+    expect(skills).toHaveLength(1);
+    expect(skills[0]!.name).toBe("good-skill");
+  });
+
+  it("readRulesFromDir skips rules with unparseable YAML instead of crashing", async () => {
+    await writeFile(
+      path.join(tmpDir, "bad-rule.md"),
+      '---\nname: bad\nglobs: pattern:\\nuser: "test"\n---\n\nBody.\n',
+    );
+    await writeFile(
+      path.join(tmpDir, "good-rule.md"),
+      "---\nname: good\ndescription: A valid rule\n---\n\nWorks.\n",
+    );
+    const rules = await readRulesFromDir(tmpDir);
+    expect(rules).toHaveLength(1);
+    expect(rules[0]!.name).toBe("good-rule");
   });
 });
 
