@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.12 (2026-04-09)
+
+### Fixed
+
+- Installing MCP servers to Codex no longer strips comments or reformats your `config.toml`. The writer now surgically edits only the managed `[mcp_servers.*]` sections, leaving your comments, model settings, and custom formatting untouched.
+
 ## 0.3.11 (2026-04-08)
 
 ### Fixed
