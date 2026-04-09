@@ -1,0 +1,6 @@
+{
+  "figma-mcp": {
+    "command": "npx",
+    "args": ["-y", "@anthropic/figma-mcp"]
+  }
+}

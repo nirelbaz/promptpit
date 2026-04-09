@@ -1,0 +1,6 @@
+{
+  "name": "level-2",
+  "version": "1.0.0",
+  "extends": ["../level-1"],
+  "skills": ["skills/top-skill"]
+}

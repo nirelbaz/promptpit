@@ -1,0 +1,8 @@
+{
+  "name": "base-stack",
+  "version": "1.0.0",
+  "description": "Base org stack",
+  "skills": ["skills/lint"],
+  "rules": ["rules/security"],
+  "compatibility": ["claude-code"]
+}

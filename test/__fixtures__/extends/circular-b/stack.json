@@ -1,0 +1,5 @@
+{
+  "name": "circular-b",
+  "version": "1.0.0",
+  "extends": ["../circular-a"]
+}
