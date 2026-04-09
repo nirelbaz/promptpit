@@ -4,7 +4,7 @@
 
 **Core thesis:** PromptPit is the composition layer for AI agent config. Translation is the entry point, stack management keeps things in sync, composition lets teams build on each other's work.
 
-**Phased roadmap:** ~~Team Platform (v0.3)~~ -> Stack Composer (v0.5) -> Ecosystem Bridge (v1.0)
+**Phased roadmap:** ~~Team Platform (v0.3)~~ -> ~~Stack Composer (v0.4)~~ -> Ecosystem Bridge (v1.0)
 
 **Landscape (April 2026):** AGENTS.md adopted as cross-tool convention (Linux Foundation, agreed by Google, OpenAI, Sourcegraph, Cursor, Factory — February 2026). Agent Skills spec (agentskills.io) defines the individual skill format; 30+ tools support it. skills.sh is the emerging skill package manager with Cloudflare `.well-known` RFC for discovery. `.mcp.json` supported by Claude Code and Copilot at the project level, but not yet a universal standard (Codex uses TOML, Cursor uses `.cursor/mcp.json`, others have their own paths).
 
@@ -71,7 +71,7 @@ Discovered via `/audit-adapters` using the AI Stack Expert knowledge base. See `
 8. ~~Deduplication test coverage (integration tests for multi-adapter install scenarios)~~ — completed v0.3.13
 
 ### Tier 2 — Phase 2 features
-9. Stack composition (`extends`) — headline feature
+9. ~~Stack composition (`extends`) — headline feature~~ **Completed:** v0.4.0 (2026-04-09)
 10. Uninstall command — needed for safe stack iteration
 11. Update command — depends on composition logic
 12. Everything else in Phase 2
@@ -88,8 +88,8 @@ Discovered via `/audit-adapters` using the AI Stack Expert knowledge base. See `
 
 Goal: let teams layer stacks on top of each other. Company base stack + team overrides + personal preferences, all composable.
 
-### Stack composition (`extends`)
-`"extends": ["github:company/base-stack@1.0.0"]` in stack.json. `pit install` recursively fetches and resolves the dependency graph. Base instructions merge first, team overrides layer on top. Provisional merge semantics: last-declared-wins with a warning on conflicts, explicit `overrides` block in stack.json for intentional resolution. This is the feature that makes multi-team setups practical.
+### ~~Stack composition (`extends`)~~ **Completed v0.4.0**
+~~`"extends": ["github:company/base-stack@1.0.0"]` in stack.json. `pit install` recursively fetches and resolves the dependency graph. Base instructions merge first, team overrides layer on top. Provisional merge semantics: last-declared-wins with a warning on conflicts, explicit `overrides` block in stack.json for intentional resolution. This is the feature that makes multi-team setups practical.~~
 
 ### Diff command
 `pit diff` — show the actual text diff between installed config and `.promptpit/` source. Distinct from `pit status` (which shows hash-level drift). This is a UI feature, not a composition feature.

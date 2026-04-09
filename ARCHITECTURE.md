@@ -11,7 +11,7 @@ collect:
   detect adapters → read each tool's configs (instructions, skills, rules, agents, MCP) → strip installed markers → merge (hash dedup) → strip secrets → write .promptpit/
 
 install:
-  read .promptpit/ (or clone from GitHub) → write canonical .agents/skills/ → detect adapters → symlink or copy+translate skills, rules, and agents to each tool's format → write manifest (.promptpit/installed.json)
+  read .promptpit/ (or clone from GitHub) → resolve extends chain (if present) → merge stacks (last-declared-wins) → write canonical .agents/skills/ → detect adapters → symlink or copy+translate skills, rules, and agents to each tool's format → write manifest (.promptpit/installed.json)
 
 status:
   read manifest → compute content hashes of installed files → compare → report synced/drifted/deleted
@@ -50,7 +50,7 @@ The original design used a `BaseAdapter` class. It was replaced with plain funct
 
 ```
 .promptpit/
-├── stack.json          # Manifest: name, version, skills list, compatibility
+├── stack.json          # Manifest: name, version, skills list, compatibility, extends, instructionStrategy
 ├── agent.promptpit.md  # Agent instructions (merged from CLAUDE.md, .cursorrules, etc.)
 ├── skills/             # SKILL.md files, one per directory
 ├── rules/              # Conditional rules (*.md with name, description, globs, alwaysApply frontmatter)
@@ -59,7 +59,17 @@ The original design used a `BaseAdapter` class. It was replaced with plain funct
 └── .env.example        # Required environment variables
 ```
 
-`stack.json` is Zod-validated at read time (`src/shared/schema.ts`).
+`stack.json` is Zod-validated at read time (`src/shared/schema.ts`). The `extends` field declares dependencies on other stacks. The `instructionStrategy` field controls whether extended instructions are concatenated (default) or overridden.
+
+## Stack composition (extends)
+
+`src/core/resolve.ts` handles dependency resolution in two phases:
+
+1. **`resolveGraph(stackDir)`** — walks `extends` depth-first with parallel sibling fetches. Detects cycles (error with full chain), enforces depth limit (default 10), deduplicates diamonds. Returns nodes in merge order: deepest deps first, root last.
+
+2. **`mergeGraph(graph)`** — merges all nodes left-to-right. Last-declared-wins for skills, rules, agents, MCP, commands, and env vars. Instructions concatenate with `## From {source}` headers (or override via `instructionStrategy`). Produces `ConflictEntry` records for every name collision.
+
+The install manifest (`installed.json`) records `resolvedExtends` with source, version, and commit SHA for drift detection. `pit status` compares commit SHAs to detect upstream changes.
 
 ## Idempotent markers
 
