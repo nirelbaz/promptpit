@@ -35,6 +35,18 @@ const stringOrArray = z.preprocess(
   z.array(z.string()),
 );
 
+/**
+ * Skill frontmatter schema.
+ *
+ * **Categorization policy:** Fields from the Agent Skills spec or shared by 2+
+ * tools are explicitly typed. Tool-specific fields pass through via
+ * `.passthrough()`.
+ *
+ * Typed: name, description, license, metadata, allowed-tools, context, agent,
+ *   user-invocable, model (existing); argument-hint, disable-model-invocation,
+ *   effort, hooks, paths, shell (portable additions).
+ * Passthrough: any future tool-specific fields.
+ */
 export const skillFrontmatterSchema = z.object({
   name: z.string().min(1),
   description: z.string().min(1),
@@ -45,17 +57,46 @@ export const skillFrontmatterSchema = z.object({
   agent: z.boolean().optional(),
   "user-invocable": z.boolean().optional(),
   model: z.string().optional(),
-});
+  // Portable additions (Agent Skills spec or shared by 2+ tools)
+  "argument-hint": z.string().optional(),
+  "disable-model-invocation": z.boolean().optional(),
+  effort: z.string().optional(),
+  hooks: z.unknown().optional(),
+  paths: stringOrArray.optional(),
+  shell: z.string().optional(),
+}).passthrough();
 
 export type SkillFrontmatter = z.infer<typeof skillFrontmatterSchema>;
 
 // --- Agent Frontmatter ---
 
+/**
+ * Agent frontmatter schema.
+ *
+ * **Categorization policy:** Fields shared by 2+ tools or affecting translation
+ * logic are explicitly typed. Tool-specific exotic fields (permissionMode,
+ * isolation, sandbox_mode, nickname_candidates, etc.) pass through via
+ * `.passthrough()` — they're preserved during round-trips but not validated.
+ *
+ * Typed: name, description, tools, model (core); disable-model-invocation,
+ *   user-invocable, target, mcp-servers, metadata, effort, maxTurns (portable).
+ * Passthrough: permissionMode, skills, background, isolation, color,
+ *   initialPrompt, disallowedTools, memory, nickname_candidates, sandbox_mode,
+ *   model_reasoning_effort, developer_instructions.
+ */
 export const agentFrontmatterSchema = z.object({
   name: z.string().min(1),
   description: z.string().min(1),
   tools: stringOrArray.optional(),
   model: z.string().optional(),
+  // Portable fields (shared by 2+ tools or affecting translation)
+  "disable-model-invocation": z.boolean().optional(),
+  "user-invocable": z.boolean().optional(),
+  target: z.string().optional(),
+  "mcp-servers": z.record(z.unknown()).optional(),
+  metadata: z.record(z.unknown()).optional(),
+  effort: z.string().optional(),
+  maxTurns: z.number().optional(),
 }).passthrough();
 
 export type AgentFrontmatter = z.infer<typeof agentFrontmatterSchema>;
