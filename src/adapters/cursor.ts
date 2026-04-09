@@ -13,7 +13,7 @@ import type {
 } from "./types.js";
 import type { StackBundle, RuleEntry, RuleFrontmatter } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
-import { readSkillsFromDir, readCommandsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry, buildInlineContent, detectCommandParamSyntax, resolveRuleDest } from "./adapter-utils.js";
+import { readSkillsFromDir, readCommandsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry, buildInlineContent, detectCommandParamSyntax, resolveRuleDest, writeSkillsNative } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -34,25 +34,6 @@ function userPaths() {
     rules: path.join(home, ".cursor", "rules"),
     commands: path.join(home, ".cursor", "commands"),
   };
-}
-
-export function skillToMdc(skillContent: string, _skillName: string): string {
-  const parsed = matter(skillContent, SAFE_MATTER_OPTIONS as never);
-  const fm = parsed.data as Record<string, unknown>;
-
-  const mdcFrontmatter: Record<string, unknown> = {};
-  if (fm.description) mdcFrontmatter.description = fm.description;
-  if (fm.context) {
-    mdcFrontmatter.globs = Array.isArray(fm.context)
-      ? fm.context.join(",")
-      : fm.context;
-  }
-
-  const fmLines = Object.entries(mdcFrontmatter)
-    .map(([k, v]) => `${k}: ${v}`)
-    .join("\n");
-
-  return `---\n${fmLines}\n---\n\n${parsed.content.trim()}\n`;
 }
 
 // Translate portable rule format to Cursor .mdc format
@@ -173,16 +154,7 @@ async function write(
       }
     }
 
-    for (const skill of stack.skills) {
-      const mdcContent = skillToMdc(skill.content, skill.name);
-      const dest = path.join(p.rules!, `${skill.name}.mdc`);
-      if (opts.dryRun) {
-        dryRunEntries.push(fileDryRunEntry(dest, await exists(dest), "translate to .mdc"));
-      } else {
-        await writeFileEnsureDir(dest, mdcContent);
-        filesWritten.push(dest);
-      }
-    }
+    await writeSkillsNative(p.skills, stack.skills, opts, dryRunEntries, filesWritten);
 
     for (const rule of stack.rules) {
       const dest = await resolveRuleDest(p.rules!, rule.name, ".mdc");
@@ -230,9 +202,9 @@ export const cursorAdapter: PlatformAdapter = {
   displayName: "Cursor",
   paths: { project: projectPaths, user: userPaths },
   capabilities: {
-    skillLinkStrategy: "translate-copy",
+    skillLinkStrategy: "symlink",
     rules: true,
-    skillFormat: "mdc",
+    skillFormat: "skill.md",
     mcpStdio: true,
     mcpRemote: true,
     mcpFormat: "json",

@@ -10,8 +10,8 @@ import type {
 } from "./types.js";
 import matter from "gray-matter";
 import type { StackBundle } from "../shared/schema.js";
-import { readFileOrNull, writeFileEnsureDir, exists, removeFileOrSymlink, symlinkOrCopy } from "../shared/utils.js";
-import { SAFE_MATTER_OPTIONS, readSkillsFromDir, readAgentsFromDir, readRulesFromDir, readCommandsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry, detectCommandParamSyntax } from "./adapter-utils.js";
+import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
+import { SAFE_MATTER_OPTIONS, readSkillsFromDir, readAgentsFromDir, readRulesFromDir, readCommandsFromDir, readMcpFromSettings, writeWithMarkers, mergeMcpIntoJson, rethrowPermissionError, markersDryRunEntry, mcpDryRunEntry, fileDryRunEntry, detectCommandParamSyntax, writeSkillsNative } from "./adapter-utils.js";
 
 function projectPaths(root: string) {
   return {
@@ -126,22 +126,7 @@ async function write(
     }
 
     // Install skills (symlink from canonical location, or direct write as fallback)
-    for (const skill of stack.skills) {
-      const skillDir = path.join(p.skills, skill.name);
-      const dest = path.join(skillDir, "SKILL.md");
-      if (opts.dryRun) {
-        dryRunEntries.push(fileDryRunEntry(dest, await exists(dest), "symlink"));
-      } else {
-        const canonicalPath = opts.canonicalSkillPaths?.get(skill.name);
-        if (canonicalPath) {
-          await symlinkOrCopy(canonicalPath, dest);
-        } else {
-          await removeFileOrSymlink(skillDir);
-          await writeFileEnsureDir(dest, skill.content);
-        }
-        filesWritten.push(dest);
-      }
-    }
+    await writeSkillsNative(p.skills, stack.skills, opts, dryRunEntries, filesWritten);
 
     // Write agents to .claude/agents/
     for (const agent of stack.agents) {

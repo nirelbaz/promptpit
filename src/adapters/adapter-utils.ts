@@ -11,7 +11,7 @@ export function parseJsonc(raw: string): unknown {
   return JSON.parse(stripJsonComments(raw));
 }
 import { skillFrontmatterSchema, ruleFrontmatterSchema, agentFrontmatterSchema } from "../shared/schema.js";
-import { readFileOrNull, writeFileEnsureDir, exists } from "../shared/utils.js";
+import { readFileOrNull, writeFileEnsureDir, exists, removeFileOrSymlink, symlinkOrCopy } from "../shared/utils.js";
 import { log } from "../shared/io.js";
 import { hasMarkers, insertMarkers, replaceMarkerContent } from "../shared/markers.js";
 import type { DryRunEntry } from "./types.js";
@@ -392,6 +392,34 @@ export async function writeWithMarkers(
 
   await writeFileEnsureDir(filePath, updated);
   return { written: filePath, content: updated, oldContent: existing, existed };
+}
+
+// Shared skill write loop for symlink-strategy adapters (claude-code, codex, cursor).
+// Symlinks from canonical .agents/skills/ when canonicalSkillPaths is provided,
+// falls back to direct file write otherwise.
+export async function writeSkillsNative(
+  skillsDir: string,
+  skills: SkillEntry[],
+  opts: { dryRun?: boolean; canonicalSkillPaths?: Map<string, string> },
+  dryRunEntries: DryRunEntry[],
+  filesWritten: string[],
+): Promise<void> {
+  for (const skill of skills) {
+    const skillDir = path.join(skillsDir, skill.name);
+    const dest = path.join(skillDir, "SKILL.md");
+    if (opts.dryRun) {
+      dryRunEntries.push(fileDryRunEntry(dest, await exists(dest), "symlink"));
+    } else {
+      const canonicalPath = opts.canonicalSkillPaths?.get(skill.name);
+      if (canonicalPath) {
+        await symlinkOrCopy(canonicalPath, dest);
+      } else {
+        await removeFileOrSymlink(skillDir);
+        await writeFileEnsureDir(dest, skill.content);
+      }
+      filesWritten.push(dest);
+    }
+  }
 }
 
 export function fileDryRunEntry(

@@ -13,10 +13,8 @@ import {
   readFileOrNull,
   writeFileEnsureDir,
   exists,
-  removeFileOrSymlink,
-  symlinkOrCopy,
 } from "../shared/utils.js";
-import { readSkillsFromDir, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, fileDryRunEntry, buildInlineContent, warnMcpOverwrites } from "./adapter-utils.js";
+import { readSkillsFromDir, writeWithMarkers, rethrowPermissionError, markersDryRunEntry, buildInlineContent, warnMcpOverwrites, writeSkillsNative } from "./adapter-utils.js";
 import { readAgentsFromToml, readMcpFromToml, writeMcpToToml } from "./toml-utils.js";
 
 function projectPaths(root: string) {
@@ -115,22 +113,7 @@ async function write(
       }
     }
 
-    for (const skill of stack.skills) {
-      const skillDir = path.join(p.skills, skill.name);
-      const dest = path.join(skillDir, "SKILL.md");
-      if (opts.dryRun) {
-        dryRunEntries.push(fileDryRunEntry(dest, await exists(dest), "symlink"));
-      } else {
-        const canonicalPath = opts.canonicalSkillPaths?.get(skill.name);
-        if (canonicalPath) {
-          await symlinkOrCopy(canonicalPath, dest);
-        } else {
-          await removeFileOrSymlink(skillDir);
-          await writeFileEnsureDir(dest, skill.content);
-        }
-        filesWritten.push(dest);
-      }
-    }
+    await writeSkillsNative(p.skills, stack.skills, opts, dryRunEntries, filesWritten);
 
     if (Object.keys(stack.mcpServers).length > 0 && !opts.dryRun) {
       const existingToml = (await readFileOrNull(p.mcp)) ?? "";

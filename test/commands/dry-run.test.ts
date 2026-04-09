@@ -110,7 +110,7 @@ describe("adapter dry-run entries", () => {
     const instructions = result.dryRunEntries!.find((e) => e.file.includes(".cursorrules"));
     expect(instructions).toBeDefined();
 
-    const skill = result.dryRunEntries!.find((e) => e.file.includes("my-skill.mdc"));
+    const skill = result.dryRunEntries!.find((e) => e.file.includes("my-skill") && e.file.includes("SKILL.md"));
     expect(skill).toBeDefined();
 
     const mcp = result.dryRunEntries!.find((e) => e.file.includes("mcp.json"));
