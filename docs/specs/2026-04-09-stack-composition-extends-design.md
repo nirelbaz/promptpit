@@ -1,7 +1,7 @@
 # Stack Composition (`extends`) — Design Spec
 
 **Date:** 2026-04-09
-**Status:** Draft
+**Status:** Reviewed
 **Branch:** nirelbaz/stack-composition
 
 ## Overview
@@ -96,6 +96,9 @@ function resolveGraph(stackDir: string, options?: {
    - Check visited set (keyed by normalized source string) — error on cycle
    - Check depth — error if exceeding max (default 10)
    - Recurse: resolve that stack's own extends
+   - **Sibling fetches run in parallel** (Promise.all on the fetch step for all
+     entries at the same level). Transitive deps per-sibling resolve sequentially.
+     Merge order is always declared order regardless of fetch completion order.
 4. Return flat list in merge order: deepest transitive deps first, then direct
    extends in declared order, root stack last
 
@@ -133,9 +136,12 @@ B extends [root]
 Error: "Circular dependency detected: root → A → B → root"
 ```
 
-**Caching:** GitHub stacks fetched during resolution go to a shared temp directory
-(`os.tmpdir()/pit-resolve-XXXXXX/`). Same source fetched once even if referenced
-from multiple branches of the graph. Temp directory cleaned up in `finally` block.
+**Caching:** `resolveGraph` creates a single shared temp directory
+(`os.tmpdir()/pit-resolve-XXXXXX/`) at the start. All GitHub fetches clone into
+subdirectories of this shared dir (requires a wrapper around `cloneAndResolve` that
+accepts a pre-created temp dir instead of creating its own). Same source fetched
+once even if referenced from multiple branches of the graph. Entire temp directory
+cleaned up in a single `finally` block.
 
 ### Phase 2: `mergeGraph()`
 
@@ -193,10 +199,13 @@ When `instructionStrategy` is `"override"`, only the root node's instructions ap
 **The `sources` map** tracks provenance for debugging: "this skill came from
 acme/base-stack."
 
-**Relationship to existing `merger.ts`:** The existing merger handles multi-adapter
-merging during `pit collect` (combining Claude Code + Cursor configs into one bundle).
-`mergeGraph` handles multi-stack merging during extends resolution. Different
-dimensions — no overlap. Existing merger stays untouched.
+**Relationship to existing `merger.ts`:** The existing `mergeAdapterConfigs()`
+(renamed from `mergeConfigs`) handles multi-adapter merging during `pit collect`
+(combining Claude Code + Cursor configs into one bundle) using **first-seen-wins**.
+`mergeGraph` handles multi-stack merging during extends resolution using
+**last-declared-wins**. Different dimensions, different strategies:
+- Adapter merge: deduplicating the same content read from multiple tools (first-seen is safe)
+- Stack merge: layering intentional overrides (last-declared = highest priority)
 
 ## Command Changes
 
@@ -206,13 +215,14 @@ dimensions — no overlap. Existing merger stays untouched.
 
 Same as today. Fetch, install, no extends involvement.
 
-**Mode 2: `pit install github:acme/stack --save`**
+**Mode 2: `pit install github:acme/stack --save`** (or local path `--save`)
 
-1. Fetch and install the stack (same as Mode 1)
-2. Read local stack.json (or `.promptpit/stack.json`)
-3. Append source to `extends` array (skip if already present)
-4. Write updated stack.json
-5. Error if no local stack.json exists: `No stack.json found. Run "pit init" first, or install without --save.`
+1. Error if no explicit source: `Cannot use --save without specifying a stack source.`
+2. Fetch and install the stack (same as Mode 1)
+3. Read local `.promptpit/stack.json`
+4. Append source to `extends` array (skip if already present)
+5. Write updated stack.json
+6. Error if no local stack.json exists: `No stack.json found. Run "pit init" first, or install without --save.`
 
 Version pinning follows user input:
 - `pit install github:acme/stack --save` → saves `"github:acme/stack"` (floating)
@@ -231,28 +241,37 @@ Version pinning follows user input:
 resolvedExtends?: {
   source: string;
   version?: string;      // from the fetched stack's manifest
+  resolvedCommit?: string; // git commit SHA at resolution time (for drift detection)
   resolvedAt: string;    // ISO timestamp
 }[];
 ```
 
+`resolvedCommit` is the reliable drift signal for floating refs. `pit status`
+compares commit SHAs, not version strings, to detect upstream changes.
+
 ### `pit collect`
 
-**Without flag:** Collects as today. `extends` stays as pointers in stack.json.
+**Without flag:** Collects as today. **`pit collect` preserves existing `extends`
+and `instructionStrategy` fields** when regenerating stack.json — reads the existing
+file first, carries those fields into the new manifest. This prevents `pit collect`
+from destroying extends declarations added via `--save` or manual edits.
 
 **`pit collect --include-extends`:**
 
 1. Run `resolveGraph()` to fetch all extends
 2. Run `mergeGraph()` to produce merged bundle
 3. Write merged bundle to `.promptpit/`
-4. Remove `extends` from the output stack.json (it's been flattened)
+4. Explicitly strip `extends` from the output manifest before writing stack.json
+   (the content has been flattened into the bundle)
 
 ### `pit status`
 
 **Default (with network):**
 
 1. Local drift detection (same as today — hash comparison)
-2. If manifest has `resolvedExtends`, fetch each source and compare versions
-3. Report upstream drift: `acme/base-stack: installed v1.0.0, upstream now v1.2.0`
+2. If manifest has `resolvedExtends`, fetch each source and compare commit SHAs
+   (not version strings — floating refs can change content without version bumps)
+3. Report upstream drift: `acme/base-stack: upstream has changed since install (commit abc123 → def456)`
 
 **`pit status --skip-upstream`:** Local drift only. No network. Fast.
 
@@ -317,6 +336,7 @@ GitHub stacks fetched during resolution go to `os.tmpdir()/pit-resolve-XXXXXX/`.
 - Duplicate extends entries → validation error
 - Mix of GitHub and local path entries → both resolved
 - Cache hit: same source in two branches → fetched once
+- Parallel sibling fetches: merge order correct regardless of fetch completion order
 
 **`test/core/resolve.merge.test.ts`** — graph merging:
 - No conflicts → clean union of all content
@@ -335,10 +355,13 @@ GitHub stacks fetched during resolution go to `os.tmpdir()/pit-resolve-XXXXXX/`.
 - `pit install github:x --save` appends to extends
 - `--save` with existing entry doesn't duplicate
 - `--save` without stack.json errors
-- Manifest records `resolvedExtends`
+- `--save` without explicit source errors
+- No-args install without extends → unchanged behavior (regression test)
+- Manifest records `resolvedExtends` with commit SHA
 
 **`test/commands/collect-extends.test.ts`:**
 - `pit collect` preserves extends as pointers
+- `pit collect` preserves existing extends field when regenerating stack.json
 - `pit collect --include-extends` flattens extends into bundle
 - Flattened bundle has no extends in stack.json
 
