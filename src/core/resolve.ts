@@ -4,7 +4,14 @@ import { tmpdir } from "node:os";
 import { readStack } from "./stack.js";
 import { parseGitHubSource, cloneToDir, getRepoCommitSha } from "../sources/github.js";
 import { removeDir } from "../shared/utils.js";
-import type { StackBundle } from "../shared/schema.js";
+import type {
+  StackBundle,
+  SkillEntry,
+  AgentEntry,
+  RuleEntry,
+  CommandEntry,
+  McpConfig,
+} from "../shared/schema.js";
 
 // --- Public interfaces ---
 
@@ -170,4 +177,211 @@ export async function resolveGraph(
     const depBundle = await readStack(depDir);
     return { normalized, stackDir: depDir, bundle: depBundle };
   }
+}
+
+// --- Merge types ---
+
+export interface ConflictEntry {
+  type: "skill" | "rule" | "agent" | "mcp" | "command" | "env";
+  name: string;
+  from: string;
+  winner: string;
+}
+
+export interface MergedStack {
+  bundle: StackBundle;
+  conflicts: ConflictEntry[];
+  sources: Map<string, string>;
+}
+
+export interface MergeOptions {
+  instructionStrategy?: "concatenate" | "override";
+}
+
+// --- Merge implementation ---
+
+export function mergeGraph(
+  graph: ResolvedGraph,
+  options?: MergeOptions,
+): MergedStack {
+  const nodes = graph.nodes;
+  const strategy = options?.instructionStrategy ?? "concatenate";
+
+  // Single-node optimization: return directly with empty conflicts/sources
+  if (nodes.length === 1) {
+    return {
+      bundle: nodes[0]!.bundle,
+      conflicts: [],
+      sources: new Map(),
+    };
+  }
+
+  // Root node is always the last element in graph.nodes
+  const rootNode = nodes[nodes.length - 1]!;
+
+  const conflicts: ConflictEntry[] = [];
+  const sources = new Map<string, string>();
+
+  // Accumulate merged items (keyed by name, last-declared-wins)
+  const skillMap = new Map<string, SkillEntry>();
+  const agentMap = new Map<string, AgentEntry>();
+  const ruleMap = new Map<string, RuleEntry>();
+  const commandMap = new Map<string, CommandEntry>();
+  const mcpMap = new Map<string, McpConfig[string]>();
+  const envMap = new Map<string, string>();
+
+  // Collect instructions in order
+  const instructionParts: string[] = [];
+
+  // Process nodes left-to-right (deepest deps first, root last)
+  for (const node of nodes) {
+    const source = node.source;
+    const sourceName = path.basename(source);
+    const bundle = node.bundle;
+
+    // Instructions
+    if (bundle.agentInstructions) {
+      if (strategy === "concatenate") {
+        instructionParts.push(
+          `## From ${sourceName}\n\n${bundle.agentInstructions}`,
+        );
+      }
+      // For "override", we only use root node's instructions (handled after loop)
+    }
+
+    // Skills: last-declared-wins
+    for (const skill of bundle.skills) {
+      if (skillMap.has(skill.name)) {
+        conflicts.push({
+          type: "skill",
+          name: skill.name,
+          from: sources.get(skill.name)!,
+          winner: source,
+        });
+      }
+      skillMap.set(skill.name, skill);
+      sources.set(skill.name, source);
+    }
+
+    // Agents: last-declared-wins
+    for (const agent of bundle.agents) {
+      if (agentMap.has(agent.name)) {
+        conflicts.push({
+          type: "agent",
+          name: agent.name,
+          from: sources.get(agent.name)!,
+          winner: source,
+        });
+      }
+      agentMap.set(agent.name, agent);
+      sources.set(agent.name, source);
+    }
+
+    // Rules: last-declared-wins
+    for (const rule of bundle.rules) {
+      if (ruleMap.has(rule.name)) {
+        conflicts.push({
+          type: "rule",
+          name: rule.name,
+          from: sources.get(rule.name)!,
+          winner: source,
+        });
+      }
+      ruleMap.set(rule.name, rule);
+      sources.set(rule.name, source);
+    }
+
+    // Commands: last-declared-wins
+    for (const command of bundle.commands) {
+      if (commandMap.has(command.name)) {
+        conflicts.push({
+          type: "command",
+          name: command.name,
+          from: sources.get(command.name)!,
+          winner: source,
+        });
+      }
+      commandMap.set(command.name, command);
+      sources.set(command.name, source);
+    }
+
+    // MCP servers: last-declared-wins
+    for (const [serverName, serverConfig] of Object.entries(bundle.mcpServers)) {
+      const mcpKey = `mcp:${serverName}`;
+      if (mcpMap.has(serverName)) {
+        conflicts.push({
+          type: "mcp",
+          name: serverName,
+          from: sources.get(mcpKey)!,
+          winner: source,
+        });
+      }
+      mcpMap.set(serverName, serverConfig);
+      sources.set(mcpKey, source);
+    }
+
+    // Env vars: last-declared-wins
+    for (const [envKey, envVal] of Object.entries(bundle.envExample)) {
+      const envSourceKey = `env:${envKey}`;
+      if (envMap.has(envKey)) {
+        conflicts.push({
+          type: "env",
+          name: envKey,
+          from: sources.get(envSourceKey)!,
+          winner: source,
+        });
+      }
+      envMap.set(envKey, envVal);
+      sources.set(envSourceKey, source);
+    }
+  }
+
+  // Build instructions
+  let agentInstructions: string;
+  if (strategy === "override") {
+    agentInstructions = rootNode.bundle.agentInstructions;
+  } else {
+    agentInstructions = instructionParts.join("\n\n");
+  }
+
+  // Build merged MCP config
+  const mcpServers: McpConfig = {};
+  for (const [name, config] of mcpMap) {
+    mcpServers[name] = config;
+  }
+
+  // Build merged env
+  const envExample: Record<string, string> = {};
+  for (const [key, val] of envMap) {
+    envExample[key] = val;
+  }
+
+  // Build merged manifest from root, with updated arrays
+  const skills = Array.from(skillMap.values());
+  const agents = Array.from(agentMap.values());
+  const rules = Array.from(ruleMap.values());
+  const commands = Array.from(commandMap.values());
+
+  const manifest = {
+    ...rootNode.bundle.manifest,
+    skills: skills.map((s) => s.name),
+    agents: agents.map((a) => a.name),
+    rules: rules.map((r) => r.name),
+    commands: commands.map((c) => c.name),
+  };
+
+  return {
+    bundle: {
+      manifest,
+      agentInstructions,
+      skills,
+      agents,
+      rules,
+      commands,
+      mcpServers,
+      envExample,
+    },
+    conflicts,
+    sources,
+  };
 }
