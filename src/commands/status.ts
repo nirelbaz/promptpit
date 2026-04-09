@@ -1,4 +1,5 @@
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import chalk from "chalk";
 import { readManifest, computeHash, computeMcpServerHash } from "../core/manifest.js";
 import { readFileOrNull } from "../shared/utils.js";
@@ -8,11 +9,13 @@ import { extractMarkerContent, hasMarkers } from "../shared/markers.js";
 import type { InstallManifest, AdapterInstallRecord } from "../shared/schema.js";
 import { getAdapter } from "../adapters/registry.js";
 import { log } from "../shared/io.js";
+import { parseGitHubSource } from "../sources/github.js";
 
 export interface StatusOptions {
   json?: boolean;
   short?: boolean;
   verbose?: boolean;
+  skipUpstream?: boolean;
 }
 
 // Reconciliation states per the design doc
@@ -508,6 +511,41 @@ export async function statusCommand(
   opts: StatusOptions = {},
 ): Promise<void> {
   const result = await computeStatus(root);
+
+  // Check upstream extends drift
+  if (!opts.skipUpstream && result.hasManifest) {
+    let manifest: InstallManifest;
+    try {
+      manifest = await readManifest(root);
+    } catch {
+      manifest = { installs: [] } as unknown as InstallManifest;
+    }
+    for (const install of manifest.installs) {
+      if (!install.resolvedExtends?.length) continue;
+      for (const ext of install.resolvedExtends) {
+        const gh = parseGitHubSource(ext.source);
+        if (!gh || !ext.resolvedCommit) continue;
+        try {
+          const ref = gh.ref ?? "HEAD";
+          const output = execFileSync("git", [
+            "ls-remote",
+            `https://github.com/${gh.owner}/${gh.repo}.git`,
+            ref,
+          ], { stdio: ["pipe", "pipe", "pipe"], timeout: 10000 }).toString();
+          const latestSha = output.split("\t")[0]?.trim();
+
+          if (latestSha && latestSha !== ext.resolvedCommit) {
+            log.warn(
+              `${ext.source}: upstream has changed since install ` +
+              `(commit ${ext.resolvedCommit.slice(0, 7)} → ${latestSha.slice(0, 7)})`,
+            );
+          }
+        } catch {
+          // Network error — skip silently
+        }
+      }
+    }
+  }
 
   if (opts.json) {
     formatJson(result);
