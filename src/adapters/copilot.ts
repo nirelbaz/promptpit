@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import fg from "fast-glob";
 import matter from "gray-matter";
 import yaml from "js-yaml";
-import { SAFE_MATTER_OPTIONS, parseJsonc, readCommandsFromDir, detectCommandParamSyntax } from "./adapter-utils.js";
+import { SAFE_MATTER_OPTIONS, parseJsonc, readCommandsFromDir, readSkillsFromDir, detectCommandParamSyntax } from "./adapter-utils.js";
 import type {
   PlatformAdapter,
   PlatformConfig,
@@ -150,6 +150,10 @@ async function read(root: string): Promise<PlatformConfig> {
   // Read both *.agent.md and plain *.md — real-world repos use both formats
   const agents = await readAgentsFromDir(p.agents!, { glob: "*.md", ext: ".agent.md" });
 
+  // Read skills from .github/skills/ (Copilot's native Agent Skills location)
+  const nativeSkillsDir = path.join(root, ".github", "skills");
+  const skills = await readSkillsFromDir(nativeSkillsDir, { includeStandalone: true });
+
   // Read scoped instructions as rules
   const rules: RuleEntry[] = [];
   if (await exists(p.rules)) {
@@ -202,7 +206,7 @@ async function read(root: string): Promise<PlatformConfig> {
   return {
     adapterId: "copilot",
     agentInstructions,
-    skills: [],
+    skills,
     agents,
     mcpServers,
     rules,
