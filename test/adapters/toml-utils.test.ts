@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { readMcpFromToml, writeMcpToToml, readAgentsFromToml } from "../../src/adapters/toml-utils.js";
+import { computeMcpServerHash } from "../../src/core/manifest.js";
 import type { McpConfig } from "../../src/shared/schema.js";
 
 describe("readMcpFromToml", () => {
@@ -200,6 +201,202 @@ args = ["server.js"]
     const reparsed = readMcpFromToml(written);
     expect(reparsed.exa).toEqual({ url: "https://mcp.exa.ai/mcp" });
     expect(reparsed.github).toEqual({ command: "npx", args: ["-y", "server-github"] });
+  });
+
+  it("preserves comments in existing config.toml", () => {
+    const existing = `# My Codex configuration
+model = "o4-mini"
+model_reasoning_effort = "medium"
+
+# MCP servers
+[mcp_servers.filesystem]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/me"]
+`;
+    const servers: McpConfig = {
+      github: { command: "npx", args: ["-y", "server-github"] },
+    };
+    const result = writeMcpToToml(existing, servers);
+    expect(result).toContain("# My Codex configuration");
+    expect(result).toContain("# MCP servers");
+    expect(result).toContain("[mcp_servers.filesystem]");
+    expect(result).toContain("[mcp_servers.github]");
+  });
+
+  it("preserves non-MCP config sections unchanged", () => {
+    const existing = `model = "o4-mini"
+approval_policy = "on-request"
+
+[mcp_servers.old]
+command = "node"
+args = ["old.js"]
+`;
+    const servers: McpConfig = {
+      newserver: { command: "npx", args: ["new.js"] },
+    };
+    const result = writeMcpToToml(existing, servers);
+    // Non-MCP lines preserved verbatim
+    expect(result).toContain('model = "o4-mini"');
+    expect(result).toContain('approval_policy = "on-request"');
+    // Old server section preserved
+    expect(result).toContain("[mcp_servers.old]");
+    expect(result).toContain('command = "node"');
+  });
+
+  it("updates a server without affecting sibling sections", () => {
+    const existing = `[mcp_servers.alpha]
+command = "npx"
+args = ["alpha"]
+
+[mcp_servers.beta]
+command = "node"
+args = ["beta.js"]
+`;
+    const servers: McpConfig = {
+      alpha: { command: "npx", args: ["alpha-v2"] },
+    };
+    const result = writeMcpToToml(existing, servers);
+    // Alpha updated
+    expect(result).toContain('args = ["alpha-v2"]');
+    expect(result).not.toContain('args = ["alpha"]');
+    // Beta untouched
+    expect(result).toContain("[mcp_servers.beta]");
+    expect(result).toContain('command = "node"');
+    expect(result).toContain('args = ["beta.js"]');
+  });
+
+  it("preserves Codex-specific fields in unmanaged servers", () => {
+    const existing = `[mcp_servers.fs]
+command = "npx"
+args = ["-y", "server-fs"]
+enabled = true
+startup_timeout_sec = 30.0
+tool_timeout_sec = 60.0
+
+[mcp_servers.managed]
+command = "old"
+`;
+    const servers: McpConfig = {
+      managed: { command: "new", args: ["new.js"] },
+    };
+    const result = writeMcpToToml(existing, servers);
+    // Unmanaged server's Codex-specific fields preserved
+    expect(result).toContain("enabled = true");
+    expect(result).toContain("startup_timeout_sec = 30.0");
+    // Managed server updated
+    expect(result).toContain('command = "new"');
+    expect(result).not.toContain('command = "old"');
+  });
+
+  it("preserves inline comments on section headers", () => {
+    const existing = `[mcp_servers.fs] # file system server
+command = "npx"
+args = ["-y", "server-fs"]
+`;
+    const servers: McpConfig = {
+      other: { command: "node", args: ["other.js"] },
+    };
+    const result = writeMcpToToml(existing, servers);
+    expect(result).toContain("[mcp_servers.fs] # file system server");
+  });
+
+  it("preserves commented-out servers between active sections", () => {
+    const existing = `[mcp_servers.active]
+command = "npx"
+args = ["active-server"]
+
+# [mcp_servers.disabled]
+# command = "npx"
+# args = ["disabled-server"]
+
+[features]
+multi_agent = true
+`;
+    const servers: McpConfig = {
+      active: { command: "npx", args: ["active-v2"] },
+    };
+    const result = writeMcpToToml(existing, servers);
+    // Commented-out server preserved
+    expect(result).toContain("# [mcp_servers.disabled]");
+    expect(result).toContain('# command = "npx"');
+    // Features section preserved
+    expect(result).toContain("[features]");
+    expect(result).toContain("multi_agent = true");
+    // Active server updated
+    expect(result).toContain('args = ["active-v2"]');
+  });
+
+  it("BUG-23 end-to-end: hash stability through write→read round-trip", () => {
+    const existing = `# My Codex configuration
+model = "o4-mini"
+model_reasoning_effort = "medium"
+
+# MCP servers
+[mcp_servers.filesystem]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/me"]
+env = { ROOT_PATH = "/home/me" }
+`;
+    const bundleServers: McpConfig = {
+      github: {
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-github"],
+        env: { GITHUB_TOKEN: "ghp_test" },
+      },
+    };
+
+    // Install writes to TOML
+    const written = writeMcpToToml(existing, bundleServers);
+    // Status reads back from TOML
+    const readBack = readMcpFromToml(written);
+
+    // Hash at install time (from bundle) must match hash at status time (from disk)
+    const installHash = computeMcpServerHash(bundleServers.github!);
+    const statusHash = computeMcpServerHash(readBack.github!);
+    expect(statusHash).toBe(installHash);
+  });
+
+  it("updates multiple servers in one call (mix of existing and new)", () => {
+    const existing = `[mcp_servers.alpha]
+command = "npx"
+args = ["alpha"]
+
+[mcp_servers.beta]
+command = "node"
+args = ["beta.js"]
+
+[mcp_servers.gamma]
+command = "python"
+args = ["gamma.py"]
+`;
+    const servers: McpConfig = {
+      alpha: { command: "npx", args: ["alpha-v2"] },
+      gamma: { command: "python3", args: ["gamma-v2.py"] },
+      delta: { command: "deno", args: ["delta.ts"] },
+    };
+    const result = writeMcpToToml(existing, servers);
+
+    // Alpha updated
+    expect(result).toContain('args = ["alpha-v2"]');
+    expect(result).not.toContain('args = ["alpha"]');
+    // Beta untouched
+    expect(result).toContain("[mcp_servers.beta]");
+    expect(result).toContain('args = ["beta.js"]');
+    // Gamma updated
+    expect(result).toContain('command = "python3"');
+    expect(result).toContain('args = ["gamma-v2.py"]');
+    expect(result).not.toContain('args = ["gamma.py"]');
+    // Delta added
+    expect(result).toContain("[mcp_servers.delta]");
+    expect(result).toContain('command = "deno"');
+
+    // Verify all four parse correctly
+    const parsed = readMcpFromToml(result);
+    expect(Object.keys(parsed)).toHaveLength(4);
+    expect(parsed.alpha!.args).toEqual(["alpha-v2"]);
+    expect(parsed.beta!.args).toEqual(["beta.js"]);
+    expect(parsed.gamma!.args).toEqual(["gamma-v2.py"]);
+    expect(parsed.delta!.args).toEqual(["delta.ts"]);
   });
 });
 

@@ -17,7 +17,7 @@
 
 ~~**BUG 22:** `writeMcpToToml()` only writes `command`/`args`/`env` — drops `url`/`serverUrl` for HTTP MCP servers on Codex install. Data loss for url-only servers like exa.~~ **Completed:** v0.3.11 (2026-04-08)
 
-**BUG 23:** Codex `config.toml` install strips comments and reformats, causing immediate drift in `pit status`. Either preserve non-managed sections or hash only managed fields.
+~~**BUG 23:** Codex `config.toml` install strips comments and reformats, causing immediate drift in `pit status`. Either preserve non-managed sections or hash only managed fields.~~ **Completed:** v0.3.12 (2026-04-09)
 
 ~~**BUG 24:** Install into a repo that already has rules creates `rule-` prefixed duplicates alongside originals. Consider skipping `rule-{name}` when `{name}` already exists in the target directory.~~ **Completed:** v0.3.11 (2026-04-08)
 
@@ -56,8 +56,8 @@ Discovered via `/audit-adapters` using the AI Stack Expert knowledge base. See `
 
 ### Tier 0 — Blocking (fix before Phase 2)
 1. ~~Audit #1 + #2 (MCP and AGENTS.md duplication)~~ — in progress
-2. BUG 23 (Codex TOML comment stripping — immediate user-visible drift)
-3. ~~BUG 26 (Validator false positives — blocks valid stacks)~~
+2. ~~BUG 23 (Codex TOML comment stripping — immediate user-visible drift)~~ — completed
+3. ~~BUG 26 (Validator false positives — blocks valid stacks)~~ — completed
 4. Audit #3 (Cursor native SKILL.md — lossy translation, high impact)
 
 ### Tier 1 — Correctness
