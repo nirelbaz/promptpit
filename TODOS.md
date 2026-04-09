@@ -35,10 +35,10 @@ Discovered via `/audit-adapters` using the AI Stack Expert knowledge base. See `
 | 2 | ~~HIGH~~ | ~~**AGENTS.md instruction duplication:** Standards always writes AGENTS.md. Copilot, Cursor, and Codex also read it natively. Both adapters active = instructions appear twice.~~ | **Completed** v0.3.12 — Standards adapter skips MCP/instructions when tool-specific adapter handles them; `installMode` recorded in manifest |
 | 3 | ~~HIGH~~ | ~~**Cursor native SKILL.md:** Cursor v2.4+ supports `.cursor/skills/<name>/SKILL.md` natively. Adapter still translates to `.mdc` (lossy).~~ | **Completed** v0.3.12 — switched `skillLinkStrategy` to `"symlink"` targeting `.cursor/skills/`, dropped `skillToMdc()` translation |
 | 4 | MEDIUM | **Codex agent write format mismatch:** Codex reads agents from `.codex/agents/*.toml` but adapter writes inline in AGENTS.md via `buildInlineContent`. Inline approach loses structured fields (`model_reasoning_effort`, `sandbox_mode`, `mcp_servers`, `nickname_candidates`). Real data loss, not just a format preference. | |
-| 5 | LOW | **Copilot missing agent frontmatter:** `agentToGitHubAgent` drops `target`, `disable-model-invocation`, `user-invocable`, `mcp-servers`, `metadata` fields. | |
-| 6 | LOW | **Copilot skill reading:** `read()` returns `skills: []` but Copilot discovers skills from `.github/skills/`. Should be read during collect. | |
-| 7 | LOW | **Codex AGENTS.override.md:** Codex supports `AGENTS.override.md` (takes precedence over AGENTS.md). Not handled during collect — could miss overriding content. | |
-| 8 | LOW | **Schema enrichment:** Many new Claude Code agent/skill frontmatter fields not typed in Zod schema. They pass through via `.passthrough()` but are untyped. | |
+| 5 | ~~LOW~~ | ~~**Copilot missing agent frontmatter:** `agentToGitHubAgent` drops `target`, `disable-model-invocation`, `user-invocable`, `mcp-servers`, `metadata` fields.~~ | **Completed** v0.3.13 — switched to full frontmatter passthrough |
+| 6 | ~~LOW~~ | ~~**Copilot skill reading:** `read()` returns `skills: []` but Copilot discovers skills from `.github/skills/`. Should be read during collect.~~ | **Completed** v0.3.13 — reads from `.github/skills/` via `readSkillsFromDir()` |
+| 7 | ~~LOW~~ | ~~**Codex AGENTS.override.md:** Codex supports `AGENTS.override.md` (takes precedence over AGENTS.md). Not handled during collect — could miss overriding content.~~ | **Completed** v0.3.13 — override checked first, wins when present |
+| 8 | ~~LOW~~ | ~~**Schema enrichment:** Many new Claude Code agent/skill frontmatter fields not typed in Zod schema. They pass through via `.passthrough()` but are untyped.~~ | **Completed** v0.3.13 — portable fields typed, categorization policy documented |
 
 ## Adapter Gaps (not in audit, discovered during review)
 
@@ -62,7 +62,7 @@ Discovered via `/audit-adapters` using the AI Stack Expert knowledge base. See `
 
 ### Tier 1 — Correctness
 5. Audit #4 (Codex native TOML agents — data loss)
-6. Audit #5-8 (Copilot agent fields, skill reading, Codex override, schema enrichment)
+6. ~~Audit #5-8 (Copilot agent fields, skill reading, Codex override, schema enrichment)~~ — completed v0.3.13
 7. Verify `.claude/commands/` deprecation status
 8. Deduplication test coverage (integration tests for multi-adapter install scenarios)
 
