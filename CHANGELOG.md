@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.14 (2026-04-09)
+
+### Fixed
+
+- `pit collect` no longer crashes on repos with malformed YAML frontmatter in agent, skill, or rule files. Files with unparseable YAML are now skipped with a warning showing the file path and specific parse error, instead of killing the entire command.
+- Warning messages now show relative paths instead of absolute paths for cleaner output.
+
 ## 0.3.13 (2026-04-09)
 
 ### Added

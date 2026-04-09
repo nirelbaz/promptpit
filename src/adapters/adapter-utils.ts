@@ -26,6 +26,22 @@ export const SAFE_MATTER_OPTIONS = {
   },
 };
 
+function formatYamlError(err: unknown): string {
+  if (err instanceof Error) {
+    return err.message.split("\n")[0] ?? "YAML parse error";
+  }
+  return "YAML parse error";
+}
+
+function safeParseMatter(raw: string, relPath: string, label = ""): matter.GrayMatterFile<string> | null {
+  try {
+    return matter(raw, SAFE_MATTER_OPTIONS as never);
+  } catch (err: unknown) {
+    log.warn(`Skipping ${label}${relPath}: invalid frontmatter (${formatYamlError(err)})`);
+    return null;
+  }
+}
+
 export async function readSkillsFromDir(
   skillsDir: string,
   opts?: { includeStandalone?: boolean },
@@ -46,12 +62,14 @@ export async function readSkillsFromDir(
   const standaloneFiles = skillFiles.filter((f) => path.basename(f) !== "SKILL.md");
 
   for (const file of dirFiles) {
+    const rel = path.relative(process.cwd(), file);
     const raw = await readFileOrNull(file);
     if (!raw) continue;
-    const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
+    const parsed = safeParseMatter(raw, rel);
+    if (!parsed) continue;
     const validation = skillFrontmatterSchema.safeParse(parsed.data);
     if (!validation.success) {
-      log.warn(`Skipping ${file}: invalid frontmatter (${validation.error.errors.map((e) => e.message).join(", ")})`);
+      log.warn(`Skipping ${rel}: invalid frontmatter (${validation.error.errors.map((e) => e.message).join(", ")})`);
       continue;
     }
     const skillName = path.basename(path.dirname(file));
@@ -61,12 +79,14 @@ export async function readSkillsFromDir(
   }
 
   for (const file of standaloneFiles) {
+    const rel = path.relative(process.cwd(), file);
     const raw = await readFileOrNull(file);
     if (!raw) continue;
-    const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
+    const parsed = safeParseMatter(raw, rel);
+    if (!parsed) continue;
     const validation = skillFrontmatterSchema.safeParse(parsed.data);
     if (!validation.success) {
-      log.warn(`Skipping ${file}: invalid frontmatter (${validation.error.errors.map((e) => e.message).join(", ")})`);
+      log.warn(`Skipping ${rel}: invalid frontmatter (${validation.error.errors.map((e) => e.message).join(", ")})`);
       continue;
     }
     const skillName = path.basename(file, ".md");
@@ -119,17 +139,19 @@ export async function readAgentsFromDir(
 
   const agents: AgentEntry[] = [];
   for (const file of agentFiles) {
+    const rel = path.relative(process.cwd(), file);
     const raw = await readFileOrNull(file);
     if (!raw) continue;
 
-    const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
+    const parsed = safeParseMatter(raw, rel);
+    if (!parsed) continue;
     const agentName = path.basename(file, file.endsWith(ext) ? ext : path.extname(file));
     const data = inferAgentDefaults(parsed.data as Record<string, unknown>, agentName, parsed.content);
 
     const validation = agentFrontmatterSchema.safeParse(data);
     if (!validation.success) {
       const reasons = validation.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ");
-      log.warn(`Skipping ${file}: invalid agent frontmatter (${reasons})`);
+      log.warn(`Skipping ${rel}: invalid agent frontmatter (${reasons})`);
       continue;
     }
 
@@ -159,17 +181,19 @@ export async function readRulesFromDir(
 
   const rules: RuleEntry[] = [];
   for (const file of ruleFiles) {
+    const rel = path.relative(process.cwd(), file);
     const raw = await readFileOrNull(file);
     if (!raw) continue;
 
-    const parsed = matter(raw, SAFE_MATTER_OPTIONS as never);
+    const parsed = safeParseMatter(raw, rel, "rule ");
+    if (!parsed) continue;
     const ruleName = path.basename(file, ".md");
 
     const dataWithDefaults = inferRuleDefaults(parsed.data as Record<string, unknown>, ruleName);
     const validation = ruleFrontmatterSchema.safeParse(dataWithDefaults);
     if (!validation.success) {
       const reasons = validation.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ");
-      log.warn(`Skipping rule ${file}: invalid frontmatter (${reasons})`);
+      log.warn(`Skipping rule ${rel}: invalid frontmatter (${reasons})`);
       continue;
     }
 
