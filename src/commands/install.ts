@@ -10,6 +10,7 @@ import { parseGitHubSource, cloneAndResolve } from "../sources/github.js";
 import { ruleToClaudeFormat } from "../adapters/claude-code.js";
 import { ruleToMdc } from "../adapters/cursor.js";
 import { ruleToInstructionsMd, agentToGitHubAgent } from "../adapters/copilot.js";
+import { agentToCodexToml } from "../adapters/toml-utils.js";
 import { buildInlineContent } from "../adapters/adapter-utils.js";
 import type { WriteOptions, DryRunEntry } from "../adapters/types.js";
 import type { DryRunSection } from "../shared/io.js";
@@ -316,6 +317,7 @@ export async function installStack(
           for (const agent of bundle.agents) {
             let translated = agent.content;
             if (adapter.id === "copilot") translated = agentToGitHubAgent(agent.content);
+            else if (adapter.id === "codex") translated = agentToCodexToml(agent.content);
             agents[agent.name] = { hash: computeHash(translated) };
           }
           if (Object.keys(agents).length > 0) {

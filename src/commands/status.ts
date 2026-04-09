@@ -139,8 +139,8 @@ async function checkAdapterStatus(
     const agentsDir = adapter.paths.project(root).agents;
     if (agentsDir) {
       for (const [agentName, agentRecord] of Object.entries(agentEntries)) {
-        // Claude Code uses <name>.md, Copilot uses <name>.agent.md
-        const ext = adapterId === "copilot" ? ".agent.md" : ".md";
+        // Claude Code uses <name>.md, Copilot uses <name>.agent.md, Codex uses <name>.toml
+        const ext = adapterId === "copilot" ? ".agent.md" : adapterId === "codex" ? ".toml" : ".md";
         const agentPath = path.join(agentsDir, `${agentName}${ext}`);
         let agentState: ArtifactState = "synced";
         const content = await readFileOrNull(agentPath);

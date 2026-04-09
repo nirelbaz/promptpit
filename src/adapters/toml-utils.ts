@@ -1,10 +1,10 @@
 import path from "node:path";
 import fg from "fast-glob";
 import matter from "gray-matter";
-import { parse } from "smol-toml";
+import { parse, stringify } from "smol-toml";
 import type { McpConfig, McpServerConfig, AgentEntry } from "../shared/schema.js";
 import { readFileOrNull } from "../shared/utils.js";
-import { inferAgentDefaults } from "./adapter-utils.js";
+import { inferAgentDefaults, SAFE_MATTER_OPTIONS } from "./adapter-utils.js";
 import { agentFrontmatterSchema } from "../shared/schema.js";
 import { log } from "../shared/io.js";
 
@@ -256,4 +256,22 @@ export async function readAgentsFromToml(
     });
   }
   return agents;
+}
+
+/**
+ * Convert an AgentEntry (portable Markdown format) to Codex TOML format.
+ * Inverse of readAgentsFromToml: frontmatter fields become TOML keys,
+ * body content becomes developer_instructions multiline string.
+ */
+export function agentToCodexToml(agentContent: string): string {
+  const parsed = matter(agentContent, SAFE_MATTER_OPTIONS as never);
+  const fm = parsed.data as Record<string, unknown>;
+  const body = parsed.content.trim();
+
+  const tomlObj: Record<string, unknown> = { ...fm };
+  if (body) {
+    tomlObj.developer_instructions = body;
+  }
+
+  return stringify(tomlObj) + "\n";
 }

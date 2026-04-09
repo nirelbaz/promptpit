@@ -4,6 +4,7 @@ import { tmpdir, homedir } from "node:os";
 import path from "node:path";
 import { codexAdapter } from "../../src/adapters/codex.js";
 import { readStack } from "../../src/core/stack.js";
+import { parse as parseToml } from "smol-toml";
 
 const VALID_STACK = path.resolve("test/__fixtures__/stacks/valid-stack");
 
@@ -192,18 +193,21 @@ describe("Codex CLI adapter", () => {
     });
   });
 
-  describe("inline agent writing", () => {
-    it("includes agents in marker block when writing instructions", async () => {
+  describe("native TOML agent writing", () => {
+    it("writes agents to .codex/agents/*.toml files", async () => {
       const bundle = await readStack(VALID_STACK);
-      await writeFile(path.join(tmpDir, "AGENTS.md"), "");
       await codexAdapter.write(tmpDir, bundle, {});
-      const content = await readFile(path.join(tmpDir, "AGENTS.md"), "utf-8");
-      expect(content).toContain("## Custom Agents");
-      expect(content).toContain("### reviewer");
-      expect(content).toContain("security-focused code reviewer");
+      const tomlPath = path.join(tmpDir, ".codex", "agents", "reviewer.toml");
+      const content = await readFile(tomlPath, "utf-8");
+      const parsed = parseToml(content) as Record<string, unknown>;
+      expect(parsed.name).toBe("reviewer");
+      expect(parsed.description).toBe("Code review agent focused on security");
+      expect(parsed.tools).toEqual(["Read", "Grep", "Glob"]);
+      expect(typeof parsed.developer_instructions).toBe("string");
+      expect((parsed.developer_instructions as string)).toContain("OWASP");
     });
 
-    it("does not include agents section when bundle has no agents", async () => {
+    it("does not write agent TOML files when bundle has no agents", async () => {
       const dir = await mkdtemp(path.join(tmpdir(), "pit-codex-"));
       await writeFile(
         path.join(dir, "stack.json"),
@@ -215,17 +219,15 @@ describe("Codex CLI adapter", () => {
       );
       const bundle = await readStack(dir);
       const target = await mkdtemp(path.join(tmpdir(), "pit-codex-target-"));
-      await writeFile(path.join(target, "AGENTS.md"), "");
       await codexAdapter.write(target, bundle, {});
-      const content = await readFile(path.join(target, "AGENTS.md"), "utf-8");
-      expect(content).not.toContain("## Custom Agents");
+      const agentsDir = path.join(target, ".codex", "agents");
+      const agentsDirExists = await readFile(path.join(agentsDir, "dummy.toml"), "utf-8").catch(() => null);
+      expect(agentsDirExists).toBeNull();
       await rm(dir, { recursive: true });
       await rm(target, { recursive: true });
     });
 
-    it("writes agents section when agentInstructions is empty but agents exist (else branch)", async () => {
-      // This exercises the buildInlineContent else branch:
-      // agentInstructions is "" → content starts "" → replaced by agentSection alone
+    it("skips AGENTS.md when no instructions but agents exist", async () => {
       const target = await mkdtemp(path.join(tmpdir(), "pit-codex-agents-only-"));
       const bundle = {
         manifest: { name: "agents-only", version: "1.0.0", skills: [], compatibility: [] },
@@ -240,15 +242,32 @@ describe("Codex CLI adapter", () => {
           },
         ],
         rules: [],
+        commands: [],
         mcpServers: {},
         envExample: {},
       };
       await codexAdapter.write(target, bundle, {});
-      const content = await readFile(path.join(target, "AGENTS.md"), "utf-8");
-      expect(content).toContain("## Custom Agents");
-      expect(content).toContain("### helper");
-      expect(content).toContain("Help with tasks.");
+      // AGENTS.md should NOT be created (no instructions, agents go to TOML)
+      const agentsMd = await readFile(path.join(target, "AGENTS.md"), "utf-8").catch(() => null);
+      expect(agentsMd).toBeNull();
+      // Agent TOML file should exist
+      const tomlContent = await readFile(path.join(target, ".codex", "agents", "helper.toml"), "utf-8");
+      const parsed = parseToml(tomlContent) as Record<string, unknown>;
+      expect(parsed.name).toBe("helper");
+      expect((parsed.developer_instructions as string)).toContain("Help with tasks.");
       await rm(target, { recursive: true });
+    });
+
+    it("does not write agent TOML files in dryRun mode", async () => {
+      const bundle = await readStack(VALID_STACK);
+      const result = await codexAdapter.write(tmpDir, bundle, { dryRun: true });
+      expect(result.filesWritten).toEqual([]);
+      const tomlFile = await readFile(
+        path.join(tmpDir, ".codex", "agents", "reviewer.toml"), "utf-8",
+      ).catch(() => null);
+      expect(tomlFile).toBeNull();
+      // Dry run entries should include the agent
+      expect(result.dryRunEntries?.some((e) => e.file.endsWith("reviewer.toml"))).toBe(true);
     });
   });
 
@@ -263,6 +282,10 @@ describe("Codex CLI adapter", () => {
 
     it("supports MCP stdio", () => {
       expect(codexAdapter.capabilities.mcpStdio).toBe(true);
+    });
+
+    it("uses native agent strategy", () => {
+      expect(codexAdapter.capabilities.agents).toBe("native");
     });
   });
 
