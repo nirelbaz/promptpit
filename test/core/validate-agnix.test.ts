@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import path from "node:path";
 import { promisify } from "node:util";
+import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
 
 // Controllable mock implementation, swapped per test
 let currentImpl: (bin: string, args: string[], opts: unknown) => Promise<{ stdout: string; stderr: string }>;
@@ -139,5 +141,102 @@ describe("agnix integration", () => {
     const result = await validateStack(VALID_STACK);
     expect(result.agnix.available).toBe(false);
     expect(result.agnix.diagnostics).toEqual([]);
+  });
+
+  // --- BUG 26: platform-aware agnix rule filtering ---
+
+  function agnixOutputWith(...diagnostics: Array<{ rule: string; file: string; level?: string; message?: string }>) {
+    return JSON.stringify({
+      diagnostics: diagnostics.map((d) => ({
+        level: d.level ?? "error",
+        rule: d.rule,
+        file: d.file,
+        message: d.message ?? `${d.rule} violation`,
+      })),
+    });
+  }
+
+  async function makeStack(compat: string[] | undefined): Promise<string> {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-agnix-filter-"));
+    const manifest: Record<string, unknown> = { name: "test", version: "1.0.0" };
+    if (compat !== undefined) manifest.compatibility = compat;
+    await writeFile(path.join(dir, "stack.json"), JSON.stringify(manifest));
+    await mkdir(path.join(dir, "agents"), { recursive: true });
+    await writeFile(
+      path.join(dir, "agents", "copilot-helper.md"),
+      "---\nname: copilot-helper\ndescription: A Copilot agent\nmodel: gpt-4o\ntools:\n  - code_interpreter\n---\n\nHelp with code.\n",
+    );
+    return dir;
+  }
+
+  it("suppresses CC-AG-003/CC-AG-009 on agent files for multi-platform stacks", async () => {
+    const dir = await makeStack(["claude-code", "copilot"]);
+    try {
+      currentImpl = succeedWith(agnixOutputWith(
+        { rule: "CC-AG-003", file: "agents/copilot-helper.md" },
+        { rule: "CC-AG-009", file: "agents/copilot-helper.md" },
+        { rule: "CC-042", file: "agent.promptpit.md", level: "warning" },
+      ));
+      const result = await validateStack(dir);
+      // CC-AG-003 and CC-AG-009 on agent files should be filtered
+      expect(result.agnix.diagnostics).toHaveLength(1);
+      expect(result.agnix.diagnostics[0].rule).toBe("CC-042");
+      // Filtering removes errors, so stack should be valid (only a warning remains)
+      expect(result.valid).toBe(true);
+      expect(result.errors).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  it("suppresses CC-AG rules when compatibility is not declared", async () => {
+    const dir = await makeStack(undefined);
+    try {
+      currentImpl = succeedWith(agnixOutputWith(
+        { rule: "CC-AG-003", file: "agents/copilot-helper.md" },
+        { rule: "CC-AG-009", file: "agents/copilot-helper.md" },
+      ));
+      const result = await validateStack(dir);
+      expect(result.agnix.diagnostics).toHaveLength(0);
+      expect(result.valid).toBe(true);
+      expect(result.errors).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  it("keeps CC-AG rules for Claude-only stacks", async () => {
+    const dir = await makeStack(["claude-code"]);
+    try {
+      currentImpl = succeedWith(agnixOutputWith(
+        { rule: "CC-AG-003", file: "agents/copilot-helper.md" },
+        { rule: "CC-AG-009", file: "agents/copilot-helper.md" },
+      ));
+      const result = await validateStack(dir);
+      // Claude-only stack should retain Claude-specific agent rules
+      expect(result.agnix.diagnostics).toHaveLength(2);
+      expect(result.agnix.diagnostics[0].rule).toBe("CC-AG-003");
+      expect(result.agnix.diagnostics[1].rule).toBe("CC-AG-009");
+      expect(result.valid).toBe(false);
+      expect(result.errors).toBe(2);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  it("only filters CC-AG rules on agent files, not on other files", async () => {
+    const dir = await makeStack(["claude-code", "codex"]);
+    try {
+      currentImpl = succeedWith(agnixOutputWith(
+        { rule: "CC-AG-003", file: "agents/copilot-helper.md" },
+        { rule: "CC-AG-003", file: "skills/browse/SKILL.md" },
+      ));
+      const result = await validateStack(dir);
+      // Agent file filtered, skill file kept
+      expect(result.agnix.diagnostics).toHaveLength(1);
+      expect(result.agnix.diagnostics[0].file).toBe("skills/browse/SKILL.md");
+    } finally {
+      await rm(dir, { recursive: true });
+    }
   });
 });
