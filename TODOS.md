@@ -23,7 +23,7 @@
 
 ~~**BUG 25:** `readSkillsFromDir()` only globs `*/SKILL.md`, missing standalone `.md` skill files (e.g. positron's `review-upstream-merge.md`).~~ **Completed:** v0.3.11 (2026-04-08)
 
-**BUG 26:** Validator CC-AG-009/CC-AG-003 false positives on Copilot/Codex-native tool and model names. Validator should be platform-aware or skip tool/model validation for non-Claude-origin agents.
+~~**BUG 26:** Validator CC-AG-009/CC-AG-003 false positives on Copilot/Codex-native tool and model names. Validator should be platform-aware or skip tool/model validation for non-Claude-origin agents.~~ **Completed:** v0.3.12 (2026-04-09)
 
 ## Adapter Audit Findings
 
@@ -57,7 +57,7 @@ Discovered via `/audit-adapters` using the AI Stack Expert knowledge base. See `
 ### Tier 0 — Blocking (fix before Phase 2)
 1. ~~Audit #1 + #2 (MCP and AGENTS.md duplication)~~ — in progress
 2. BUG 23 (Codex TOML comment stripping — immediate user-visible drift)
-3. BUG 26 (Validator false positives — blocks valid stacks)
+3. ~~BUG 26 (Validator false positives — blocks valid stacks)~~
 4. Audit #3 (Cursor native SKILL.md — lossy translation, high impact)
 
 ### Tier 1 — Correctness

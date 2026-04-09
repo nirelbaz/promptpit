@@ -45,8 +45,14 @@ function addDiag(
   diagnostics.push({ file, level, message, source: "pit" });
 }
 
+// Claude-Code-specific agnix rules that only apply to Claude-origin agents.
+// CC-AG-003: model must be a valid Claude model name
+// CC-AG-009: tools must be valid Claude Code tool names
+export const CLAUDE_AGENT_RULES = new Set(["CC-AG-003", "CC-AG-009"]);
+
 export async function validateStack(stackDir: string): Promise<ValidateResult> {
   const diagnostics: Diagnostic[] = [];
+  let compatibility: string[] | undefined;
 
   // Fire agnix early so subprocess startup overlaps with file I/O
   const agnixPromise = runAgnix(stackDir);
@@ -83,6 +89,8 @@ export async function validateStack(stackDir: string): Promise<ValidateResult> {
         for (const issue of result.error.issues) {
           addDiag(diagnostics, "stack.json", "error", `${issue.path.join(".")}: ${issue.message}`);
         }
+      } else {
+        compatibility = result.data.compatibility;
       }
     }
   }
@@ -238,17 +246,31 @@ export async function validateStack(stackDir: string): Promise<ValidateResult> {
   // --- agnix (optional) ---
   const agnixResult = await agnixPromise;
 
+  // Suppress Claude-specific agent rules for multi-platform stacks.
+  // A stack is Claude-only when compatibility is explicitly ["claude-code"].
+  // Otherwise (multi-platform or undeclared), these rules produce false positives
+  // on agents with Copilot/Codex-native tool and model names.
+  const isClaudeOnly = compatibility?.length === 1 && compatibility[0] === "claude-code";
+  const filteredAgnix: ValidateResult["agnix"] = !isClaudeOnly
+    ? {
+        available: agnixResult.available,
+        diagnostics: agnixResult.diagnostics.filter(
+          (d) => !(d.rule && CLAUDE_AGENT_RULES.has(d.rule) && d.file.startsWith("agents/")),
+        ),
+      }
+    : agnixResult;
+
   const errors = diagnostics.filter((d) => d.level === "error").length
-    + agnixResult.diagnostics.filter((d) => d.level === "error").length;
+    + filteredAgnix.diagnostics.filter((d) => d.level === "error").length;
   const warnings = diagnostics.filter((d) => d.level === "warning").length
-    + agnixResult.diagnostics.filter((d) => d.level === "warning").length;
+    + filteredAgnix.diagnostics.filter((d) => d.level === "warning").length;
 
   return {
     valid: errors === 0,
     errors,
     warnings,
     diagnostics,
-    agnix: agnixResult,
+    agnix: filteredAgnix,
   };
 }
 
