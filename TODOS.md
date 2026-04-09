@@ -44,7 +44,7 @@ Discovered via `/audit-adapters` using the AI Stack Expert knowledge base. See `
 
 **Copilot reads CLAUDE.md** (with `chat.useClaudeMdFile` setting). If both Claude Code and Copilot adapters are active, instructions may appear twice in Copilot. Needs at minimum a documented warning, ideally conditional write logic.
 
-**`.claude/commands/` is deprecated** in favor of `.claude/skills/`. The commands feature (v0.3.10) reads from and writes to the deprecated path. Verify current Claude Code behavior and migrate if needed.
+**`.claude/commands/` is NOT deprecated** — merged into skills. Both `.claude/commands/deploy.md` and `.claude/skills/deploy/SKILL.md` create `/deploy` and work identically. Commands still work; skills win on name conflict and add optional features (auto-invocation, supporting files, path rules). No removal timeline. Current PromptPit implementation (read/write to `.claude/commands/`) is correct. Future enhancement: optionally install commands as skills for richer features. Verified 2026-04-09.
 
 **Claude Code `@path/to/file` import syntax** in CLAUDE.md is not resolved during collect. If a project's CLAUDE.md uses imports, collected instructions will contain the literal import directives instead of referenced content. Can produce incomplete stacks silently.
 
@@ -63,7 +63,7 @@ Discovered via `/audit-adapters` using the AI Stack Expert knowledge base. See `
 ### Tier 1 — Correctness
 5. Audit #4 (Codex native TOML agents — data loss)
 6. ~~Audit #5-8 (Copilot agent fields, skill reading, Codex override, schema enrichment)~~ — completed v0.3.13
-7. Verify `.claude/commands/` deprecation status
+7. ~~Verify `.claude/commands/` deprecation status~~ — verified 2026-04-09, not deprecated (merged into skills)
 8. Deduplication test coverage (integration tests for multi-adapter install scenarios)
 
 ### Tier 2 — Phase 2 features

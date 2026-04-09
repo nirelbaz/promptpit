@@ -141,7 +141,7 @@ adapter-file: src/adapters/claude-code.ts
 - Plugin subagents cannot use hooks, mcpServers, or permissionMode
 - `autoMode` not read from shared project settings
 - SSE transport deprecated — use HTTP (Streamable HTTP)
-- `.claude/commands/` deprecated in favor of `.claude/skills/`
+- `.claude/commands/` merged into `.claude/skills/` — both paths create slash commands, commands still work, skills win on name conflict. Skills add optional features (auto-invocation, supporting files, path rules). No removal timeline announced.
 
 ## Promptpit Gaps
 - **MCP duplication**: Claude Code reads `.mcp.json` natively — if Standards adapter writes to `.mcp.json` AND Claude Code adapter writes to `.claude/settings.json`, MCP servers appear twice. Need deduplication strategy.
