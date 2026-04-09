@@ -19,12 +19,13 @@ pit check          # CI integration — verify config is fresh and in sync
 
 ## Features
 
+- **Stack composition via `extends`.** Layer stacks on top of each other: company base stack + team overrides + personal preferences. `pit install` resolves the dependency graph recursively.
 - **Five adapters:** Claude Code, Cursor, Codex CLI, GitHub Copilot, and cross-tool standards (AGENTS.md, .mcp.json). One stack, every tool configured.
-- **Install from any GitHub repo,** even ones that don't use promptpit. pit auto-collects from raw configs.
+- **Install from any GitHub repo,** even ones that don't use promptpit. pit auto-collects from raw configs. Use `--save` to add it to your extends list.
 - **Skills follow the [Agent Skills](https://agentskills.io) spec,** symlinked or translated per tool (SKILL.md, .mdc, .instructions.md)
 - **Portable rules:** conditional rules in `.promptpit/rules/*.md` with YAML frontmatter, translated per-adapter (Claude Code, Cursor, Copilot)
 - **Portable agents:** custom agent definitions in `.promptpit/agents/*.md`, written natively to Claude Code and Copilot, inlined for other tools
-- **Drift detection:** `pit status` shows what's synced, drifted, or deleted across all adapters, including rules and agents
+- **Drift detection:** `pit status` shows what's synced, drifted, or deleted across all adapters, including upstream extends changes
 - **Dry-run previews:** `--dry-run` on collect and install shows exactly what would change. `--verbose` adds unified diffs.
 - **CI integration:** `pit check` exits non-zero on stale or drifted config. `pit validate` lints your stack before publishing.
 - **MCP handled automatically:** stdio and HTTP remote servers, secrets stripped during collect, per-adapter format translation (JSON, TOML)
@@ -76,14 +77,32 @@ Use `--dry-run` to preview what would be collected without writing anything. Add
 ### Install a stack
 
 ```sh
-pit install                              # from .promptpit/ in current dir
+pit install                              # from .promptpit/ in current dir (resolves extends automatically)
 pit install ./path/to/.promptpit         # from local path
 pit install github:user/repo             # from GitHub
 pit install github:user/repo@v2.0       # specific tag or branch
+pit install github:user/repo --save     # install + add to extends in stack.json
 pit install github:user/repo --global   # install to user-level paths (~/.claude/, ~/.codex/, etc.)
 ```
 
-pit detects which AI tools are in your project and writes config in each one's format. If the repo doesn't have a `.promptpit/` bundle, pit auto-collects one from the raw configs it finds. Use `--dry-run` to preview changes before writing.
+pit detects which AI tools are in your project and writes config in each one's format. If the repo doesn't have a `.promptpit/` bundle, pit auto-collects one from the raw configs it finds. If your stack has `extends`, pit resolves the full dependency chain and merges content (last-declared wins, with conflict warnings). Use `--dry-run` to preview changes before writing.
+
+### Stack composition
+
+Layer stacks on top of each other with `extends` in stack.json:
+
+```json
+{
+  "name": "my-team-stack",
+  "version": "1.0.0",
+  "extends": [
+    "github:company/base-stack@1.0.0",
+    "../shared-stack/.promptpit"
+  ]
+}
+```
+
+Base instructions merge first, your overrides layer on top. `pit install --save` adds a stack to your extends list in one command. `pit collect --include-extends` flattens the chain into a self-contained bundle.
 
 ### Validate and check
 
@@ -131,7 +150,7 @@ Adding a new tool is one file plus one registry entry. See [CONTRIBUTING.md](CON
 git clone https://github.com/nirelbaz/promptpit.git
 cd promptpit
 npm install
-npm test          # 395 tests, vitest
+npm test          # 624 tests, vitest
 npm run build     # builds dist/cli.js via tsup
 npm run lint      # TypeScript strict mode check
 ```
@@ -141,7 +160,8 @@ npm run lint      # TypeScript strict mode check
 See [TODOS.md](TODOS.md) for the full roadmap. The big milestones:
 
 - **v0.3 (Team Platform):** Done. Five adapters (Claude Code, Cursor, Codex, Copilot, Standards), seven commands, drift detection, dry-run previews, CI integration, portable rules and agents.
-- **v0.4 (Stack Composer):** Stack composition via `extends` in stack.json, `pit diff`, `pit update`, `pit uninstall`, selective install/collect, AGENTS.md as primary input.
+- **v0.4 (Stack Composer):** Done. Stack composition via `extends` in stack.json, `pit install --save`, upstream drift detection, conflict warnings with last-declared-wins, `pit collect --include-extends`.
+- **v0.5:** `pit diff`, `pit update`, `pit uninstall`, selective install/collect.
 - **v1.0 (Ecosystem Bridge):** Multi-source install (skills.sh, SkillsMP, cursor.directory), `pit publish`, `pit search`.
 
 ## Acknowledgments
