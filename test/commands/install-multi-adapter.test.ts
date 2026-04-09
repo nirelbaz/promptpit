@@ -187,7 +187,7 @@ describe("install multi-adapter dedup", () => {
       expect(countMarkers(copilotInstr, "test-stack")).toBe(1);
     });
 
-    it("Codex only: .mcp.json present, AGENTS.md absent", async () => {
+    it("Codex only: .mcp.json present, AGENTS.md written by Codex (not Standards)", async () => {
       const target = await setupTarget(["codex"]);
       await installStack(VALID_STACK, target, {});
 
@@ -237,12 +237,8 @@ describe("install multi-adapter dedup", () => {
       // .mcp.json present (Standards writes it)
       expect(existsSync(path.join(target, ".mcp.json"))).toBe(true);
 
-      // .claude/settings.json has no MCP (CC skips it)
-      const settingsPath = path.join(target, ".claude", "settings.json");
-      if (existsSync(settingsPath)) {
-        const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
-        expect(settings.mcpServers).toBeUndefined();
-      }
+      // .claude/settings.json should not exist (CC skips MCP write entirely)
+      expect(existsSync(path.join(target, ".claude", "settings.json"))).toBe(false);
 
       // AGENTS.md present (Standards writes it)
       const agents = await readFile(path.join(target, "AGENTS.md"), "utf-8");
