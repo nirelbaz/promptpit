@@ -104,6 +104,44 @@ describe("agent translation", () => {
     expect(result).toContain("model:");
     expect(result).toContain("Write code.");
   });
+
+  it("passes through all supported Copilot agent frontmatter fields", () => {
+    const content = `---
+name: secure-agent
+description: Security scanning agent
+tools:
+  - Read
+  - Grep
+model: gpt-4o
+target: github-copilot
+disable-model-invocation: true
+user-invocable: false
+mcp-servers:
+  security-scanner:
+    command: npx
+    args: ["-y", "security-mcp"]
+metadata:
+  category: security
+  version: "2.0"
+---
+
+Scan for vulnerabilities.
+`;
+    const result = agentToGitHubAgent(content);
+    expect(result).toContain("target:");
+    expect(result).toContain("disable-model-invocation:");
+    expect(result).toContain("user-invocable:");
+    expect(result).toContain("mcp-servers:");
+    expect(result).toContain("metadata:");
+    expect(result).toContain("Scan for vulnerabilities.");
+  });
+
+  it("handles agent content with no frontmatter", () => {
+    const content = "Review all pull requests for security issues.\n";
+    const result = agentToGitHubAgent(content);
+    expect(result).not.toContain("---");
+    expect(result).toContain("Review all pull requests");
+  });
 });
 
 describe("agent read/write", () => {
