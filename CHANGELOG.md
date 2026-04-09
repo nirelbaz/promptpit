@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0 (2026-04-09)
+
+### Added
+
+- **Stack composition via `extends`.** Stacks can now declare dependencies on other stacks with `"extends": ["github:company/base-stack@1.0.0"]` in stack.json. `pit install` recursively fetches and resolves the dependency graph. Base instructions merge first, your overrides layer on top. This is how multi-team setups work: company publishes a base stack, teams extend it with their own skills and rules.
+- **`pit install --save`** installs a stack AND adds it to your `extends` list in one command. Like `npm install --save` for AI agent configs.
+- **`pit install` (no args) resolves extends** automatically. New developer clones the repo, runs `pit install`, gets everything including transitive dependencies.
+- **`pit collect --include-extends`** flattens your extends chain into a self-contained bundle. Publish it and consumers install without needing access to your base stacks.
+- **`pit collect` preserves extends** when re-collecting. Your `extends` and `instructionStrategy` fields survive re-runs of `pit collect`.
+- **`pit status` checks upstream extends** for drift. If a base stack has new commits since you installed, you'll see a warning. Use `--skip-upstream` for offline mode.
+- **`pit validate` checks extends syntax** (format validation, duplicate detection, instructionStrategy without extends warning).
+- **Conflict detection with warnings.** When two stacks define the same skill, rule, agent, or MCP server, the last-declared version wins and you get a clear warning showing which source was overridden.
+- **`instructionStrategy: "override"`** in stack.json lets you replace base instructions entirely instead of merging them.
+- **Provenance tracking.** The install manifest records which commit each extended stack was resolved from, enabling precise drift detection.
+
+### Changed
+
+- `mergeConfigs` renamed to `mergeAdapterConfigs` for clarity (the new `mergeGraph` handles stack composition with different semantics).
+
 ## 0.3.14 (2026-04-09)
 
 ### Fixed
