@@ -200,4 +200,190 @@ describe("install multi-adapter dedup", () => {
       expect(countMarkers(agents, "test-stack")).toBe(1);
     });
   }); // close default mode describe
+
+  describe("mode overrides", () => {
+    it("CC + Cursor + --force-standards: writes both universal and tool-specific", async () => {
+      const target = await setupTarget(["claude-code", "cursor"]);
+      await installStack(VALID_STACK, target, { forceStandards: true });
+
+      // .mcp.json present (Standards writes it)
+      expect(existsSync(path.join(target, ".mcp.json"))).toBe(true);
+      const mcp = JSON.parse(await readFile(path.join(target, ".mcp.json"), "utf-8"));
+      expect(mcp.mcpServers.postgres).toBeDefined();
+
+      // .claude/settings.json also has MCP (CC writes it)
+      const settings = JSON.parse(
+        await readFile(path.join(target, ".claude", "settings.json"), "utf-8"),
+      );
+      expect(settings.mcpServers.postgres).toBeDefined();
+
+      // AGENTS.md present (Standards writes it)
+      const agents = await readFile(path.join(target, "AGENTS.md"), "utf-8");
+      expect(countMarkers(agents, "test-stack")).toBe(1);
+
+      // CLAUDE.md has instructions (CC writes it)
+      const claude = await readFile(path.join(target, "CLAUDE.md"), "utf-8");
+      expect(countMarkers(claude, "test-stack")).toBe(1);
+
+      // .cursorrules has instructions (Cursor writes it)
+      const cursorrules = await readFile(path.join(target, ".cursorrules"), "utf-8");
+      expect(countMarkers(cursorrules, "test-stack")).toBe(1);
+    });
+
+    it("CC + Cursor + --prefer-universal: universal files written, tool-specific skipped", async () => {
+      const target = await setupTarget(["claude-code", "cursor"]);
+      await installStack(VALID_STACK, target, { preferUniversal: true });
+
+      // .mcp.json present (Standards writes it)
+      expect(existsSync(path.join(target, ".mcp.json"))).toBe(true);
+
+      // .claude/settings.json has no MCP (CC skips it)
+      const settingsPath = path.join(target, ".claude", "settings.json");
+      if (existsSync(settingsPath)) {
+        const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
+        expect(settings.mcpServers).toBeUndefined();
+      }
+
+      // AGENTS.md present (Standards writes it)
+      const agents = await readFile(path.join(target, "AGENTS.md"), "utf-8");
+      expect(countMarkers(agents, "test-stack")).toBe(1);
+
+      // .cursorrules unchanged (Cursor skips instructions)
+      const cursorrules = await readFile(path.join(target, ".cursorrules"), "utf-8");
+      expect(cursorrules).toBe("Existing rules\n");
+    });
+
+    it("CC + Copilot + --prefer-universal: Copilot instructions skipped", async () => {
+      const target = await setupTarget(["claude-code", "copilot"]);
+      await installStack(VALID_STACK, target, { preferUniversal: true });
+
+      // .mcp.json present (Standards writes it)
+      expect(existsSync(path.join(target, ".mcp.json"))).toBe(true);
+
+      // AGENTS.md present (Standards writes it)
+      const agents = await readFile(path.join(target, "AGENTS.md"), "utf-8");
+      expect(countMarkers(agents, "test-stack")).toBe(1);
+
+      // .github/copilot-instructions.md unchanged (Copilot skips instructions)
+      const copilotInstr = await readFile(
+        path.join(target, ".github", "copilot-instructions.md"),
+        "utf-8",
+      );
+      expect(copilotInstr).toBe("# Existing\n");
+    });
+  });
+
+  describe("manifest correctness", () => {
+    it("all four adapters: manifest records all detected adapters", async () => {
+      const target = await setupTarget(["claude-code", "cursor", "copilot", "codex"]);
+      await installStack(VALID_STACK, target, {});
+
+      const manifest = await readManifest(target);
+      expect(manifest.installs).toHaveLength(1);
+
+      const adapters = manifest.installs[0]!.adapters;
+      expect(adapters).toHaveProperty("claude-code");
+      expect(adapters).toHaveProperty("cursor");
+      expect(adapters).toHaveProperty("copilot");
+      expect(adapters).toHaveProperty("codex");
+      expect(adapters).toHaveProperty("standards");
+    });
+
+    it("default mode: Standards has no mcp or instructions hashes when skipped", async () => {
+      const target = await setupTarget(["claude-code", "cursor"]);
+      await installStack(VALID_STACK, target, {});
+
+      const manifest = await readManifest(target);
+      const standards = manifest.installs[0]!.adapters.standards;
+
+      // Standards skipped both MCP and instructions
+      expect(standards?.mcp).toBeUndefined();
+      expect(standards?.instructions).toBeUndefined();
+    });
+
+    it("mode switch: re-install updates manifest entry (upsert)", async () => {
+      const target = await setupTarget(["claude-code", "cursor"]);
+
+      // First install: default mode
+      await installStack(VALID_STACK, target, {});
+      const first = await readManifest(target);
+      expect(first.installs).toHaveLength(1);
+      expect(first.installs[0]!.installMode).toBeUndefined();
+
+      // Second install: --force-standards
+      await installStack(VALID_STACK, target, { forceStandards: true });
+      const second = await readManifest(target);
+
+      // Still 1 entry (upserted, not duplicated)
+      expect(second.installs).toHaveLength(1);
+      expect(second.installs[0]!.installMode).toBe("force-standards");
+
+      // Standards now has MCP hashes (it wrote .mcp.json)
+      expect(second.installs[0]!.adapters.standards?.mcp).toBeDefined();
+    });
+  });
+
+  describe("idempotency and lifecycle", () => {
+    it("install twice: no marker duplication", async () => {
+      const target = await setupTarget(["claude-code", "cursor"]);
+      await installStack(VALID_STACK, target, {});
+      await installStack(VALID_STACK, target, {});
+
+      // Each file should have exactly 1 marker block
+      const claude = await readFile(path.join(target, "CLAUDE.md"), "utf-8");
+      expect(countMarkers(claude, "test-stack")).toBe(1);
+
+      const cursorrules = await readFile(path.join(target, ".cursorrules"), "utf-8");
+      expect(countMarkers(cursorrules, "test-stack")).toBe(1);
+    });
+
+    it("mode switch: universal files appear after re-install with --force-standards", async () => {
+      const target = await setupTarget(["claude-code", "cursor"]);
+
+      // Default mode: no .mcp.json
+      await installStack(VALID_STACK, target, {});
+      expect(existsSync(path.join(target, ".mcp.json"))).toBe(false);
+
+      // Re-install with --force-standards: .mcp.json appears
+      await installStack(VALID_STACK, target, { forceStandards: true });
+      expect(existsSync(path.join(target, ".mcp.json"))).toBe(true);
+      const mcp = JSON.parse(await readFile(path.join(target, ".mcp.json"), "utf-8"));
+      expect(mcp.mcpServers.postgres).toBeDefined();
+
+      // Manifest updated
+      const manifest = await readManifest(target);
+      expect(manifest.installs).toHaveLength(1);
+      expect(manifest.installs[0]!.installMode).toBe("force-standards");
+    });
+
+    it("status reports synced for all adapters after multi-adapter install", async () => {
+      const target = await setupTarget(["claude-code", "cursor", "copilot"]);
+      await installStack(VALID_STACK, target, {});
+
+      const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+      await statusCommand(target, { json: true });
+      const output = spy.mock.calls.map((c) => c.join(" ")).join("");
+      const result = JSON.parse(output);
+      spy.mockRestore();
+
+      const stacks = result.stacks as Array<{
+        adapters: Array<{ adapterId: string; state: string }>;
+        overallState: string;
+      }>;
+      expect(stacks).toHaveLength(1);
+      expect(stacks[0]!.overallState).toBe("synced");
+
+      // Each adapter should be synced
+      for (const adapter of stacks[0]!.adapters) {
+        expect(adapter.state).toBe("synced");
+      }
+
+      // All expected adapters present
+      const adapterIds = stacks[0]!.adapters.map((a) => a.adapterId);
+      expect(adapterIds).toContain("claude-code");
+      expect(adapterIds).toContain("cursor");
+      expect(adapterIds).toContain("copilot");
+      expect(adapterIds).toContain("standards");
+    });
+  });
 });
