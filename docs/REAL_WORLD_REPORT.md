@@ -135,9 +135,9 @@ After all 18 fixes landed, ran agent-based QA across all 9 repos. 7/9 fully clea
 **Repo affected:** everything-claude-code (exa MCP server)
 
 ### BUG 23 (Medium): Codex config.toml drift after install
-**Status: OPEN**
+**Status: FIXED** (v0.3.12)
 
-Installing MCP to an existing `config.toml` strips comments and reformats the file. The hash computed at install time doesn't match the on-disk content after TOML serialization, causing immediate drift in `pit status`.
+Installing MCP to an existing `config.toml` stripped comments and reformatted the file. Fixed by switching `writeMcpToToml()` from parse→merge→stringify (which destroyed comments) to surgical text editing that only modifies managed `[mcp_servers.*]` sections.
 
 **Repo affected:** everything-claude-code
 

@@ -1,7 +1,7 @@
 import path from "node:path";
 import fg from "fast-glob";
 import matter from "gray-matter";
-import { parse, stringify } from "smol-toml";
+import { parse } from "smol-toml";
 import type { McpConfig, McpServerConfig, AgentEntry } from "../shared/schema.js";
 import { readFileOrNull } from "../shared/utils.js";
 import { inferAgentDefaults } from "./adapter-utils.js";
@@ -61,42 +61,135 @@ export function readMcpFromToml(content: string): McpConfig {
   return result;
 }
 
+/** Escape special regex characters. */
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Quote a TOML key if it contains non-bare characters. */
+function toTomlKey(key: string): string {
+  return /^[A-Za-z0-9_-]+$/.test(key) ? key : JSON.stringify(key);
+}
+
+/** Quote a string value for TOML (JSON escaping is compatible). */
+function toTomlString(s: string): string {
+  return JSON.stringify(s);
+}
+
+/**
+ * Find the line range of a [mcp_servers.NAME] section (including sub-tables).
+ * Returns start (header line) and end (last content line + 1, excluding
+ * trailing blank lines so inter-section spacing is preserved).
+ */
+function findSectionRange(
+  lines: string[],
+  serverName: string,
+): { start: number; end: number } | null {
+  const escaped = escapeRegex(serverName);
+  const headerRe = new RegExp(
+    `^\\s*\\[\\s*mcp_servers\\s*\\.\\s*${escaped}\\s*\\]\\s*(#.*)?$`,
+  );
+  const subTableRe = new RegExp(
+    `^\\s*\\[\\s*mcp_servers\\s*\\.\\s*${escaped}\\.`,
+  );
+  const anyHeaderRe = /^\s*\[/;
+
+  let start = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (headerRe.test(lines[i]!)) {
+      start = i;
+      break;
+    }
+  }
+  if (start === -1) return null;
+
+  // Find next section header that isn't a sub-table of this server
+  let nextHeader = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (anyHeaderRe.test(lines[i]!) && !subTableRe.test(lines[i]!)) {
+      nextHeader = i;
+      break;
+    }
+  }
+
+  // Exclude trailing blank lines so spacing between sections is preserved
+  let end = nextHeader;
+  while (end > start + 1 && lines[end - 1]!.trim() === "") {
+    end--;
+  }
+
+  return { start, end };
+}
+
+/**
+ * Generate a TOML section for an MCP server.
+ */
+function serverToTomlSection(
+  name: string,
+  server: McpServerConfig,
+): string {
+  const key = toTomlKey(name);
+  const lines: string[] = [`[mcp_servers.${key}]`];
+  if (server.command) lines.push(`command = ${toTomlString(server.command)}`);
+  if (server.args && server.args.length > 0) {
+    lines.push(`args = [${server.args.map(toTomlString).join(", ")}]`);
+  }
+  if (server.url) lines.push(`url = ${toTomlString(server.url)}`);
+  if (server.serverUrl) lines.push(`serverUrl = ${toTomlString(server.serverUrl)}`);
+  if (server.env && Object.keys(server.env).length > 0) {
+    const pairs = Object.entries(server.env)
+      .map(([k, v]) => `${toTomlKey(k)} = ${toTomlString(v)}`)
+      .join(", ");
+    lines.push(`env = { ${pairs} }`);
+  }
+  return lines.join("\n");
+}
+
 /**
  * Merge MCP servers into a config.toml string.
- * Preserves all existing config sections. Merges new servers into
- * the mcp_servers section (existing servers are preserved, new ones added).
+ * Surgically edits managed [mcp_servers.*] sections while preserving
+ * comments, formatting, and non-managed content in the original file.
  */
 export function writeMcpToToml(
   existingContent: string,
   servers: McpConfig,
 ): string {
-  let config: Record<string, unknown> = {};
-  if (existingContent.trim()) {
-    try {
-      config = parse(existingContent) as Record<string, unknown>;
-    } catch (err) {
-      throw new Error(
-        `Failed to parse existing config.toml: ${(err as Error).message}`,
-      );
+  // Empty file — generate fresh
+  if (!existingContent.trim()) {
+    const sections = Object.entries(servers).map(([name, server]) =>
+      serverToTomlSection(name, server),
+    );
+    return sections.join("\n\n") + "\n";
+  }
+
+  // Validate existing TOML is parseable (fail fast on corruption)
+  try {
+    parse(existingContent);
+  } catch (err) {
+    throw new Error(
+      `Failed to parse existing config.toml: ${(err as Error).message}`,
+    );
+  }
+
+  let lines = existingContent.split("\n");
+
+  for (const [name, server] of Object.entries(servers)) {
+    const range = findSectionRange(lines, name);
+    const newLines = serverToTomlSection(name, server).split("\n");
+
+    if (range) {
+      // Replace existing section in-place
+      lines.splice(range.start, range.end - range.start, ...newLines);
+    } else {
+      // Append new section at end with blank line separator
+      while (lines.length > 0 && lines[lines.length - 1]!.trim() === "") {
+        lines.pop();
+      }
+      lines.push("", ...newLines);
     }
   }
 
-  const existing =
-    (config.mcp_servers as Record<string, unknown> | undefined) ?? {};
-  const merged: Record<string, unknown> = { ...existing };
-
-  for (const [name, server] of Object.entries(servers)) {
-    const entry: Record<string, unknown> = {};
-    if (server.command) entry.command = server.command;
-    if (server.args) entry.args = server.args;
-    if (server.url) entry.url = server.url;
-    if (server.serverUrl) entry.serverUrl = server.serverUrl;
-    if (server.env) entry.env = server.env;
-    merged[name] = entry;
-  }
-
-  config.mcp_servers = merged;
-  return stringify(config) + "\n";
+  return lines.join("\n").replace(/\n*$/, "\n");
 }
 
 /**
