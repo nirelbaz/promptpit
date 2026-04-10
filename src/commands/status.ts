@@ -4,6 +4,7 @@ import chalk from "chalk";
 import { readManifest } from "../core/manifest.js";
 import { reconcileAll } from "../core/reconcile.js";
 import type { ReconciledArtifact, ReconciledAdapter } from "../core/reconcile.js";
+// Re-export for downstream compatibility (check.ts imports ArtifactState from here)
 export type { ArtifactState } from "../core/reconcile.js";
 import type { ArtifactState } from "../core/reconcile.js";
 import type { InstallManifest } from "../shared/schema.js";
@@ -87,7 +88,7 @@ function toAdapterStatus(reconciled: ReconciledAdapter): AdapterStatus {
     mcpCount: byType.mcp.length,
     agentCount: byType.agent.length,
     commandCount: byType.command.length,
-    hasInstructions: byType.instructions.length > 0,
+    hasInstructions: reconciled.hasInstructions,
     state: reconciled.state,
     driftedFiles,
     instructionDetail: byType.instructions[0] ? toArtifactDetail(byType.instructions[0]) : undefined,

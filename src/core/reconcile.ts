@@ -13,7 +13,7 @@ import { getAdapter } from "../adapters/registry.js";
 export type ArtifactState = "synced" | "drifted" | "deleted" | "removed-by-user" | "untracked";
 
 // Priority: deleted > removed-by-user > drifted > untracked > synced
-export const STATE_SEVERITY: Record<ArtifactState, number> = {
+const STATE_SEVERITY: Record<ArtifactState, number> = {
   synced: 0, untracked: 1, drifted: 2, "removed-by-user": 3, deleted: 4,
 };
 
@@ -37,6 +37,8 @@ export interface ReconciledAdapter {
   adapterId: string;
   artifacts: ReconciledArtifact[];
   state: ArtifactState;
+  /** Whether the manifest recorded instructions for this adapter (may not have a corresponding artifact if adapter lookup failed). */
+  hasInstructions: boolean;
 }
 
 export interface ReconcileResult {
@@ -287,7 +289,7 @@ async function reconcileAdapter(
     }
   }
 
-  return { adapterId, artifacts, state: worstState };
+  return { adapterId, artifacts, state: worstState, hasInstructions: !!record.instructions };
 }
 
 export async function reconcileAll(root: string): Promise<ReconcileOutput> {
