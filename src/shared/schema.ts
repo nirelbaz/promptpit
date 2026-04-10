@@ -241,9 +241,14 @@ const artifactHashSchema = z.object({
   hash: z.string(),
 });
 
+const skillArtifactHashSchema = z.object({
+  hash: z.string(),
+  supportingFiles: z.array(z.string()).optional(),
+});
+
 const adapterInstallSchema = z.object({
   instructions: artifactHashSchema.optional(),
-  skills: z.record(artifactHashSchema).optional(),
+  skills: z.record(skillArtifactHashSchema).optional(),
   agents: z.record(artifactHashSchema).optional(),
   rules: z.record(artifactHashSchema).optional(),
   commands: z.record(artifactHashSchema).optional(),

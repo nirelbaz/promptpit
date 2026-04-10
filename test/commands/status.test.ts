@@ -155,7 +155,7 @@ describe("pit status", () => {
     const output = await captureOutput(() => statusCommand(dir, { verbose: true }));
     expect(output).toContain("security");
     expect(output).toContain("testing");
-    expect(output).toContain("SKILL.md");
+    expect(output).toContain(".agents/skills/");
   });
 
   it("--verbose shows MCP server names", async () => {
@@ -590,7 +590,7 @@ describe("pit status", () => {
     await writeManifest(dir, manifest);
 
     const output = await captureOutput(() => statusCommand(dir, { verbose: true }));
-    expect(output).toContain(".agents/skills/my-skill/SKILL.md");
+    expect(output).toContain(".agents/skills/my-skill");
     expect(output).not.toContain(dir);
   });
 

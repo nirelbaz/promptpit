@@ -251,6 +251,14 @@ export async function installStack(
             file: dest,
             action: skillExists ? "modify" : "create",
           });
+          for (const f of skill.supportingFiles ?? []) {
+            const fDest = path.join(base, skill.name, f.relativePath);
+            canonicalEntries.push({
+              file: fDest,
+              action: (await exists(fDest)) ? "modify" : "create",
+              detail: "supporting file",
+            });
+          }
         }
       } else {
         const canonSpin = spinner("Writing canonical skills...");
@@ -430,9 +438,15 @@ export async function installStack(
 
         // Hash skills from in-memory content
         if (finalBundle.skills.length > 0) {
-          const skills: Record<string, { hash: string }> = {};
+          const skills: Record<string, { hash: string; supportingFiles?: string[] }> = {};
           for (const skill of finalBundle.skills) {
-            skills[skill.name] = { hash: computeSkillHash(skill.content, skill.supportingFiles) };
+            const entry: { hash: string; supportingFiles?: string[] } = {
+              hash: computeSkillHash(skill.content, skill.supportingFiles),
+            };
+            if (skill.supportingFiles && skill.supportingFiles.length > 0) {
+              entry.supportingFiles = skill.supportingFiles.map((f) => f.relativePath);
+            }
+            skills[skill.name] = entry;
           }
           if (Object.keys(skills).length > 0) {
             record.skills = skills;

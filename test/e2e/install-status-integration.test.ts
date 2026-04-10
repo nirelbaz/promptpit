@@ -162,7 +162,7 @@ describe("E2E: install → status integration", () => {
 
     // The drifted files should reference the specific skill, not other artifacts
     for (const a of driftedAdapters) {
-      expect(a.driftedFiles.some((f) => f.includes("SKILL.md"))).toBe(true);
+      expect(a.driftedFiles.some((f) => f.includes("skills/"))).toBe(true);
     }
   });
 

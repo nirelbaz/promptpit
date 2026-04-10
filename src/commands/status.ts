@@ -22,6 +22,7 @@ export interface ArtifactDetail {
   name: string;
   path: string;
   state: ArtifactState;
+  detail?: string;
 }
 
 export interface AdapterStatus {
@@ -59,7 +60,11 @@ export interface StatusResult {
 
 // Map a ReconciledArtifact to the ArtifactDetail shape used by status display
 function toArtifactDetail(artifact: ReconciledArtifact): ArtifactDetail {
-  return { name: artifact.name, path: artifact.path, state: artifact.state };
+  let detail: string | undefined;
+  if (artifact.supportingFileCount && artifact.supportingFileCount > 0) {
+    detail = `+${artifact.supportingFileCount} file${artifact.supportingFileCount !== 1 ? "s" : ""}`;
+  }
+  return { name: artifact.name, path: artifact.path, state: artifact.state, detail };
 }
 
 // Map a ReconciledAdapter to the AdapterStatus shape used by status display
@@ -151,7 +156,8 @@ function printDetailLine(d: ArtifactDetail, typeLabel: string, root: string): vo
   const relPath = path.relative(root, d.path);
   const label = chalk.dim(typeLabel.padEnd(14));
   const name = typeLabel === "instructions" ? "" : `${d.name}  `;
-  console.log(`      ${stateIcon(d.state)} ${label}${name}${chalk.dim(relPath)}`);
+  const detail = d.detail ? chalk.dim(` (${d.detail})`) : "";
+  console.log(`      ${stateIcon(d.state)} ${label}${name}${chalk.dim(relPath)}${detail}`);
 }
 
 function formatDetailed(result: StatusResult, root: string, verbose: boolean): void {

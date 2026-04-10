@@ -1,5 +1,6 @@
 import path from "node:path";
 import { readManifest, computeHash, computeSkillHash, computeMcpServerHash } from "./manifest.js";
+import { readFile } from "node:fs/promises";
 import { readFileOrNull } from "../shared/utils.js";
 import { readMcpFromToml } from "../adapters/toml-utils.js";
 import { parseJsonc, resolveRuleDest, buildInlineContent, collectSupportingFilesFromDir } from "../adapters/adapter-utils.js";
@@ -36,6 +37,7 @@ export interface ReconciledArtifact {
   path: string;
   state: ArtifactState;
   actualContent?: string;
+  supportingFileCount?: number;
 }
 
 export interface ReconciledAdapter {
@@ -122,23 +124,41 @@ async function reconcileAdapter(
     if (content == null) {
       skillState = "deleted";
     } else {
-      const supportingFiles = await collectSupportingFilesFromDir(skillDir);
-      const currentHash = computeSkillHash(
-        content,
-        supportingFiles.length > 0 ? supportingFiles : undefined,
-      );
+      // Only hash supporting files that were tracked during install (avoids
+      // false drift from pre-existing files in the skill directory)
+      const trackedPaths = skillRecord.supportingFiles;
+      let supportingFiles: import("../shared/schema.js").SupportingFile[] | undefined;
+      if (trackedPaths && trackedPaths.length > 0) {
+        const files: import("../shared/schema.js").SupportingFile[] = [];
+        for (const relPath of trackedPaths) {
+          try {
+            const buf = await readFile(path.join(skillDir, relPath));
+            files.push({ relativePath: relPath, content: buf });
+          } catch {
+            // File missing — will cause hash mismatch → drifted
+          }
+        }
+        supportingFiles = files.length > 0 ? files : undefined;
+      } else if (!trackedPaths) {
+        // Legacy manifest without supportingFiles list — fall back to full dir scan
+        const allFiles = await collectSupportingFilesFromDir(skillDir);
+        supportingFiles = allFiles.length > 0 ? allFiles : undefined;
+      }
+      const currentHash = computeSkillHash(content, supportingFiles);
       if (currentHash !== skillRecord.hash) {
         skillState = "drifted";
         actualContent = content;
       }
     }
+    const fileCount = skillRecord.supportingFiles?.length ?? 0;
     worstState = escalateState(worstState, skillState);
     artifacts.push({
       type: "skill",
       name: skillName,
-      path: skillPath,
+      path: skillDir,
       state: skillState,
       actualContent,
+      ...(fileCount > 0 && { supportingFileCount: fileCount }),
     });
   }
 
