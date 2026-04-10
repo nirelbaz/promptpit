@@ -55,8 +55,11 @@ const stringOrArray = z.preprocess(
  * Passthrough: any other tool-specific fields.
  */
 export const skillFrontmatterSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().min(1),
+  name: z.string().min(1).max(64).regex(
+    /^[a-z0-9][a-z0-9-]*$/,
+    "Must be 1-64 lowercase alphanumeric characters or hyphens, starting with alphanumeric",
+  ),
+  description: z.string().min(1).max(1024),
   license: z.string().optional(),
   metadata: z.record(z.unknown()).optional(),
   "allowed-tools": stringOrArray.optional(),

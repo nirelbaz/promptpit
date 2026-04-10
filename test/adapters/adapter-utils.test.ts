@@ -128,6 +128,60 @@ describe("writeWithMarkers", () => {
   });
 });
 
+describe("skillFrontmatterSchema validation", () => {
+  // Import the schema directly for unit-level validation tests
+  let skillFrontmatterSchema: typeof import("../../src/shared/schema.js").skillFrontmatterSchema;
+
+  beforeEach(async () => {
+    skillFrontmatterSchema = (await import("../../src/shared/schema.js")).skillFrontmatterSchema;
+  });
+
+  it("accepts valid lowercase-hyphenated name", () => {
+    const result = skillFrontmatterSchema.safeParse({ name: "my-skill", description: "A skill" });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts single-char name", () => {
+    const result = skillFrontmatterSchema.safeParse({ name: "a", description: "A skill" });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects name with uppercase letters", () => {
+    const result = skillFrontmatterSchema.safeParse({ name: "MySkill", description: "A skill" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects name longer than 64 chars", () => {
+    const result = skillFrontmatterSchema.safeParse({ name: "a".repeat(65), description: "A skill" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects name with underscores", () => {
+    const result = skillFrontmatterSchema.safeParse({ name: "my_skill", description: "A skill" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects name with spaces", () => {
+    const result = skillFrontmatterSchema.safeParse({ name: "my skill", description: "A skill" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects name starting with hyphen", () => {
+    const result = skillFrontmatterSchema.safeParse({ name: "-my-skill", description: "A skill" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects description longer than 1024 chars", () => {
+    const result = skillFrontmatterSchema.safeParse({ name: "ok", description: "x".repeat(1025) });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts description at exactly 1024 chars", () => {
+    const result = skillFrontmatterSchema.safeParse({ name: "ok", description: "x".repeat(1024) });
+    expect(result.success).toBe(true);
+  });
+});
+
 describe("readSkillsFromDir", () => {
   let tmpDir: string;
 
