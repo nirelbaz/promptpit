@@ -2,7 +2,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { rename } from "node:fs/promises";
 import { installManifestSchema } from "../shared/schema.js";
-import type { InstallManifest, InstallEntry, McpServerConfig } from "../shared/schema.js";
+import type { InstallManifest, InstallEntry, McpServerConfig, SupportingFile } from "../shared/schema.js";
 import { readFileOrNull, writeFileEnsureDir } from "../shared/utils.js";
 
 const MANIFEST_FILE = "installed.json";
@@ -62,6 +62,20 @@ export function upsertInstall(
 
 export function computeHash(content: string): string {
   return "sha256:" + createHash("sha256").update(content).digest("hex");
+}
+
+/** Composite hash for a skill: SKILL.md content + sorted supporting file hashes.
+ *  When no supporting files, identical to computeHash(content). */
+export function computeSkillHash(content: string, supportingFiles?: SupportingFile[]): string {
+  if (!supportingFiles || supportingFiles.length === 0) {
+    return computeHash(content);
+  }
+  const fileHashes = supportingFiles
+    .slice()
+    .sort((a, b) => a.relativePath.localeCompare(b.relativePath))
+    .map((f) => createHash("sha256").update(f.content).digest("hex"))
+    .join("");
+  return "sha256:" + createHash("sha256").update(content + fileHashes).digest("hex");
 }
 
 // Normalize content for hash comparison (instructions may have whitespace diffs)

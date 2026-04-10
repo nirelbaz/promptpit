@@ -1,8 +1,8 @@
 import path from "node:path";
-import { readManifest, computeHash, computeMcpServerHash } from "./manifest.js";
+import { readManifest, computeHash, computeSkillHash, computeMcpServerHash } from "./manifest.js";
 import { readFileOrNull } from "../shared/utils.js";
 import { readMcpFromToml } from "../adapters/toml-utils.js";
-import { parseJsonc, resolveRuleDest, buildInlineContent } from "../adapters/adapter-utils.js";
+import { parseJsonc, resolveRuleDest, buildInlineContent, collectSupportingFilesFromDir } from "../adapters/adapter-utils.js";
 import { ruleToClaudeFormat } from "../adapters/claude-code.js";
 import { ruleToMdc } from "../adapters/cursor.js";
 import { ruleToInstructionsMd, agentToGitHubAgent } from "../adapters/copilot.js";
@@ -114,14 +114,19 @@ async function reconcileAdapter(
   // Check skills — use canonical .agents/skills/ path (all adapters read from here)
   const skillEntries = record.skills ?? {};
   for (const [skillName, skillRecord] of Object.entries(skillEntries)) {
-    const skillPath = path.join(root, ".agents", "skills", skillName, "SKILL.md");
+    const skillDir = path.join(root, ".agents", "skills", skillName);
+    const skillPath = path.join(skillDir, "SKILL.md");
     let skillState: ArtifactState = "synced";
     let actualContent: string | undefined;
     const content = await readFileOrNull(skillPath);
     if (content == null) {
       skillState = "deleted";
     } else {
-      const currentHash = computeHash(content);
+      const supportingFiles = await collectSupportingFilesFromDir(skillDir);
+      const currentHash = computeSkillHash(
+        content,
+        supportingFiles.length > 0 ? supportingFiles : undefined,
+      );
       if (currentHash !== skillRecord.hash) {
         skillState = "drifted";
         actualContent = content;

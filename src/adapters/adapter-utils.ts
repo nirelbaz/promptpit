@@ -45,7 +45,7 @@ function safeParseMatter(raw: string, relPath: string, label = ""): matter.GrayM
 
 const MAX_SUPPORTING_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
-async function collectSupportingFiles(skillDir: string): Promise<SupportingFile[]> {
+export async function collectSupportingFilesFromDir(skillDir: string): Promise<SupportingFile[]> {
   const allFiles = await fg("**/*", {
     cwd: skillDir,
     absolute: true,
@@ -103,7 +103,7 @@ export async function readSkillsFromDir(
     if (seen.has(skillName)) continue;
     seen.add(skillName);
     const skillDir = path.dirname(file);
-    const supportingFiles = await collectSupportingFiles(skillDir);
+    const supportingFiles = await collectSupportingFilesFromDir(skillDir);
     skills.push({
       name: skillName,
       path: `skills/${skillName}`,

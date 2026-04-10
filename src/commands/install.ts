@@ -1,7 +1,7 @@
 import path from "node:path";
 import { readStack } from "../core/stack.js";
 import { installCanonical } from "../core/skill-store.js";
-import { readManifest, writeManifest, upsertInstall, computeHash, computeMcpServerHash } from "../core/manifest.js";
+import { readManifest, writeManifest, upsertInstall, computeHash, computeSkillHash, computeMcpServerHash } from "../core/manifest.js";
 import { detectAdapters } from "../adapters/registry.js";
 import { validateEnvNames } from "../core/security.js";
 import { writeFileEnsureDir, removeDir, readFileOrNull, exists } from "../shared/utils.js";
@@ -432,7 +432,7 @@ export async function installStack(
         if (finalBundle.skills.length > 0) {
           const skills: Record<string, { hash: string }> = {};
           for (const skill of finalBundle.skills) {
-            skills[skill.name] = { hash: computeHash(skill.content) };
+            skills[skill.name] = { hash: computeSkillHash(skill.content, skill.supportingFiles) };
           }
           if (Object.keys(skills).length > 0) {
             record.skills = skills;
