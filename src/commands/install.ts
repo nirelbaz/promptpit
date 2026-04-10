@@ -25,6 +25,9 @@ export interface InstallOptions {
   forceStandards?: boolean;
   preferUniversal?: boolean;
   save?: boolean;
+  trust?: boolean;
+  ignoreScripts?: boolean;
+  ignoreScriptErrors?: boolean;
 }
 
 export async function installStack(

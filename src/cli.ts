@@ -98,6 +98,12 @@ program
     "Use universal files (.mcp.json, AGENTS.md) instead of tool-specific equivalents",
   )
   .option("--save", "Add the source to extends in .promptpit/stack.json")
+  .option("--trust", "Trust remote stack scripts (skip consent prompt)")
+  .option("--ignore-scripts", "Skip lifecycle scripts (preinstall/postinstall)")
+  .option(
+    "--ignore-script-errors",
+    "Continue install even if lifecycle scripts fail",
+  )
   .addHelpText("after", `
 Examples:
   pit install                          # from .promptpit/ in current dir
@@ -119,6 +125,9 @@ Examples:
         forceStandards?: boolean;
         preferUniversal?: boolean;
         save?: boolean;
+        trust?: boolean;
+        ignoreScripts?: boolean;
+        ignoreScriptErrors?: boolean;
       },
     ) => {
       try {
