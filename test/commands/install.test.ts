@@ -400,6 +400,70 @@ describe("installStack", () => {
     await expect(access(path.join(target, "pre-marker"))).resolves.toBeUndefined();
   });
 
+  it("runs CLI --post-install script after files are written", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    const stackDir = await mkdtemp(path.join(tmpdir(), "pit-stack-"));
+    tmpDirs.push(stackDir);
+    await writeFile(
+      path.join(stackDir, "stack.json"),
+      JSON.stringify({ name: "cli-script-test", version: "1.0.0" }),
+    );
+    await writeFile(path.join(stackDir, "agent.promptpit.md"), "---\n---\nTest");
+
+    await installStack(stackDir, target, {
+      postInstall: `touch "${target}/cli-postinstall-ran"`,
+    });
+
+    const { access } = await import("node:fs/promises");
+    await expect(access(path.join(target, "cli-postinstall-ran"))).resolves.toBeUndefined();
+  });
+
+  it("runs CLI --pre-install script before files are written", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    const stackDir = await mkdtemp(path.join(tmpdir(), "pit-stack-"));
+    tmpDirs.push(stackDir);
+    await writeFile(
+      path.join(stackDir, "stack.json"),
+      JSON.stringify({ name: "cli-script-test", version: "1.0.0" }),
+    );
+    await writeFile(path.join(stackDir, "agent.promptpit.md"), "---\n---\nTest");
+
+    await installStack(stackDir, target, {
+      preInstall: `mkdir -p "${target}/cli-pre-marker"`,
+    });
+
+    const { access } = await import("node:fs/promises");
+    await expect(access(path.join(target, "cli-pre-marker"))).resolves.toBeUndefined();
+  });
+
+  it("CLI scripts are skipped with --ignore-scripts", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    const stackDir = await mkdtemp(path.join(tmpdir(), "pit-stack-"));
+    tmpDirs.push(stackDir);
+    await writeFile(
+      path.join(stackDir, "stack.json"),
+      JSON.stringify({ name: "cli-script-test", version: "1.0.0" }),
+    );
+    await writeFile(path.join(stackDir, "agent.promptpit.md"), "---\n---\nTest");
+
+    await installStack(stackDir, target, {
+      postInstall: `touch "${target}/cli-should-not-exist"`,
+      ignoreScripts: true,
+    });
+
+    const { access } = await import("node:fs/promises");
+    await expect(access(path.join(target, "cli-should-not-exist"))).rejects.toThrow();
+  });
+
   it("skips scripts with --ignore-scripts", async () => {
     const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
     tmpDirs.push(target);

@@ -29,6 +29,8 @@ export interface InstallOptions {
   trust?: boolean;
   ignoreScripts?: boolean;
   ignoreScriptErrors?: boolean;
+  preInstall?: string;
+  postInstall?: string;
 }
 
 export async function installStack(
@@ -192,6 +194,29 @@ export async function installStack(
     ];
     const preScripts = collectScripts(scriptChainEntries, "preinstall");
     const postScripts = collectScripts(scriptChainEntries, "postinstall");
+
+    // Append CLI-provided scripts (run after manifest scripts)
+    if (opts.preInstall) {
+      preScripts.push({
+        phase: "preinstall",
+        script: opts.preInstall,
+        stackDir: resolvedSource,
+        stackName: finalBundle.manifest.name,
+        stackVersion: finalBundle.manifest.version,
+        source,
+      });
+    }
+    if (opts.postInstall) {
+      postScripts.push({
+        phase: "postinstall",
+        script: opts.postInstall,
+        stackDir: resolvedSource,
+        stackName: finalBundle.manifest.name,
+        stackVersion: finalBundle.manifest.version,
+        source,
+      });
+    }
+
     const isRemoteSource = (src: string) => !!parseGitHubSource(src);
 
     // Run preinstall scripts (before any files are written)

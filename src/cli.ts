@@ -106,6 +106,8 @@ program
     "--ignore-script-errors",
     "Continue install even if lifecycle scripts fail",
   )
+  .option("--pre-install <script>", "Run a shell command before installing files")
+  .option("--post-install <script>", "Run a shell command after installing files")
   .addHelpText("after", `
 Examples:
   pit install                          # from .promptpit/ in current dir
@@ -114,6 +116,7 @@ Examples:
   pit install --dry-run                # preview without writing
   pit install --global                 # install to user-level paths
   pit install github:org/stack --save  # install + add to extends
+  pit install github:org/stack --post-install ./setup  # run setup after install
 `)
   .action(
     async (
@@ -130,6 +133,8 @@ Examples:
         trust?: boolean;
         ignoreScripts?: boolean;
         ignoreScriptErrors?: boolean;
+        preInstall?: string;
+        postInstall?: string;
       },
     ) => {
       try {
