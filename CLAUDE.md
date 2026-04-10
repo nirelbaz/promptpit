@@ -7,7 +7,7 @@ PromptPit (`pit`) — the composition layer for AI agent configuration. Bundles 
 ## Commands
 
 ```bash
-npm test          # run tests (vitest, 624 tests)
+npm test          # run tests (vitest)
 npm run build     # build dist/cli.js (tsup, ESM)
 npm run lint      # TypeScript strict mode check
 npm run dev       # watch mode build
@@ -53,11 +53,13 @@ Tests use vitest with real filesystem (not memfs) for E2E. Test fixtures in `tes
 ## Slash Commands
 
 ```bash
+/develop            # full workflow: design -> plan -> implement -> review -> simplify
+/ship               # push branch + create PR
 /version [X.Y.Z]   # bump version in package.json + add CHANGELOG entry
 /release            # tag and publish from main (runs all checks first)
 ```
 
-`/version` on your feature branch before opening a PR. `/release` on main after merging.
+`/develop` for new features (runs the full cycle). `/ship` when ready to push and PR. `/version` on your feature branch before opening a PR. `/release` on main after merging.
 
 ## Before Pushing
 
@@ -70,12 +72,6 @@ npm test && npm run lint && npm run build
 All three must pass. No exceptions.
 
 When bumping the version in `package.json`, always add a corresponding entry to `CHANGELOG.md`.
-
-## gstack
-
-Use the `/browse` skill from gstack for all web browsing. Never use `mcp__claude-in-chrome__*` tools.
-
-Available skills: `/office-hours`, `/plan-ceo-review`, `/plan-eng-review`, `/plan-design-review`, `/design-consultation`, `/design-shotgun`, `/design-html`, `/review`, `/ship`, `/land-and-deploy`, `/canary`, `/benchmark`, `/browse`, `/connect-chrome`, `/qa`, `/qa-only`, `/design-review`, `/setup-browser-cookies`, `/setup-deploy`, `/retro`, `/investigate`, `/document-release`, `/codex`, `/cso`, `/autoplan`, `/careful`, `/freeze`, `/guard`, `/unfreeze`, `/gstack-upgrade`, `/learn`.
 
 ## Adding a New Adapter
 
