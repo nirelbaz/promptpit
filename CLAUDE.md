@@ -53,11 +53,13 @@ Tests use vitest with real filesystem (not memfs) for E2E. Test fixtures in `tes
 ## Slash Commands
 
 ```bash
+/develop            # full workflow: design -> plan -> implement -> review -> simplify
+/ship               # push branch + create PR
 /version [X.Y.Z]   # bump version in package.json + add CHANGELOG entry
 /release            # tag and publish from main (runs all checks first)
 ```
 
-`/version` on your feature branch before opening a PR. `/release` on main after merging.
+`/develop` for new features (runs the full cycle). `/ship` when ready to push and PR. `/version` on your feature branch before opening a PR. `/release` on main after merging.
 
 ## Before Pushing
 
