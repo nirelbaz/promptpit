@@ -109,8 +109,8 @@ PromptPit already parses Agent Skills frontmatter (`skillFrontmatterSchema` in `
 ### Command param syntax translation
 Translate `$ARGUMENTS` (Claude Code) <-> `$1` (Cursor) <-> `${input:arguments}` (Copilot) during install. Currently commands are copied verbatim with warnings. Single-param translation is clean, but multi-param ($1/$2/$3 -> $ARGUMENTS) is lossy. Deferred until user demand validates the need.
 
-### Claude Code settings.json permissions/hooks
-spotlight has a rich `.claude/settings.json` with `permissions`, `hooks`, and `enabledMcpServers`. Only `mcpServers` is collected. Consider porting these as optional bundle sections.
+### ~~Claude Code settings.json permissions/hooks~~ **Investigated, not a gap**
+~~spotlight has a rich `.claude/settings.json` with `permissions`, `hooks`, and `enabledMcpServers`. Only `mcpServers` is collected. Consider porting these as optional bundle sections.~~ These sections are non-portable by nature: **permissions** are local security policy (the installer controls what tools are allowed, not the stack author); **hooks** reference local scripts that have no distribution primitive to carry them (unlike MCP servers which are self-contained `command`+`args`); **enabledMcpServers** is local preference. The `hooks: true` capability on the Claude Code adapter remains correct — it means the adapter supports the concept, not that pit needs to distribute them.
 
 ### Large instruction file warning
 KurrentDB has a 25.1KB CLAUDE.md. No warning about unusually large instruction files. Add a size threshold warning during collect/validate.
