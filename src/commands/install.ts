@@ -440,13 +440,10 @@ export async function installStack(
         if (finalBundle.skills.length > 0) {
           const skills: Record<string, { hash: string; supportingFiles?: string[] }> = {};
           for (const skill of finalBundle.skills) {
-            const entry: { hash: string; supportingFiles?: string[] } = {
+            skills[skill.name] = {
               hash: computeSkillHash(skill.content, skill.supportingFiles),
+              supportingFiles: skill.supportingFiles?.map((f) => f.relativePath) ?? [],
             };
-            if (skill.supportingFiles && skill.supportingFiles.length > 0) {
-              entry.supportingFiles = skill.supportingFiles.map((f) => f.relativePath);
-            }
-            skills[skill.name] = entry;
           }
           if (Object.keys(skills).length > 0) {
             record.skills = skills;
