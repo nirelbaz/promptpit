@@ -476,10 +476,9 @@ export async function writeSkillsNative(
         await removeFileOrSymlink(skillDir);
         await writeFileEnsureDir(dest, skill.content);
         for (const file of skill.supportingFiles ?? []) {
-          await writeFileBufferEnsureDir(
-            path.join(skillDir, file.relativePath),
-            file.content,
-          );
+          const resolved = path.resolve(skillDir, file.relativePath);
+          if (!resolved.startsWith(skillDir + path.sep)) continue;
+          await writeFileBufferEnsureDir(resolved, file.content);
         }
       }
       filesWritten.push(dest);

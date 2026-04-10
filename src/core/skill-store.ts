@@ -23,8 +23,11 @@ export async function installCanonical(
     await writeFileEnsureDir(dest, skill.content);
     pathMap.set(skill.name, dest);
 
+    const skillDir = path.join(base, skill.name);
     for (const file of skill.supportingFiles ?? []) {
-      await writeFileBufferEnsureDir(path.join(base, skill.name, file.relativePath), file.content);
+      const resolved = path.resolve(skillDir, file.relativePath);
+      if (!resolved.startsWith(skillDir + path.sep)) continue;
+      await writeFileBufferEnsureDir(resolved, file.content);
     }
   }
 

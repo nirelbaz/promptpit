@@ -142,11 +142,11 @@ export async function writeStack(
       path.join(outputDir, "skills", skill.name, "SKILL.md"),
       skill.content,
     );
+    const skillDir = path.join(outputDir, "skills", skill.name);
     for (const file of skill.supportingFiles ?? []) {
-      await writeFileBufferEnsureDir(
-        path.join(outputDir, "skills", skill.name, file.relativePath),
-        file.content,
-      );
+      const resolved = path.resolve(skillDir, file.relativePath);
+      if (!resolved.startsWith(skillDir + path.sep)) continue;
+      await writeFileBufferEnsureDir(resolved, file.content);
     }
   }
 

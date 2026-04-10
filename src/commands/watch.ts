@@ -142,7 +142,10 @@ async function handleChanges(
     for (const entry of manifest.installs) {
       for (const record of Object.values(entry.adapters)) {
         if (record.skills?.[skillName]) {
-          record.skills[skillName] = { hash: computeSkillHash(skill.content, skill.supportingFiles) };
+          record.skills[skillName] = {
+            hash: computeSkillHash(skill.content, skill.supportingFiles),
+            supportingFiles: skill.supportingFiles?.map((f) => f.relativePath) ?? [],
+          };
           manifestChanged = true;
         }
       }
