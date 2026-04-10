@@ -24,6 +24,10 @@ export const stackManifestSchema = z.object({
   compatibility: z.array(z.string()).optional(),
   extends: z.array(z.string()).optional(),
   instructionStrategy: z.enum(["concatenate", "override"]).optional(),
+  scripts: z.object({
+    preinstall: z.string().min(1).optional(),
+    postinstall: z.string().min(1).optional(),
+  }).optional(),
 });
 
 export type StackManifest = z.infer<typeof stackManifestSchema>;
