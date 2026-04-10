@@ -12,9 +12,10 @@ import { ruleToMdc } from "../adapters/cursor.js";
 import { ruleToInstructionsMd, agentToGitHubAgent } from "../adapters/copilot.js";
 import { agentToCodexToml } from "../adapters/toml-utils.js";
 import { buildInlineContent } from "../adapters/adapter-utils.js";
+import { collectScripts, executeScripts } from "../core/scripts.js";
 import type { WriteOptions, DryRunEntry } from "../adapters/types.js";
 import type { DryRunSection } from "../shared/io.js";
-import type { InstallEntry, AdapterInstallRecord } from "../shared/schema.js";
+import type { InstallEntry, AdapterInstallRecord, StackBundle } from "../shared/schema.js";
 import { canonicalSkillBase } from "../core/skill-store.js";
 
 export interface InstallOptions {
@@ -113,6 +114,7 @@ export async function installStack(
       resolvedCommit?: string;
       resolvedAt: string;
     }> = [];
+    let resolvedNodes: Array<{ source: string; stackDir: string; bundle: StackBundle }> = [];
 
     if (bundle.manifest.extends && bundle.manifest.extends.length > 0) {
       const resolveSpin = spinner("Resolving extends...");
@@ -146,6 +148,8 @@ export async function installStack(
           resolvedCommit: n.resolvedCommit,
           resolvedAt: new Date().toISOString(),
         }));
+
+      resolvedNodes = graph.nodes.filter((n) => n.depth > 0);
     }
 
     // Validate inbound env var names (security)
@@ -169,6 +173,35 @@ export async function installStack(
           `${Object.keys(finalBundle.mcpServers).join(", ")}. ` +
           `MCP servers run as executables on your machine.`,
       );
+    }
+
+    // Collect lifecycle scripts from resolved chain
+    const scriptChainEntries = [
+      // Dependencies first (deepest-first order from resolveGraph)
+      ...resolvedNodes.map((n) => ({
+        manifest: n.bundle.manifest,
+        stackDir: n.stackDir,
+        source: n.source,
+      })),
+      // Root stack last
+      {
+        manifest: finalBundle.manifest,
+        stackDir: resolvedSource,
+        source,
+      },
+    ];
+
+    // Run preinstall scripts (before any files are written)
+    if (!opts.ignoreScripts) {
+      const preScripts = collectScripts(scriptChainEntries, "preinstall");
+      if (preScripts.length > 0) {
+        await executeScripts(preScripts, {
+          targetDir: target,
+          isRemote: (src) => !!parseGitHubSource(src),
+          trust: opts.trust,
+          ignoreScriptErrors: opts.ignoreScriptErrors,
+        });
+      }
     }
 
     // Detect target adapters
@@ -496,6 +529,19 @@ export async function installStack(
         log.info(
           `Created .env with ${Object.keys(finalBundle.envExample).length} placeholder(s). Fill in your values.`,
         );
+      }
+    }
+
+    // Run postinstall scripts (after all files are written)
+    if (!opts.ignoreScripts) {
+      const postScripts = collectScripts(scriptChainEntries, "postinstall");
+      if (postScripts.length > 0) {
+        await executeScripts(postScripts, {
+          targetDir: target,
+          isRemote: (src) => !!parseGitHubSource(src),
+          trust: opts.trust,
+          ignoreScriptErrors: opts.ignoreScriptErrors,
+        });
       }
     }
 
