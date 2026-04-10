@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.1 (2026-04-10)
+
+### Added
+
+- `pit diff` command shows the actual text diff between installed config and your `.promptpit/` source. See exactly what changed, not just "drifted" — with per-adapter and per-artifact breakdowns.
+- Install lifecycle scripts: stacks can now define `scripts.preinstall` and `scripts.postinstall` in stack.json to run shell commands before/after install. Remote stacks show the script content and require explicit consent. `--trust` skips the prompt, `--ignore-scripts` skips scripts entirely, `--dry-run` shows what would run.
+- Large instruction file warning during collect and validate. Files over 15KB (like a 25KB CLAUDE.md) now trigger a warning so you know before your stack bloats.
+- `/develop` and `/ship` custom commands for the PromptPit project workflow.
+
+### Changed
+
+- Reconciliation logic extracted into `src/core/reconcile.ts` for reuse by both `pit status` and `pit diff`.
+- Cleaned up docs: removed completed plan/spec/superpowers directories.
+
 ## 0.4.0 (2026-04-09)
 
 ### Added
