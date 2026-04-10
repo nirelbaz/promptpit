@@ -2,7 +2,7 @@ import path from "node:path";
 import chalk from "chalk";
 import { createTwoFilesPatch } from "diff";
 import { reconcileAll, buildExpectedContent } from "../core/reconcile.js";
-import type { ArtifactType, ArtifactState, ReconciledArtifact } from "../core/reconcile.js";
+import type { ArtifactType, ArtifactState } from "../core/reconcile.js";
 import { readStack } from "../core/stack.js";
 import { resolveGraph, mergeGraph } from "../core/resolve.js";
 import type { StackBundle } from "../shared/schema.js";
@@ -11,9 +11,9 @@ import { log } from "../shared/io.js";
 // --- Public types ---
 
 export interface DiffOptions {
-  type?: string;      // filter by artifact type (singular: "skill", "rule", etc.)
-  adapter?: string;   // filter by adapter ID
-  name?: string;      // filter by artifact name
+  type?: ArtifactType; // filter by artifact type (singular: "skill", "rule", etc.)
+  adapter?: string;    // filter by adapter ID
+  name?: string;       // filter by artifact name
   json?: boolean;
 }
 
@@ -40,14 +40,21 @@ export interface DiffResult {
 
 // --- Helpers ---
 
-/** Load the stack bundle from .promptpit/, resolving extends if present. */
-async function loadBundle(root: string): Promise<StackBundle | null> {
+/**
+ * Load the stack bundle from .promptpit/, resolving extends if present.
+ * @param isLocalSource Whether the stack was installed from local .promptpit/ (vs GitHub).
+ *   Controls skipRootInstructions to match what pit install used at install time.
+ */
+async function loadBundle(root: string, isLocalSource: boolean): Promise<StackBundle | null> {
   const stackDir = path.join(root, ".promptpit");
   try {
     const bundle = await readStack(stackDir);
     if (bundle.manifest.extends?.length) {
       const graph = await resolveGraph(stackDir);
-      const merged = mergeGraph(graph, { skipRootInstructions: true });
+      const merged = mergeGraph(graph, {
+        instructionStrategy: bundle.manifest.instructionStrategy ?? "concatenate",
+        skipRootInstructions: isLocalSource,
+      });
       return merged.bundle;
     }
     return bundle;
@@ -105,7 +112,10 @@ export async function computeDiff(root: string, opts: DiffOptions): Promise<Diff
     return { stacks: [], hasDrift: false, hasManifest: reconciled.hasManifest };
   }
 
-  const bundle = await loadBundle(root);
+  // Determine if the stack was installed from local .promptpit/ (no source) or external (has source).
+  // This affects how extends are resolved — must match what pit install used.
+  const isLocalSource = !reconciled.stacks[0]?.source;
+  const bundle = await loadBundle(root, isLocalSource);
   let hasDrift = false;
 
   const stacks = reconciled.stacks.map((rs) => {
