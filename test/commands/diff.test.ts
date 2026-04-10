@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { diffCommand, computeDiff } from "../../src/commands/diff.js";
-import { writeManifest, computeHash } from "../../src/core/manifest.js";
+import { writeManifest, computeHash, computeMcpServerHash } from "../../src/core/manifest.js";
 import { insertMarkers } from "../../src/shared/markers.js";
 import type { InstallManifest } from "../../src/shared/schema.js";
 
@@ -286,6 +286,134 @@ describe("pit diff", () => {
     const dir = await makeTmpDir();
     const output = await captureOutput(() => diffCommand(dir, {}));
     expect(output).toContain("No stacks installed");
+  });
+
+  it("shows note for removed-by-user artifact", async () => {
+    const dir = await makeTmpDir();
+    const instrContent = "Be helpful";
+
+    await setupStack(dir, { instructions: instrContent });
+
+    // Write a CLAUDE.md WITHOUT markers — simulates user stripping them
+    await writeFile(path.join(dir, "CLAUDE.md"), "User's own content, markers removed");
+
+    await writeManifest(dir, {
+      version: 1,
+      installs: [{
+        stack: "test-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          "claude-code": {
+            instructions: { hash: computeHash(instrContent.trim()) },
+          },
+        },
+      }],
+    });
+
+    const output = await captureOutput(() => diffCommand(dir, {}));
+    expect(output).toContain("removed by user");
+  });
+
+  it("filters by --adapter", async () => {
+    const dir = await makeTmpDir();
+    const skillContent = "skill content";
+
+    await setupStack(dir, { skills: [{ name: "sec", content: skillContent }] });
+
+    // Install with both claude-code and standards adapters tracking the skill
+    const skillDir = path.join(dir, ".agents", "skills", "sec");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, "SKILL.md"), "modified skill");
+
+    await writeManifest(dir, {
+      version: 1,
+      installs: [{
+        stack: "test-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          "claude-code": {
+            skills: { sec: { hash: computeHash(skillContent) } },
+          },
+          "standards": {
+            skills: { sec: { hash: computeHash(skillContent) } },
+          },
+        },
+      }],
+    });
+
+    const output = await captureOutput(() => diffCommand(dir, { adapter: "standards" }));
+    expect(output).toContain("standards");
+    expect(output).not.toContain("claude-code");
+  });
+
+  it("shows diff for drifted MCP server", async () => {
+    const dir = await makeTmpDir();
+    const originalServer = { command: "node", args: ["server.js"] } as Record<string, unknown>;
+    const modifiedServer = { command: "node", args: ["server.js", "--debug"] };
+
+    // Setup stack with MCP
+    const ppDir = path.join(dir, ".promptpit");
+    await mkdir(ppDir, { recursive: true });
+    await writeFile(path.join(ppDir, "stack.json"), JSON.stringify({
+      name: "test-stack", version: "1.0.0", description: "test",
+    }));
+    await writeFile(path.join(ppDir, "mcp.json"), JSON.stringify({ myserver: originalServer }));
+
+    // Write modified .mcp.json (standards adapter reads from root .mcp.json with mcpServers key)
+    await writeFile(path.join(dir, ".mcp.json"), JSON.stringify({
+      mcpServers: { myserver: modifiedServer },
+    }));
+
+    await writeManifest(dir, {
+      version: 1,
+      installs: [{
+        stack: "test-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          "standards": {
+            mcp: { myserver: { hash: computeMcpServerHash(originalServer) } },
+          },
+        },
+      }],
+    });
+
+    const output = await captureOutput(() => diffCommand(dir, {}));
+    expect(output).toContain("myserver");
+    expect(output).toContain("--debug");
+  });
+
+  it("--json outputs valid JSON when all synced", async () => {
+    const dir = await makeTmpDir();
+    const skillContent = "---\nname: sec\ndescription: sec\n---\nrules";
+
+    await setupStack(dir, { skills: [{ name: "sec", content: skillContent }] });
+
+    const skillDir = path.join(dir, ".agents", "skills", "sec");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, "SKILL.md"), skillContent);
+
+    await writeManifest(dir, {
+      version: 1,
+      installs: [{
+        stack: "test-stack",
+        stackVersion: "1.0.0",
+        installedAt: new Date().toISOString(),
+        adapters: {
+          "claude-code": {
+            skills: { sec: { hash: computeHash(skillContent) } },
+          },
+        },
+      }],
+    });
+
+    const output = await captureOutput(() => diffCommand(dir, { json: true }));
+    const parsed = JSON.parse(output);
+    expect(parsed.hasDrift).toBe(false);
+    // Stack exists but no adapters have drifted artifacts
+    expect(parsed.stacks[0].adapters).toEqual([]);
   });
 
   it("hasDrift is true when drifted artifacts found", async () => {
