@@ -2,9 +2,14 @@ import path from "node:path";
 import { readManifest, computeHash, computeMcpServerHash } from "./manifest.js";
 import { readFileOrNull } from "../shared/utils.js";
 import { readMcpFromToml } from "../adapters/toml-utils.js";
-import { parseJsonc, resolveRuleDest } from "../adapters/adapter-utils.js";
+import { parseJsonc, resolveRuleDest, buildInlineContent } from "../adapters/adapter-utils.js";
+import { ruleToClaudeFormat } from "../adapters/claude-code.js";
+import { ruleToMdc } from "../adapters/cursor.js";
+import { ruleToInstructionsMd, agentToGitHubAgent } from "../adapters/copilot.js";
+import { agentToCodexToml } from "../adapters/toml-utils.js";
 import { extractMarkerContent, hasMarkers } from "../shared/markers.js";
 import type { InstallManifest, AdapterInstallRecord } from "../shared/schema.js";
+import type { StackBundle } from "../shared/schema.js";
 import { getAdapter } from "../adapters/registry.js";
 
 // --- Shared types ---
@@ -329,4 +334,75 @@ export async function reconcileAll(root: string): Promise<ReconcileOutput> {
   }
 
   return { stacks, hasManifest: true };
+}
+
+// --- Expected content reconstruction ---
+
+// Bundle fields needed for expected content — avoids requiring the full StackBundle
+type ContentBundle = Pick<StackBundle, "agentInstructions" | "skills" | "agents" | "rules" | "commands" | "mcpServers">;
+
+/** Sort object keys recursively for deterministic JSON output. */
+function sortKeys(obj: unknown): unknown {
+  if (obj === null || typeof obj !== "object") return obj;
+  if (Array.isArray(obj)) return obj.map(sortKeys);
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(obj as Record<string, unknown>).sort()) {
+    sorted[key] = sortKeys((obj as Record<string, unknown>)[key]);
+  }
+  return sorted;
+}
+
+/** Reconstruct the expected (post-translation) content for a single artifact. */
+export function buildExpectedContent(
+  bundle: ContentBundle,
+  adapterId: string,
+  type: ArtifactType,
+  name: string,
+): string | null {
+  const adapter = getAdapter(adapterId);
+
+  switch (type) {
+    case "instructions": {
+      if (adapter.capabilities.agents === "inline") {
+        return buildInlineContent(bundle.agentInstructions, bundle.agents)?.trim() ?? null;
+      }
+      return bundle.agentInstructions?.trim() || null;
+    }
+
+    case "skill": {
+      const skill = bundle.skills.find((s) => s.name === name);
+      return skill?.content ?? null;
+    }
+
+    case "agent": {
+      const agent = bundle.agents.find((a) => a.name === name);
+      if (!agent) return null;
+      if (adapterId === "copilot") return agentToGitHubAgent(agent.content);
+      if (adapterId === "codex") return agentToCodexToml(agent.content);
+      return agent.content;
+    }
+
+    case "rule": {
+      const rule = bundle.rules.find((r) => r.name === name);
+      if (!rule) return null;
+      if (adapterId === "claude-code") return ruleToClaudeFormat(rule.content);
+      if (adapterId === "cursor") return ruleToMdc(rule.content);
+      if (adapterId === "copilot") return ruleToInstructionsMd(rule.content);
+      return rule.content;
+    }
+
+    case "command": {
+      const command = bundle.commands.find((c) => c.name === name);
+      return command?.content ?? null;
+    }
+
+    case "mcp": {
+      const serverConfig = bundle.mcpServers[name];
+      if (!serverConfig) return null;
+      return JSON.stringify(sortKeys(serverConfig), null, 2);
+    }
+
+    default:
+      return null;
+  }
 }
