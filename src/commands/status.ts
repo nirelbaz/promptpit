@@ -1,13 +1,12 @@
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import chalk from "chalk";
-import { readManifest, computeHash, computeMcpServerHash } from "../core/manifest.js";
-import { readFileOrNull } from "../shared/utils.js";
-import { readMcpFromToml } from "../adapters/toml-utils.js";
-import { parseJsonc, resolveRuleDest } from "../adapters/adapter-utils.js";
-import { extractMarkerContent, hasMarkers } from "../shared/markers.js";
-import type { InstallManifest, AdapterInstallRecord } from "../shared/schema.js";
-import { getAdapter } from "../adapters/registry.js";
+import { readManifest } from "../core/manifest.js";
+import { reconcileAll } from "../core/reconcile.js";
+import type { ReconciledArtifact, ReconciledAdapter } from "../core/reconcile.js";
+export type { ArtifactState } from "../core/reconcile.js";
+import type { ArtifactState } from "../core/reconcile.js";
+import type { InstallManifest } from "../shared/schema.js";
 import { log } from "../shared/io.js";
 import { parseGitHubSource } from "../sources/github.js";
 
@@ -16,18 +15,6 @@ export interface StatusOptions {
   short?: boolean;
   verbose?: boolean;
   skipUpstream?: boolean;
-}
-
-// Reconciliation states per the design doc
-export type ArtifactState = "synced" | "drifted" | "deleted" | "removed-by-user" | "untracked";
-
-// Priority: deleted > removed-by-user > drifted > untracked > synced
-const STATE_SEVERITY: Record<ArtifactState, number> = {
-  synced: 0, untracked: 1, drifted: 2, "removed-by-user": 3, deleted: 4,
-};
-
-function escalateState(current: ArtifactState, next: ArtifactState): ArtifactState {
-  return STATE_SEVERITY[next] > STATE_SEVERITY[current] ? next : current;
 }
 
 export interface ArtifactDetail {
@@ -69,267 +56,63 @@ export interface StatusResult {
   hasManifest: boolean;
 }
 
-async function checkAdapterStatus(
-  root: string,
-  stackName: string,
-  adapterId: string,
-  record: AdapterInstallRecord,
-): Promise<AdapterStatus> {
+// Map a ReconciledArtifact to the ArtifactDetail shape used by status display
+function toArtifactDetail(artifact: ReconciledArtifact): ArtifactDetail {
+  return { name: artifact.name, path: artifact.path, state: artifact.state };
+}
+
+// Map a ReconciledAdapter to the AdapterStatus shape used by status display
+function toAdapterStatus(reconciled: ReconciledAdapter): AdapterStatus {
   const driftedFiles: string[] = [];
-  let worstState: ArtifactState = "synced";
+  const byType = {
+    instructions: [] as ReconciledArtifact[],
+    skill: [] as ReconciledArtifact[],
+    agent: [] as ReconciledArtifact[],
+    rule: [] as ReconciledArtifact[],
+    command: [] as ReconciledArtifact[],
+    mcp: [] as ReconciledArtifact[],
+  };
 
-  // Resolve adapter once — used for paths and capabilities
-  let adapter: ReturnType<typeof getAdapter> | null = null;
-  try {
-    adapter = getAdapter(adapterId);
-  } catch {
-    // Unknown adapter — fall back to defaults below
-  }
-
-  // Check instructions
-  let instructionDetail: ArtifactDetail | undefined;
-  if (record.instructions) {
-    const filePath = adapter?.paths.project(root).config;
-    if (filePath) {
-      let instrState: ArtifactState = "synced";
-      const content = await readFileOrNull(filePath);
-      if (content == null) {
-        instrState = "deleted";
-        driftedFiles.push(filePath);
-      } else if (hasMarkers(content, stackName)) {
-        const markerContent = extractMarkerContent(content, stackName);
-        if (markerContent != null) {
-          const currentHash = computeHash(markerContent);
-          if (currentHash !== record.instructions.hash) {
-            instrState = "drifted";
-            driftedFiles.push(filePath);
-          }
-        }
-      } else {
-        instrState = "removed-by-user";
-        driftedFiles.push(filePath);
-      }
-      worstState = escalateState(worstState, instrState);
-      instructionDetail = { name: "instructions", path: filePath, state: instrState };
-    }
-  }
-
-  // Check skills — use canonical .agents/skills/ path (all adapters read from here)
-  const skillEntries = record.skills ?? {};
-  const skillDetails: ArtifactDetail[] = [];
-  for (const [skillName, skillRecord] of Object.entries(skillEntries)) {
-    const skillPath = path.join(root, ".agents", "skills", skillName, "SKILL.md");
-    let skillState: ArtifactState = "synced";
-    const content = await readFileOrNull(skillPath);
-    if (content == null) {
-      skillState = "deleted";
-      driftedFiles.push(skillPath);
-    } else {
-      const currentHash = computeHash(content);
-      if (currentHash !== skillRecord.hash) {
-        skillState = "drifted";
-        driftedFiles.push(skillPath);
-      }
-    }
-    worstState = escalateState(worstState, skillState);
-    skillDetails.push({ name: skillName, path: skillPath, state: skillState });
-  }
-
-  // Check agents — native adapters write per-file agents; inline adapters embed them in instructions
-  const agentEntries = record.agents ?? {};
-  const agentDetails: ArtifactDetail[] = [];
-  if (Object.keys(agentEntries).length > 0 && adapter?.capabilities.agents === "native") {
-    const agentsDir = adapter.paths.project(root).agents;
-    if (agentsDir) {
-      for (const [agentName, agentRecord] of Object.entries(agentEntries)) {
-        // Claude Code uses <name>.md, Copilot uses <name>.agent.md, Codex uses <name>.toml
-        const ext = adapterId === "copilot" ? ".agent.md" : adapterId === "codex" ? ".toml" : ".md";
-        const agentPath = path.join(agentsDir, `${agentName}${ext}`);
-        let agentState: ArtifactState = "synced";
-        const content = await readFileOrNull(agentPath);
-        if (content == null) {
-          agentState = "deleted";
-          driftedFiles.push(agentPath);
-        } else {
-          const currentHash = computeHash(content);
-          if (currentHash !== agentRecord.hash) {
-            agentState = "drifted";
-            driftedFiles.push(agentPath);
-          }
-        }
-        worstState = escalateState(worstState, agentState);
-        agentDetails.push({ name: agentName, path: agentPath, state: agentState });
-      }
-    }
-  }
-
-  // Check rules — use adapter's rules path
-  const ruleEntries = record.rules ?? {};
-  const ruleDetails: ArtifactDetail[] = [];
-  if (Object.keys(ruleEntries).length > 0) {
-    const rulesPath = adapter?.paths.project(root).rules;
-    for (const [ruleName, ruleRecord] of Object.entries(ruleEntries)) {
-      // resolveRuleDest checks unprefixed path first for cursor/copilot (dedup-aware)
-      let ruleFile: string;
-      if (adapterId === "cursor") {
-        ruleFile = await resolveRuleDest(rulesPath ?? root, ruleName, ".mdc");
-      } else if (adapterId === "copilot") {
-        ruleFile = await resolveRuleDest(rulesPath ?? root, ruleName, ".instructions.md");
-      } else {
-        ruleFile = path.join(rulesPath ?? root, `${ruleName}.md`);
-      }
-
-      let ruleState: ArtifactState = "synced";
-      const content = await readFileOrNull(ruleFile);
-      if (content == null) {
-        ruleState = "deleted";
-        driftedFiles.push(ruleFile);
-      } else {
-        const currentHash = computeHash(content);
-        if (currentHash !== ruleRecord.hash) {
-          ruleState = "drifted";
-          driftedFiles.push(ruleFile);
-        }
-      }
-      worstState = escalateState(worstState, ruleState);
-      ruleDetails.push({ name: ruleName, path: ruleFile, state: ruleState });
-    }
-  }
-
-  // Check commands
-  const commandEntries = record.commands ?? {};
-  const commandDetails: ArtifactDetail[] = [];
-  if (Object.keys(commandEntries).length > 0 && adapter?.capabilities.commands) {
-    const paths = adapter.paths.project(root);
-    const commandsBase = paths.prompts ?? paths.commands ?? path.join(root, ".claude", "commands");
-    const ext = paths.prompts ? ".prompt.md" : ".md";
-
-    for (const [commandName, commandRecord] of Object.entries(commandEntries)) {
-      const commandFile = path.join(commandsBase, `${commandName}${ext}`);
-      let commandState: ArtifactState = "synced";
-      const content = await readFileOrNull(commandFile);
-      if (content == null) {
-        commandState = "deleted";
-        driftedFiles.push(commandFile);
-      } else {
-        const currentHash = computeHash(content);
-        if (currentHash !== commandRecord.hash) {
-          commandState = "drifted";
-          driftedFiles.push(commandFile);
-        }
-      }
-      worstState = escalateState(worstState, commandState);
-      commandDetails.push({ name: commandName, path: commandFile, state: commandState });
-    }
-  }
-
-  // Check MCP — read file once, check each server's hash
-  const mcpEntries = record.mcp ?? {};
-  const mcpDetails: ArtifactDetail[] = [];
-  if (Object.keys(mcpEntries).length > 0) {
-    const mcpPath = adapter?.paths.project(root).mcp ?? path.join(root, ".mcp.json");
-    const mcpRaw = await readFileOrNull(mcpPath);
-    if (mcpRaw == null) {
-      worstState = escalateState(worstState, "deleted");
-      driftedFiles.push(mcpPath);
-      for (const serverName of Object.keys(mcpEntries)) {
-        mcpDetails.push({ name: serverName, path: mcpPath, state: "deleted" });
-      }
-    } else {
-      let mcpParsed: Record<string, unknown> | null = null;
-      const mcpFormat = adapter?.capabilities.mcpFormat ?? "json";
-      const mcpRootKey = adapter?.capabilities.mcpRootKey ?? "mcpServers";
-      try {
-        if (mcpFormat === "toml") {
-          mcpParsed = readMcpFromToml(mcpRaw) as Record<string, unknown>;
-        } else {
-          const parsed = parseJsonc(mcpRaw) as Record<string, unknown>;
-          mcpParsed = (parsed[mcpRootKey] ?? {}) as Record<string, unknown>;
-        }
-      } catch {
-        worstState = escalateState(worstState, "drifted");
-        driftedFiles.push(mcpPath);
-        for (const serverName of Object.keys(mcpEntries)) {
-          mcpDetails.push({ name: serverName, path: mcpPath, state: "drifted" });
-        }
-      }
-      if (mcpParsed) {
-        for (const [serverName, mcpRecord] of Object.entries(mcpEntries)) {
-          let serverState: ArtifactState = "synced";
-          const serverConfig = mcpParsed[serverName];
-          if (!serverConfig) {
-            serverState = "deleted";
-            driftedFiles.push(mcpPath);
-          } else {
-            const currentHash = computeMcpServerHash(serverConfig as Record<string, unknown>);
-            if (currentHash !== mcpRecord.hash) {
-              serverState = "drifted";
-              driftedFiles.push(mcpPath);
-            }
-          }
-          worstState = escalateState(worstState, serverState);
-          mcpDetails.push({ name: serverName, path: mcpPath, state: serverState });
-        }
-      }
+  for (const artifact of reconciled.artifacts) {
+    byType[artifact.type].push(artifact);
+    if (artifact.state !== "synced") {
+      driftedFiles.push(artifact.path);
     }
   }
 
   return {
-    adapterId,
-    skillCount: Object.keys(skillEntries).length,
-    ruleCount: Object.keys(ruleEntries).length,
-    mcpCount: Object.keys(mcpEntries).length,
-    agentCount: Object.keys(agentEntries).length,
-    commandCount: Object.keys(commandEntries).length,
-    hasInstructions: !!record.instructions,
-    state: worstState,
+    adapterId: reconciled.adapterId,
+    skillCount: byType.skill.length,
+    ruleCount: byType.rule.length,
+    mcpCount: byType.mcp.length,
+    agentCount: byType.agent.length,
+    commandCount: byType.command.length,
+    hasInstructions: byType.instructions.length > 0,
+    state: reconciled.state,
     driftedFiles,
-    instructionDetail,
-    skillDetails,
-    ruleDetails,
-    mcpDetails,
-    agentDetails,
-    commandDetails,
+    instructionDetail: byType.instructions[0] ? toArtifactDetail(byType.instructions[0]) : undefined,
+    skillDetails: byType.skill.map(toArtifactDetail),
+    ruleDetails: byType.rule.map(toArtifactDetail),
+    mcpDetails: byType.mcp.map(toArtifactDetail),
+    agentDetails: byType.agent.map(toArtifactDetail),
+    commandDetails: byType.command.map(toArtifactDetail),
   };
 }
 
 export async function computeStatus(root: string): Promise<StatusResult> {
-  let manifest: InstallManifest;
-  try {
-    manifest = await readManifest(root);
-  } catch {
-    return { stacks: [], hasManifest: false };
-  }
+  const reconciled = await reconcileAll(root);
 
-  if (manifest.installs.length === 0) {
-    return { stacks: [], hasManifest: true };
-  }
-
-  const stacks: StackStatus[] = [];
-
-  for (const entry of manifest.installs) {
-    const adapters: AdapterStatus[] = [];
-
-    for (const [adapterId, record] of Object.entries(entry.adapters)) {
-      const status = await checkAdapterStatus(root, entry.stack, adapterId, record);
-      adapters.push(status);
-    }
-
-    const overallState = adapters.reduce<ArtifactState>(
-      (worst, a) => escalateState(worst, a.state), "synced",
-    );
-
-    stacks.push({
-      stack: entry.stack,
-      version: entry.stackVersion,
-      source: entry.source,
-      installMode: entry.installMode,
-      adapters,
-      overallState,
-    });
-  }
-
-  return { stacks, hasManifest: true };
+  return {
+    hasManifest: reconciled.hasManifest,
+    stacks: reconciled.stacks.map((rs) => ({
+      stack: rs.stack,
+      version: rs.version,
+      source: rs.source,
+      installMode: rs.installMode,
+      adapters: rs.adapters.map(toAdapterStatus),
+      overallState: rs.overallState,
+    })),
+  };
 }
 
 function stateIcon(state: ArtifactState): string {
