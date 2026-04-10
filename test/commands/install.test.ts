@@ -472,4 +472,41 @@ describe("installStack", () => {
     const claudeMd = await readFile(path.join(target, "CLAUDE.md"), "utf-8");
     expect(claudeMd).toContain("promptpit:start:script-test");
   });
+
+  it("dry-run shows lifecycle scripts without executing", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    const stackDir = await mkdtemp(path.join(tmpdir(), "pit-stack-"));
+    tmpDirs.push(stackDir);
+    await writeFile(
+      path.join(stackDir, "stack.json"),
+      JSON.stringify({
+        name: "script-test",
+        version: "1.0.0",
+        scripts: { postinstall: `touch "${target}/should-not-run"` },
+      }),
+    );
+    await writeFile(path.join(stackDir, "agent.promptpit.md"), "---\n---\nTest");
+
+    // Capture console output
+    const logs: string[] = [];
+    const origLog = console.log;
+    console.log = (...args: unknown[]) => logs.push(args.join(" "));
+
+    try {
+      await installStack(stackDir, target, { dryRun: true });
+    } finally {
+      console.log = origLog;
+    }
+
+    // Script should be shown in output
+    const output = logs.join("\n");
+    expect(output).toContain("postinstall");
+
+    // Script should NOT have been executed
+    const { access } = await import("node:fs/promises");
+    await expect(access(path.join(target, "should-not-run"))).rejects.toThrow();
+  });
 });

@@ -379,6 +379,23 @@ export async function installStack(
         sections.push({ label: "Other", entries: otherEntries });
       }
 
+      // Show lifecycle scripts in dry-run
+      if (!opts.ignoreScripts) {
+        const preScripts = collectScripts(scriptChainEntries, "preinstall");
+        const postScripts = collectScripts(scriptChainEntries, "postinstall");
+        const allScripts = [...preScripts, ...postScripts];
+        if (allScripts.length > 0) {
+          sections.push({
+            label: "Lifecycle scripts",
+            entries: allScripts.map((s) => ({
+              file: `${s.phase}: ${s.script}`,
+              action: "run" as const,
+              detail: s.stackName,
+            })),
+          });
+        }
+      }
+
       printDryRunReport(
         `Dry run — would install ${finalBundle.manifest.name}@${finalBundle.manifest.version}:`,
         sections,

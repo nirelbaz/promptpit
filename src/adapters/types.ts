@@ -78,7 +78,7 @@ export interface WriteOptions {
 
 export interface DryRunEntry {
   file: string;
-  action: "create" | "modify" | "skip";
+  action: "create" | "modify" | "skip" | "run";
   detail?: string;
   oldContent?: string;
   newContent?: string;

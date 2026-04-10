@@ -38,7 +38,9 @@ export function printDryRunReport(
           ? chalk.green
           : entry.action === "modify"
             ? chalk.yellow
-            : chalk.dim;
+            : entry.action === "run"
+              ? chalk.magenta
+              : chalk.dim;
       const detail = entry.detail ? chalk.dim(` (${entry.detail})`) : "";
       console.log(`    ${actionColor(entry.action.padEnd(7))} ${entry.file}${detail}`);
 
