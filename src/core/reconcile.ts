@@ -121,10 +121,10 @@ async function reconcileAdapter(
     if (content == null) {
       skillState = "deleted";
     } else {
-      actualContent = content;
       const currentHash = computeHash(content);
       if (currentHash !== skillRecord.hash) {
         skillState = "drifted";
+        actualContent = content;
       }
     }
     worstState = escalateState(worstState, skillState);
@@ -152,10 +152,10 @@ async function reconcileAdapter(
         if (content == null) {
           agentState = "deleted";
         } else {
-          actualContent = content;
           const currentHash = computeHash(content);
           if (currentHash !== agentRecord.hash) {
             agentState = "drifted";
+            actualContent = content;
           }
         }
         worstState = escalateState(worstState, agentState);
@@ -191,10 +191,10 @@ async function reconcileAdapter(
       if (content == null) {
         ruleState = "deleted";
       } else {
-        actualContent = content;
         const currentHash = computeHash(content);
         if (currentHash !== ruleRecord.hash) {
           ruleState = "drifted";
+          actualContent = content;
         }
       }
       worstState = escalateState(worstState, ruleState);
@@ -223,10 +223,10 @@ async function reconcileAdapter(
       if (content == null) {
         commandState = "deleted";
       } else {
-        actualContent = content;
         const currentHash = computeHash(content);
         if (currentHash !== commandRecord.hash) {
           commandState = "drifted";
+          actualContent = content;
         }
       }
       worstState = escalateState(worstState, commandState);

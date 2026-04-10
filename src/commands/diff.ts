@@ -125,10 +125,7 @@ export async function computeDiff(root: string, opts: DiffOptions): Promise<Diff
         const artifacts: DiffArtifact[] = [];
 
         for (const artifact of ra.artifacts) {
-          // Skip synced artifacts
           if (artifact.state === "synced") continue;
-
-          // Apply filters
           if (opts.type && artifact.type !== opts.type) continue;
           if (opts.name && artifact.name !== opts.name) continue;
 
