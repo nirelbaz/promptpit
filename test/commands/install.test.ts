@@ -5,6 +5,7 @@ import { mkdtemp, rm, readFile, writeFile, lstat, readlink } from "node:fs/promi
 import { tmpdir } from "node:os";
 
 const VALID_STACK = path.resolve("test/__fixtures__/stacks/valid-stack");
+const SCRIPT_STACK = path.resolve("test/__fixtures__/stacks/stack-with-scripts");
 
 describe("installStack", () => {
   const tmpDirs: string[] = [];
@@ -351,5 +352,202 @@ describe("installStack", () => {
     const markerContent = extractMarkerContent(agentsMd, "test-stack");
     expect(markerContent).not.toBeNull();
     expect(computeHash(markerContent!)).toBe(standardsRecord!.instructions!.hash);
+  });
+
+  it("runs postinstall script after files are written", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    const stackDir = await mkdtemp(path.join(tmpdir(), "pit-stack-"));
+    tmpDirs.push(stackDir);
+    await writeFile(
+      path.join(stackDir, "stack.json"),
+      JSON.stringify({
+        name: "script-test",
+        version: "1.0.0",
+        scripts: { postinstall: `touch "${target}/postinstall-ran"` },
+      }),
+    );
+    await writeFile(path.join(stackDir, "agent.promptpit.md"), "---\n---\nTest instructions");
+
+    await installStack(stackDir, target, {});
+
+    const { access } = await import("node:fs/promises");
+    await expect(access(path.join(target, "postinstall-ran"))).resolves.toBeUndefined();
+  });
+
+  it("runs preinstall script before files are written", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    const stackDir = await mkdtemp(path.join(tmpdir(), "pit-stack-"));
+    tmpDirs.push(stackDir);
+    await writeFile(
+      path.join(stackDir, "stack.json"),
+      JSON.stringify({
+        name: "script-test",
+        version: "1.0.0",
+        scripts: { preinstall: `mkdir -p "${target}/pre-marker"` },
+      }),
+    );
+    await writeFile(path.join(stackDir, "agent.promptpit.md"), "---\n---\nTest instructions");
+
+    await installStack(stackDir, target, {});
+
+    const { access } = await import("node:fs/promises");
+    await expect(access(path.join(target, "pre-marker"))).resolves.toBeUndefined();
+  });
+
+  it("skips scripts with --ignore-scripts", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    const stackDir = await mkdtemp(path.join(tmpdir(), "pit-stack-"));
+    tmpDirs.push(stackDir);
+    await writeFile(
+      path.join(stackDir, "stack.json"),
+      JSON.stringify({
+        name: "script-test",
+        version: "1.0.0",
+        scripts: { postinstall: `touch "${target}/should-not-exist"` },
+      }),
+    );
+    await writeFile(path.join(stackDir, "agent.promptpit.md"), "---\n---\nTest");
+
+    await installStack(stackDir, target, { ignoreScripts: true });
+
+    const { access } = await import("node:fs/promises");
+    await expect(access(path.join(target, "should-not-exist"))).rejects.toThrow();
+  });
+
+  it("aborts install on preinstall failure by default", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    const stackDir = await mkdtemp(path.join(tmpdir(), "pit-stack-"));
+    tmpDirs.push(stackDir);
+    await writeFile(
+      path.join(stackDir, "stack.json"),
+      JSON.stringify({
+        name: "script-test",
+        version: "1.0.0",
+        scripts: { preinstall: "exit 1" },
+      }),
+    );
+    await writeFile(path.join(stackDir, "agent.promptpit.md"), "---\n---\nTest");
+
+    await expect(installStack(stackDir, target, {})).rejects.toThrow(
+      /preinstall script.*exited with code/,
+    );
+
+    // Verify no files were written (install was aborted)
+    const claudeMd = await readFile(path.join(target, "CLAUDE.md"), "utf-8");
+    expect(claudeMd).toBe("# Existing\n");
+  });
+
+  it("continues on script failure with --ignore-script-errors", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    const stackDir = await mkdtemp(path.join(tmpdir(), "pit-stack-"));
+    tmpDirs.push(stackDir);
+    await writeFile(
+      path.join(stackDir, "stack.json"),
+      JSON.stringify({
+        name: "script-test",
+        version: "1.0.0",
+        scripts: { postinstall: "exit 1" },
+      }),
+    );
+    await writeFile(path.join(stackDir, "agent.promptpit.md"), "---\n---\nTest");
+
+    // Should not throw
+    await installStack(stackDir, target, { ignoreScriptErrors: true });
+
+    // Install still completed (CLAUDE.md was written)
+    const claudeMd = await readFile(path.join(target, "CLAUDE.md"), "utf-8");
+    expect(claudeMd).toContain("promptpit:start:script-test");
+  });
+
+  it("runs fixture stack scripts and creates marker file", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    await installStack(SCRIPT_STACK, target, {});
+
+    const { access } = await import("node:fs/promises");
+    await expect(access(path.join(target, ".postinstall-marker"))).resolves.toBeUndefined();
+  });
+
+  it("dry-run shows lifecycle scripts without executing", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    const stackDir = await mkdtemp(path.join(tmpdir(), "pit-stack-"));
+    tmpDirs.push(stackDir);
+    await writeFile(
+      path.join(stackDir, "stack.json"),
+      JSON.stringify({
+        name: "script-test",
+        version: "1.0.0",
+        scripts: { postinstall: `touch "${target}/should-not-run"` },
+      }),
+    );
+    await writeFile(path.join(stackDir, "agent.promptpit.md"), "---\n---\nTest");
+
+    // Capture console output
+    const logs: string[] = [];
+    const origLog = console.log;
+    console.log = (...args: unknown[]) => logs.push(args.join(" "));
+
+    try {
+      await installStack(stackDir, target, { dryRun: true });
+    } finally {
+      console.log = origLog;
+    }
+
+    // Script should be shown in output
+    const output = logs.join("\n");
+    expect(output).toContain("postinstall");
+
+    // Script should NOT have been executed
+    const { access } = await import("node:fs/promises");
+    await expect(access(path.join(target, "should-not-run"))).rejects.toThrow();
+  });
+
+  it("dry-run does not execute preinstall scripts", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    const stackDir = await mkdtemp(path.join(tmpdir(), "pit-stack-"));
+    tmpDirs.push(stackDir);
+    await writeFile(
+      path.join(stackDir, "stack.json"),
+      JSON.stringify({
+        name: "script-test",
+        version: "1.0.0",
+        scripts: { preinstall: `touch "${target}/pre-should-not-run"` },
+      }),
+    );
+    await writeFile(path.join(stackDir, "agent.promptpit.md"), "---\n---\nTest");
+
+    const origLog = console.log;
+    console.log = () => {};
+    try {
+      await installStack(stackDir, target, { dryRun: true });
+    } finally {
+      console.log = origLog;
+    }
+
+    const { access } = await import("node:fs/promises");
+    await expect(access(path.join(target, "pre-should-not-run"))).rejects.toThrow();
   });
 });

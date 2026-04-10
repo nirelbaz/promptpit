@@ -12,9 +12,10 @@ import { ruleToMdc } from "../adapters/cursor.js";
 import { ruleToInstructionsMd, agentToGitHubAgent } from "../adapters/copilot.js";
 import { agentToCodexToml } from "../adapters/toml-utils.js";
 import { buildInlineContent } from "../adapters/adapter-utils.js";
+import { collectScripts, executeScripts } from "../core/scripts.js";
 import type { WriteOptions, DryRunEntry } from "../adapters/types.js";
 import type { DryRunSection } from "../shared/io.js";
-import type { InstallEntry, AdapterInstallRecord } from "../shared/schema.js";
+import type { InstallEntry, AdapterInstallRecord, StackBundle } from "../shared/schema.js";
 import { canonicalSkillBase } from "../core/skill-store.js";
 
 export interface InstallOptions {
@@ -25,6 +26,9 @@ export interface InstallOptions {
   forceStandards?: boolean;
   preferUniversal?: boolean;
   save?: boolean;
+  trust?: boolean;
+  ignoreScripts?: boolean;
+  ignoreScriptErrors?: boolean;
 }
 
 export async function installStack(
@@ -110,6 +114,7 @@ export async function installStack(
       resolvedCommit?: string;
       resolvedAt: string;
     }> = [];
+    let resolvedNodes: Array<{ source: string; stackDir: string; bundle: StackBundle }> = [];
 
     if (bundle.manifest.extends && bundle.manifest.extends.length > 0) {
       const resolveSpin = spinner("Resolving extends...");
@@ -135,14 +140,16 @@ export async function installStack(
 
       finalBundle = merged.bundle;
 
-      resolvedExtendsEntries = graph.nodes
-        .filter((n) => n.depth > 0)
-        .map((n) => ({
+      const depNodes = graph.nodes.filter((n) => n.depth > 0);
+
+      resolvedExtendsEntries = depNodes.map((n) => ({
           source: n.source,
           version: n.bundle.manifest.version,
           resolvedCommit: n.resolvedCommit,
           resolvedAt: new Date().toISOString(),
         }));
+
+      resolvedNodes = depNodes;
     }
 
     // Validate inbound env var names (security)
@@ -166,6 +173,35 @@ export async function installStack(
           `${Object.keys(finalBundle.mcpServers).join(", ")}. ` +
           `MCP servers run as executables on your machine.`,
       );
+    }
+
+    // Collect lifecycle scripts from resolved chain
+    const scriptChainEntries = [
+      // Dependencies first (deepest-first order from resolveGraph)
+      ...resolvedNodes.map((n) => ({
+        manifest: n.bundle.manifest,
+        stackDir: n.stackDir,
+        source: n.source,
+      })),
+      // Root stack last
+      {
+        manifest: finalBundle.manifest,
+        stackDir: resolvedSource,
+        source,
+      },
+    ];
+    const preScripts = collectScripts(scriptChainEntries, "preinstall");
+    const postScripts = collectScripts(scriptChainEntries, "postinstall");
+    const isRemoteSource = (src: string) => !!parseGitHubSource(src);
+
+    // Run preinstall scripts (before any files are written)
+    if (!opts.ignoreScripts && !opts.dryRun && preScripts.length > 0) {
+      await executeScripts(preScripts, {
+        targetDir: target,
+        isRemote: isRemoteSource,
+        trust: opts.trust,
+        ignoreScriptErrors: opts.ignoreScriptErrors,
+      });
     }
 
     // Detect target adapters
@@ -343,6 +379,21 @@ export async function installStack(
         sections.push({ label: "Other", entries: otherEntries });
       }
 
+      // Show lifecycle scripts in dry-run
+      if (!opts.ignoreScripts) {
+        const allScripts = [...preScripts, ...postScripts];
+        if (allScripts.length > 0) {
+          sections.push({
+            label: "Lifecycle scripts",
+            entries: allScripts.map((s) => ({
+              file: `${s.phase}: ${s.script}`,
+              action: "run" as const,
+              detail: s.stackName,
+            })),
+          });
+        }
+      }
+
       printDryRunReport(
         `Dry run — would install ${finalBundle.manifest.name}@${finalBundle.manifest.version}:`,
         sections,
@@ -494,6 +545,16 @@ export async function installStack(
           `Created .env with ${Object.keys(finalBundle.envExample).length} placeholder(s). Fill in your values.`,
         );
       }
+    }
+
+    // Run postinstall scripts (after all files are written)
+    if (!opts.ignoreScripts && !opts.dryRun && postScripts.length > 0) {
+      await executeScripts(postScripts, {
+        targetDir: target,
+        isRemote: isRemoteSource,
+        trust: opts.trust,
+        ignoreScriptErrors: opts.ignoreScriptErrors,
+      });
     }
 
     log.success("Stack installed successfully!");

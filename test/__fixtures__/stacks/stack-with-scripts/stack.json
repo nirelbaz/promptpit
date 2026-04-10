@@ -1,0 +1,9 @@
+{
+  "name": "script-stack",
+  "version": "1.0.0",
+  "description": "Test stack with lifecycle scripts",
+  "scripts": {
+    "preinstall": "echo preinstall-ran",
+    "postinstall": "./setup.sh"
+  }
+}
