@@ -23,13 +23,11 @@ export interface ScriptEntry {
 }
 
 export function runLifecycleScript(
-  phase: "preinstall" | "postinstall",
+  _phase: "preinstall" | "postinstall",
   script: string,
   cwd: string,
   env: ScriptEnv,
 ): Promise<ScriptResult> {
-  // phase is part of the public API; the parameter is intentionally unused at runtime
-  void phase;
   return new Promise((resolve) => {
     const child = execFile(
       "sh",

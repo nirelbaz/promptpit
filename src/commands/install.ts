@@ -192,7 +192,7 @@ export async function installStack(
     ];
 
     // Run preinstall scripts (before any files are written)
-    if (!opts.ignoreScripts) {
+    if (!opts.ignoreScripts && !opts.dryRun) {
       const preScripts = collectScripts(scriptChainEntries, "preinstall");
       if (preScripts.length > 0) {
         await executeScripts(preScripts, {
@@ -550,7 +550,7 @@ export async function installStack(
     }
 
     // Run postinstall scripts (after all files are written)
-    if (!opts.ignoreScripts) {
+    if (!opts.ignoreScripts && !opts.dryRun) {
       const postScripts = collectScripts(scriptChainEntries, "postinstall");
       if (postScripts.length > 0) {
         await executeScripts(postScripts, {

@@ -521,4 +521,33 @@ describe("installStack", () => {
     const { access } = await import("node:fs/promises");
     await expect(access(path.join(target, "should-not-run"))).rejects.toThrow();
   });
+
+  it("dry-run does not execute preinstall scripts", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    const stackDir = await mkdtemp(path.join(tmpdir(), "pit-stack-"));
+    tmpDirs.push(stackDir);
+    await writeFile(
+      path.join(stackDir, "stack.json"),
+      JSON.stringify({
+        name: "script-test",
+        version: "1.0.0",
+        scripts: { preinstall: `touch "${target}/pre-should-not-run"` },
+      }),
+    );
+    await writeFile(path.join(stackDir, "agent.promptpit.md"), "---\n---\nTest");
+
+    const origLog = console.log;
+    console.log = () => {};
+    try {
+      await installStack(stackDir, target, { dryRun: true });
+    } finally {
+      console.log = origLog;
+    }
+
+    const { access } = await import("node:fs/promises");
+    await expect(access(path.join(target, "pre-should-not-run"))).rejects.toThrow();
+  });
 });
