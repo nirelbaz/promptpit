@@ -96,7 +96,7 @@ export async function readSkillsFromDir(
     if (!parsed) continue;
     const validation = skillFrontmatterSchema.safeParse(parsed.data);
     if (!validation.success) {
-      log.warn(`Skipping ${rel}: invalid frontmatter (${validation.error.errors.map((e) => e.message).join(", ")})`);
+      log.warn(`Skipping ${rel}: ${validation.error.errors.map((e) => e.path.length > 0 ? `${e.path.join(".")}: ${e.message}` : e.message).join(", ")}`);
       continue;
     }
     const skillName = path.basename(path.dirname(file));
@@ -121,7 +121,7 @@ export async function readSkillsFromDir(
     if (!parsed) continue;
     const validation = skillFrontmatterSchema.safeParse(parsed.data);
     if (!validation.success) {
-      log.warn(`Skipping ${rel}: invalid frontmatter (${validation.error.errors.map((e) => e.message).join(", ")})`);
+      log.warn(`Skipping ${rel}: ${validation.error.errors.map((e) => e.path.length > 0 ? `${e.path.join(".")}: ${e.message}` : e.message).join(", ")}`);
       continue;
     }
     const skillName = path.basename(file, ".md");
