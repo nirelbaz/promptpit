@@ -1,6 +1,6 @@
 import path from "node:path";
 import os from "node:os";
-import { writeFileEnsureDir } from "../shared/utils.js";
+import { writeFileEnsureDir, writeFileBufferEnsureDir } from "../shared/utils.js";
 import type { SkillEntry } from "../shared/schema.js";
 
 export function canonicalSkillBase(root: string, global?: boolean): string {
@@ -22,6 +22,10 @@ export async function installCanonical(
     const dest = path.join(base, skill.name, "SKILL.md");
     await writeFileEnsureDir(dest, skill.content);
     pathMap.set(skill.name, dest);
+
+    for (const file of skill.supportingFiles ?? []) {
+      await writeFileBufferEnsureDir(path.join(base, skill.name, file.relativePath), file.content);
+    }
   }
 
   return pathMap;

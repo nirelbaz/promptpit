@@ -66,6 +66,41 @@ describe("installCanonical", () => {
     expect(pathMap.has("review")).toBe(true);
   });
 
+  it("writes supporting files alongside SKILL.md", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "pit-canon-"));
+    tmpDirs.push(root);
+
+    const skillWithSupportingFiles: SkillEntry = {
+      name: "toolbox",
+      path: "skills/toolbox",
+      frontmatter: { name: "toolbox", description: "toolbox skill" },
+      content: "---\nname: toolbox\ndescription: toolbox skill\n---\n\n# Toolbox\n",
+      supportingFiles: [
+        { relativePath: "scripts/setup.sh", content: Buffer.from("#!/bin/sh\necho setup") },
+        { relativePath: "references/api.md", content: Buffer.from("# API Reference\nEndpoints here.") },
+      ],
+    };
+
+    await installCanonical(root, [skillWithSupportingFiles]);
+
+    const setupContent = await readFile(
+      path.join(root, ".agents", "skills", "toolbox", "scripts", "setup.sh"),
+    );
+    expect(setupContent.toString()).toBe("#!/bin/sh\necho setup");
+
+    const apiContent = await readFile(
+      path.join(root, ".agents", "skills", "toolbox", "references", "api.md"),
+    );
+    expect(apiContent.toString()).toBe("# API Reference\nEndpoints here.");
+
+    // SKILL.md must still be present
+    const skillMd = await readFile(
+      path.join(root, ".agents", "skills", "toolbox", "SKILL.md"),
+      "utf-8",
+    );
+    expect(skillMd).toContain("toolbox");
+  });
+
   it("writes to ~/.agents/skills/ for global installs", async () => {
     // Global install writes to homedir, not root. We can't mock homedir easily
     // in ESM, so we verify the actual path uses homedir and the file is written.
