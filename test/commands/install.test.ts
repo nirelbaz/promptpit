@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { installStack } from "../../src/commands/install.js";
 import path from "node:path";
-import { mkdtemp, rm, readFile, writeFile, lstat, readlink, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile, lstat, readlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 const VALID_STACK = path.resolve("test/__fixtures__/stacks/valid-stack");
