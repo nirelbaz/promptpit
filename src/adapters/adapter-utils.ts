@@ -1,9 +1,10 @@
 import path from "node:path";
+import { readFile, stat } from "node:fs/promises";
 import fg from "fast-glob";
 import matter from "gray-matter";
 import yaml from "js-yaml";
 import stripJsonComments from "strip-json-comments";
-import type { SkillEntry, RuleEntry, McpConfig, McpServerConfig, AgentEntry, CommandEntry } from "../shared/schema.js";
+import type { SkillEntry, SupportingFile, RuleEntry, McpConfig, McpServerConfig, AgentEntry, CommandEntry } from "../shared/schema.js";
 import { computeMcpServerHash } from "../core/manifest.js";
 
 // .vscode/ and .cursor/ ecosystems use JSONC (JSON with // and /* */ comments)
@@ -42,6 +43,32 @@ function safeParseMatter(raw: string, relPath: string, label = ""): matter.GrayM
   }
 }
 
+const MAX_SUPPORTING_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+
+async function collectSupportingFiles(skillDir: string): Promise<SupportingFile[]> {
+  const allFiles = await fg("**/*", {
+    cwd: skillDir,
+    absolute: true,
+    dot: false,
+  });
+
+  const files: SupportingFile[] = [];
+  for (const file of allFiles) {
+    const relativePath = path.relative(skillDir, file);
+    if (relativePath === "SKILL.md") continue;
+
+    const fileStat = await stat(file);
+    if (fileStat.size > MAX_SUPPORTING_FILE_SIZE) {
+      log.warn(`Skipping ${relativePath} in ${path.basename(skillDir)}: file exceeds 50 MB`);
+      continue;
+    }
+
+    const content = await readFile(file);
+    files.push({ relativePath, content });
+  }
+  return files;
+}
+
 export async function readSkillsFromDir(
   skillsDir: string,
   opts?: { includeStandalone?: boolean },
@@ -75,7 +102,15 @@ export async function readSkillsFromDir(
     const skillName = path.basename(path.dirname(file));
     if (seen.has(skillName)) continue;
     seen.add(skillName);
-    skills.push({ name: skillName, path: `skills/${skillName}`, frontmatter: validation.data, content: raw });
+    const skillDir = path.dirname(file);
+    const supportingFiles = await collectSupportingFiles(skillDir);
+    skills.push({
+      name: skillName,
+      path: `skills/${skillName}`,
+      frontmatter: validation.data,
+      content: raw,
+      ...(supportingFiles.length > 0 && { supportingFiles }),
+    });
   }
 
   for (const file of standaloneFiles) {

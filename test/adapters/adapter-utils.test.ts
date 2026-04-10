@@ -259,6 +259,55 @@ describe("readSkillsFromDir", () => {
     const skills = await readSkillsFromDir("/tmp/nonexistent-skills-" + Date.now());
     expect(skills).toEqual([]);
   });
+
+  it("collects supporting files from skill directories", async () => {
+    await mkdir(path.join(tmpDir, "my-skill", "scripts"), { recursive: true });
+    await mkdir(path.join(tmpDir, "my-skill", "references"), { recursive: true });
+    await writeFile(
+      path.join(tmpDir, "my-skill", "SKILL.md"),
+      "---\nname: my-skill\ndescription: A skill\n---\n\nDo things.\n",
+    );
+    await writeFile(
+      path.join(tmpDir, "my-skill", "scripts", "setup.sh"),
+      "#!/bin/sh\necho hello\n",
+    );
+    await writeFile(
+      path.join(tmpDir, "my-skill", "references", "api.md"),
+      "# API\nEndpoints.\n",
+    );
+    const skills = await readSkillsFromDir(tmpDir);
+    expect(skills).toHaveLength(1);
+    expect(skills[0]!.supportingFiles).toBeDefined();
+    expect(skills[0]!.supportingFiles).toHaveLength(2);
+    const paths = skills[0]!.supportingFiles!.map((f) => f.relativePath).sort();
+    expect(paths).toEqual(["references/api.md", "scripts/setup.sh"]);
+    // Content should be Buffers
+    for (const f of skills[0]!.supportingFiles!) {
+      expect(Buffer.isBuffer(f.content)).toBe(true);
+    }
+  });
+
+  it("does not include SKILL.md in supporting files", async () => {
+    await mkdir(path.join(tmpDir, "my-skill"), { recursive: true });
+    await writeFile(
+      path.join(tmpDir, "my-skill", "SKILL.md"),
+      "---\nname: my-skill\ndescription: A skill\n---\n\nDo things.\n",
+    );
+    const skills = await readSkillsFromDir(tmpDir);
+    expect(skills).toHaveLength(1);
+    const hasSKILLmd = skills[0]!.supportingFiles?.some((f) => f.relativePath === "SKILL.md");
+    expect(hasSKILLmd ?? false).toBe(false);
+  });
+
+  it("standalone skills have no supportingFiles", async () => {
+    await writeFile(
+      path.join(tmpDir, "review.md"),
+      "---\nname: review\ndescription: Review things\n---\n\nReview.\n",
+    );
+    const skills = await readSkillsFromDir(tmpDir, { includeStandalone: true });
+    expect(skills).toHaveLength(1);
+    expect(skills[0]!.supportingFiles).toBeUndefined();
+  });
 });
 
 describe("readAgentsFromDir", () => {
