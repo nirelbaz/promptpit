@@ -37,6 +37,9 @@ export interface ValidateResult {
   };
 }
 
+/** Instruction files larger than this (in bytes) trigger a size warning (~15 KB). */
+export const LARGE_INSTRUCTION_THRESHOLD = 15_000;
+
 function addDiag(
   diagnostics: Diagnostic[],
   file: string,
@@ -105,6 +108,16 @@ export async function validateStack(stackDir: string): Promise<ValidateResult> {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "unknown error";
       addDiag(diagnostics, "agent.promptpit.md", "error", `Invalid frontmatter: ${msg}`);
+    }
+    const sizeBytes = Buffer.byteLength(agentRaw, "utf-8");
+    if (sizeBytes > LARGE_INSTRUCTION_THRESHOLD) {
+      const sizeKB = (sizeBytes / 1024).toFixed(1);
+      addDiag(
+        diagnostics,
+        "agent.promptpit.md",
+        "warning",
+        `Instruction file is unusually large (${sizeKB} KB). Files over ${Math.round(LARGE_INSTRUCTION_THRESHOLD / 1024)} KB consume significant context window space. Consider splitting into rules or skills.`,
+      );
     }
   }
 

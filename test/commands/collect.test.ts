@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { collectStack } from "../../src/commands/collect.js";
+import { LARGE_INSTRUCTION_THRESHOLD } from "../../src/core/validate.js";
 import path from "node:path";
 import { mkdtemp, rm, readFile, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -111,6 +112,56 @@ describe("collectStack", () => {
     // Verify dry-run log included the command file path
     const allOutput = loggedPaths.join("\n");
     expect(allOutput).toContain("deploy");
+
+    await rm(projectDir, { recursive: true });
+  });
+
+  it("warns about unusually large instruction files during collect", async () => {
+    const projectDir = await mkdtemp(path.join(tmpdir(), "pit-collect-large-"));
+    const outDir = path.join(projectDir, ".promptpit");
+
+    // Write a CLAUDE.md that exceeds the size threshold
+    const largeContent = "# Instructions\n" + "x".repeat(LARGE_INSTRUCTION_THRESHOLD + 1000);
+    await writeFile(path.join(projectDir, "CLAUDE.md"), largeContent);
+
+    const warnings: string[] = [];
+    const warnSpy = vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      const line = args.join(" ");
+      if (line.includes("unusually large")) warnings.push(line);
+    });
+
+    try {
+      await collectStack(projectDir, outDir);
+    } finally {
+      warnSpy.mockRestore();
+    }
+
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings[0]).toContain("Claude Code");
+    expect(warnings[0]).toMatch(/\d+\.\d+ KB/);
+
+    await rm(projectDir, { recursive: true });
+  });
+
+  it("does not warn about normal-sized instruction files", async () => {
+    const projectDir = await mkdtemp(path.join(tmpdir(), "pit-collect-small-"));
+    const outDir = path.join(projectDir, ".promptpit");
+
+    await writeFile(path.join(projectDir, "CLAUDE.md"), "# Small instructions\nBe concise.\n");
+
+    const warnings: string[] = [];
+    const warnSpy = vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      const line = args.join(" ");
+      if (line.includes("unusually large")) warnings.push(line);
+    });
+
+    try {
+      await collectStack(projectDir, outDir);
+    } finally {
+      warnSpy.mockRestore();
+    }
+
+    expect(warnings).toHaveLength(0);
 
     await rm(projectDir, { recursive: true });
   });
