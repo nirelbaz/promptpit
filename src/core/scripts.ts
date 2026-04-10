@@ -35,6 +35,7 @@ export function runLifecycleScript(
       {
         cwd,
         env: { ...process.env, ...env },
+        timeout: 300_000,
       },
       (error, _stdout, _stderr) => {
         if (error) {

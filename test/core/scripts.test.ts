@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { runLifecycleScript, collectScripts } from "../../src/core/scripts.js";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { runLifecycleScript, collectScripts, executeScripts } from "../../src/core/scripts.js";
+import { mkdtemp, rm, writeFile, readFile, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { stackManifestSchema } from "../../src/shared/schema.js";
@@ -173,5 +173,118 @@ describe("collectScripts", () => {
     expect(result).toHaveLength(2);
     expect(result[0].script).toBe("echo prep");
     expect(result[1].script).toBe("echo root-prep");
+  });
+});
+
+describe("executeScripts", () => {
+  const tmpDirs: string[] = [];
+
+  afterEach(async () => {
+    for (const dir of tmpDirs) {
+      await rm(dir, { recursive: true, force: true });
+    }
+    tmpDirs.length = 0;
+  });
+
+  it("runs remote scripts when --trust is set", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-scripts-"));
+    tmpDirs.push(dir);
+
+    const entries = [
+      {
+        phase: "postinstall" as const,
+        script: `touch "${dir}/trust-ran"`,
+        stackDir: dir,
+        stackName: "remote-stack",
+        stackVersion: "1.0.0",
+        source: "github:org/repo",
+      },
+    ];
+
+    await executeScripts(entries, {
+      targetDir: dir,
+      isRemote: () => true,
+      trust: true,
+    });
+
+    await expect(access(path.join(dir, "trust-ran"))).resolves.toBeUndefined();
+  });
+
+  it("throws on script failure by default", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-scripts-"));
+    tmpDirs.push(dir);
+
+    const entries = [
+      {
+        phase: "postinstall" as const,
+        script: "exit 1",
+        stackDir: dir,
+        stackName: "fail-stack",
+        stackVersion: "1.0.0",
+        source: ".promptpit",
+      },
+    ];
+
+    await expect(
+      executeScripts(entries, {
+        targetDir: dir,
+        isRemote: () => false,
+      }),
+    ).rejects.toThrow(/postinstall script.*exited with code/);
+  });
+
+  it("warns instead of throwing with ignoreScriptErrors", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-scripts-"));
+    tmpDirs.push(dir);
+
+    const entries = [
+      {
+        phase: "postinstall" as const,
+        script: "exit 1",
+        stackDir: dir,
+        stackName: "fail-stack",
+        stackVersion: "1.0.0",
+        source: ".promptpit",
+      },
+    ];
+
+    // Should not throw
+    await executeScripts(entries, {
+      targetDir: dir,
+      isRemote: () => false,
+      ignoreScriptErrors: true,
+    });
+  });
+
+  it("executes scripts in order", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-scripts-"));
+    tmpDirs.push(dir);
+
+    const entries = [
+      {
+        phase: "postinstall" as const,
+        script: `echo "first" >> "${dir}/order.txt"`,
+        stackDir: dir,
+        stackName: "dep-a",
+        stackVersion: "1.0.0",
+        source: ".promptpit",
+      },
+      {
+        phase: "postinstall" as const,
+        script: `echo "second" >> "${dir}/order.txt"`,
+        stackDir: dir,
+        stackName: "dep-b",
+        stackVersion: "1.0.0",
+        source: ".promptpit",
+      },
+    ];
+
+    await executeScripts(entries, {
+      targetDir: dir,
+      isRemote: () => false,
+    });
+
+    const content = await readFile(path.join(dir, "order.txt"), "utf-8");
+    expect(content.trim()).toBe("first\nsecond");
   });
 });
