@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { validateCommand } from "../../src/commands/validate.js";
+import { validateStack, LARGE_INSTRUCTION_THRESHOLD } from "../../src/core/validate.js";
 import path from "node:path";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, mkdir, copyFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 const VALID_STACK = path.resolve("test/__fixtures__/stacks/valid-stack");
@@ -60,5 +61,36 @@ describe("pit validate", () => {
     await expect(
       captureConsole(() => validateCommand(dir, {})),
     ).rejects.toThrow();
+  });
+
+  it("warns about unusually large instruction files", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pit-validate-large-"));
+    tmpDirs.push(dir);
+
+    // Copy a valid stack.json from fixture
+    await copyFile(
+      path.join(VALID_STACK, "stack.json"),
+      path.join(dir, "stack.json"),
+    );
+
+    // Write an instruction file that exceeds the threshold
+    const frontmatter = "---\nname: big-stack\ndescription: test\n---\n\n";
+    const largeContent = frontmatter + "x".repeat(LARGE_INSTRUCTION_THRESHOLD + 1000);
+    await writeFile(path.join(dir, "agent.promptpit.md"), largeContent);
+
+    const result = await validateStack(dir);
+    const sizeWarning = result.diagnostics.find(
+      (d) => d.file === "agent.promptpit.md" && d.level === "warning" && d.message.includes("unusually large"),
+    );
+    expect(sizeWarning).toBeDefined();
+    expect(sizeWarning!.message).toMatch(/\d+\.\d+ KB/);
+  });
+
+  it("does not warn about normal-sized instruction files", async () => {
+    const result = await validateStack(VALID_STACK);
+    const sizeWarning = result.diagnostics.find(
+      (d) => d.file === "agent.promptpit.md" && d.message.includes("unusually large"),
+    );
+    expect(sizeWarning).toBeUndefined();
   });
 });

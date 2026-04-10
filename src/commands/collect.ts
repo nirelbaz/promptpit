@@ -2,6 +2,7 @@ import path from "node:path";
 import { detectAdapters } from "../adapters/registry.js";
 import { mergeAdapterConfigs, hasVersionPins } from "../core/merger.js";
 import { stripSecrets } from "../core/security.js";
+import { LARGE_INSTRUCTION_THRESHOLD } from "../core/validate.js";
 import { writeStack } from "../core/stack.js";
 import { stripAllMarkerBlocks } from "../shared/markers.js";
 import { readFileOrNull, exists } from "../shared/utils.js";
@@ -100,6 +101,22 @@ export async function collectStack(
   }
 
   readSpin.succeed("Configurations read");
+
+  // Warn about unusually large instruction files from individual adapters
+  for (let i = 0; i < detected.length; i++) {
+    const d = detected[i];
+    const content = configs[i]?.agentInstructions;
+    if (!d || !content) continue;
+    const sizeBytes = Buffer.byteLength(content, "utf-8");
+    if (sizeBytes > LARGE_INSTRUCTION_THRESHOLD) {
+      const sizeKB = (sizeBytes / 1024).toFixed(1);
+      log.warn(
+        `${d.adapter.displayName} instruction file is unusually large (${sizeKB} KB). ` +
+          `Files over ${Math.round(LARGE_INSTRUCTION_THRESHOLD / 1024)} KB consume significant context window space. ` +
+          `Consider splitting into rules or skills.`,
+      );
+    }
+  }
 
   const mergeResult = mergeAdapterConfigs(configs);
 
