@@ -184,11 +184,20 @@ export type McpConfig = z.infer<typeof mcpConfigSchema>;
 
 // --- Stack Bundle (the full .promptpit/ contents in memory) ---
 
+export interface SupportingFile {
+  /** Path relative to the skill directory root (e.g., "scripts/setup.sh") */
+  relativePath: string;
+  /** File content as a Buffer */
+  content: Buffer;
+}
+
 export interface SkillEntry {
   name: string;
   path: string;
   frontmatter: SkillFrontmatter;
   content: string;
+  /** Non-SKILL.md files in the skill directory (scripts, references, assets, etc.) */
+  supportingFiles?: SupportingFile[];
 }
 
 export interface StackBundle {

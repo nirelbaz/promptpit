@@ -18,6 +18,14 @@ export async function writeFileEnsureDir(
   await writeFile(path, content, "utf-8");
 }
 
+export async function writeFileBufferEnsureDir(
+  path: string,
+  content: Buffer,
+): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, content);
+}
+
 export async function exists(path: string): Promise<boolean> {
   try {
     await access(path);
