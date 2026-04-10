@@ -91,6 +91,12 @@ Goal: let teams layer stacks on top of each other. Company base stack + team ove
 ### ~~Stack composition (`extends`)~~ **Completed v0.4.0**
 ~~`"extends": ["github:company/base-stack@1.0.0"]` in stack.json. `pit install` recursively fetches and resolves the dependency graph. Base instructions merge first, team overrides layer on top. Provisional merge semantics: last-declared-wins with a warning on conflicts, explicit `overrides` block in stack.json for intentional resolution. This is the feature that makes multi-team setups practical.~~
 
+### Interactive conflict resolution (`--resolve`)
+`pit install --resolve` — when extends produce conflicts (same-named skill, rule, MCP server, etc.), show an interactive picker instead of silently applying last-declare
+d-wins. For each conflict, display the two versions side-by-side and let the user choose which to keep. Saves choices to an `overrides` block in stack.json so subsequent
+installs don't re-ask. Non-TTY environments (CI) fall back to last-declared-wins with warnings. This is the interactive counterpart to the static `overrides` block that
+was deferred during the extends design.
+
 ### Diff command
 `pit diff` — show the actual text diff between installed config and `.promptpit/` source. Distinct from `pit status` (which shows hash-level drift). This is a UI feature, not a composition feature.
 
@@ -108,6 +114,9 @@ spotlight has a rich `.claude/settings.json` with `permissions`, `hooks`, and `e
 
 ### Large instruction file warning
 KurrentDB has a 25.1KB CLAUDE.md. No warning about unusually large instruction files. Add a size threshold warning during collect/validate.
+
+### Install lifecycle scripts
+`scripts.preinstall` and `scripts.postinstall` in stack.json. Run shell commands before/after `pit install` writes files. Primary use case: stacks like gstack that ship a `setup.sh` (builds binaries, creates symlinks, runs platform-specific setup) that the author expects to run after the stack is copied. `preinstall` runs before any files are written, `postinstall` runs after all adapters finish. Scripts execute from the stack's root directory. Security: local stacks (`.promptpit/`) run scripts without prompting (you own the code). Remote stacks (`github:owner/repo`) show the script content and require explicit consent before execution — "This stack wants to run a postinstall script. Review and approve?" with the full script body visible. `--trust` flag to skip the prompt (for CI or known stacks). `--ignore-scripts` flag to skip scripts entirely. `pit install --dry-run` shows which scripts would run without executing them.
 
 ### Uninstall command
 `pit uninstall <stack>` — clean reverse of install. Markers make instruction removal straightforward. Skills/MCP/env is messier (what if the user modified them?). Basic version: remove marked blocks + delete unmodified skill files.
