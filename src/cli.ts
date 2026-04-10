@@ -6,6 +6,8 @@ import { statusCommand } from "./commands/status.js";
 import { watchCommand } from "./commands/watch.js";
 import { validateCommand, ExitError } from "./commands/validate.js";
 import { checkCommand } from "./commands/check.js";
+import { diffCommand } from "./commands/diff.js";
+import type { DiffOptions } from "./commands/diff.js";
 import path from "node:path";
 import { log } from "./shared/io.js";
 
@@ -153,6 +155,37 @@ Examples:
     try {
       const root = path.resolve(dir);
       await statusCommand(root, opts);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        log.error(err.message);
+      }
+      process.exit(1);
+    }
+  });
+
+program
+  .command("diff")
+  .description("Show text diffs between installed config and .promptpit/ source")
+  .argument("[name]", "Filter by artifact name")
+  .argument("[dir]", "Project directory", ".")
+  .option("--type <type>", "Filter by artifact type (instructions|skill|agent|rule|command|mcp)")
+  .option("-a, --adapter <id>", "Show diffs for a specific adapter")
+  .option("--json", "Output as JSON")
+  .addHelpText("after", `
+Examples:
+  pit diff                        # all drifted artifacts
+  pit diff my-skill               # diff for a specific artifact
+  pit diff --type skill            # all drifted skills
+  pit diff --adapter cursor        # only Cursor adapter drifts
+  pit diff --json                  # machine-readable output
+`)
+  .action(async (name: string | undefined, dir: string, opts: { type?: string; adapter?: string; json?: boolean }) => {
+    try {
+      const root = path.resolve(dir);
+      const hasDrift = await diffCommand(root, { ...opts, name, type: opts.type as DiffOptions["type"] });
+      if (hasDrift) {
+        process.exit(1);
+      }
     } catch (err: unknown) {
       if (err instanceof Error) {
         log.error(err.message);
