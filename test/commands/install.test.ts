@@ -5,6 +5,7 @@ import { mkdtemp, rm, readFile, writeFile, lstat, readlink } from "node:fs/promi
 import { tmpdir } from "node:os";
 
 const VALID_STACK = path.resolve("test/__fixtures__/stacks/valid-stack");
+const SCRIPT_STACK = path.resolve("test/__fixtures__/stacks/stack-with-scripts");
 
 describe("installStack", () => {
   const tmpDirs: string[] = [];
@@ -471,6 +472,17 @@ describe("installStack", () => {
     // Install still completed (CLAUDE.md was written)
     const claudeMd = await readFile(path.join(target, "CLAUDE.md"), "utf-8");
     expect(claudeMd).toContain("promptpit:start:script-test");
+  });
+
+  it("runs fixture stack scripts and creates marker file", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "");
+
+    await installStack(SCRIPT_STACK, target, {});
+
+    const { access } = await import("node:fs/promises");
+    await expect(access(path.join(target, ".postinstall-marker"))).resolves.toBeUndefined();
   });
 
   it("dry-run shows lifecycle scripts without executing", async () => {
