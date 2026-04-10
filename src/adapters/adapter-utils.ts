@@ -12,7 +12,7 @@ export function parseJsonc(raw: string): unknown {
   return JSON.parse(stripJsonComments(raw));
 }
 import { skillFrontmatterSchema, ruleFrontmatterSchema, agentFrontmatterSchema } from "../shared/schema.js";
-import { readFileOrNull, writeFileEnsureDir, exists, removeFileOrSymlink, symlinkOrCopy } from "../shared/utils.js";
+import { readFileOrNull, writeFileEnsureDir, writeFileBufferEnsureDir, exists, removeFileOrSymlink, symlinkOrCopy } from "../shared/utils.js";
 import { log } from "../shared/io.js";
 import { hasMarkers, insertMarkers, replaceMarkerContent } from "../shared/markers.js";
 import type { DryRunEntry } from "./types.js";
@@ -475,6 +475,12 @@ export async function writeSkillsNative(
       } else {
         await removeFileOrSymlink(skillDir);
         await writeFileEnsureDir(dest, skill.content);
+        for (const file of skill.supportingFiles ?? []) {
+          await writeFileBufferEnsureDir(
+            path.join(skillDir, file.relativePath),
+            file.content,
+          );
+        }
       }
       filesWritten.push(dest);
     }
