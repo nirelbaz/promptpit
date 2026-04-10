@@ -140,16 +140,16 @@ export async function installStack(
 
       finalBundle = merged.bundle;
 
-      resolvedExtendsEntries = graph.nodes
-        .filter((n) => n.depth > 0)
-        .map((n) => ({
+      const depNodes = graph.nodes.filter((n) => n.depth > 0);
+
+      resolvedExtendsEntries = depNodes.map((n) => ({
           source: n.source,
           version: n.bundle.manifest.version,
           resolvedCommit: n.resolvedCommit,
           resolvedAt: new Date().toISOString(),
         }));
 
-      resolvedNodes = graph.nodes.filter((n) => n.depth > 0);
+      resolvedNodes = depNodes;
     }
 
     // Validate inbound env var names (security)
@@ -190,18 +190,18 @@ export async function installStack(
         source,
       },
     ];
+    const preScripts = collectScripts(scriptChainEntries, "preinstall");
+    const postScripts = collectScripts(scriptChainEntries, "postinstall");
+    const isRemoteSource = (src: string) => !!parseGitHubSource(src);
 
     // Run preinstall scripts (before any files are written)
-    if (!opts.ignoreScripts && !opts.dryRun) {
-      const preScripts = collectScripts(scriptChainEntries, "preinstall");
-      if (preScripts.length > 0) {
-        await executeScripts(preScripts, {
-          targetDir: target,
-          isRemote: (src) => !!parseGitHubSource(src),
-          trust: opts.trust,
-          ignoreScriptErrors: opts.ignoreScriptErrors,
-        });
-      }
+    if (!opts.ignoreScripts && !opts.dryRun && preScripts.length > 0) {
+      await executeScripts(preScripts, {
+        targetDir: target,
+        isRemote: isRemoteSource,
+        trust: opts.trust,
+        ignoreScriptErrors: opts.ignoreScriptErrors,
+      });
     }
 
     // Detect target adapters
@@ -381,8 +381,6 @@ export async function installStack(
 
       // Show lifecycle scripts in dry-run
       if (!opts.ignoreScripts) {
-        const preScripts = collectScripts(scriptChainEntries, "preinstall");
-        const postScripts = collectScripts(scriptChainEntries, "postinstall");
         const allScripts = [...preScripts, ...postScripts];
         if (allScripts.length > 0) {
           sections.push({
@@ -550,16 +548,13 @@ export async function installStack(
     }
 
     // Run postinstall scripts (after all files are written)
-    if (!opts.ignoreScripts && !opts.dryRun) {
-      const postScripts = collectScripts(scriptChainEntries, "postinstall");
-      if (postScripts.length > 0) {
-        await executeScripts(postScripts, {
-          targetDir: target,
-          isRemote: (src) => !!parseGitHubSource(src),
-          trust: opts.trust,
-          ignoreScriptErrors: opts.ignoreScriptErrors,
-        });
-      }
+    if (!opts.ignoreScripts && !opts.dryRun && postScripts.length > 0) {
+      await executeScripts(postScripts, {
+        targetDir: target,
+        isRemote: isRemoteSource,
+        trust: opts.trust,
+        ignoreScriptErrors: opts.ignoreScriptErrors,
+      });
     }
 
     log.success("Stack installed successfully!");

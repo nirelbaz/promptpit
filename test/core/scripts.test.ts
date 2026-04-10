@@ -71,7 +71,7 @@ describe("runLifecycleScript", () => {
   it("runs a script and returns success", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "pit-scripts-"));
     tmpDirs.push(dir);
-    const result = await runLifecycleScript("postinstall", "echo hello", dir, {
+    const result = await runLifecycleScript("echo hello", dir, {
       PIT_TARGET_DIR: "/tmp/target",
       PIT_STACK_NAME: "test",
       PIT_STACK_VERSION: "1.0.0",
@@ -83,7 +83,7 @@ describe("runLifecycleScript", () => {
   it("returns failure on non-zero exit code", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "pit-scripts-"));
     tmpDirs.push(dir);
-    const result = await runLifecycleScript("postinstall", "exit 1", dir, {
+    const result = await runLifecycleScript("exit 1", dir, {
       PIT_TARGET_DIR: "/tmp/target",
       PIT_STACK_NAME: "test",
       PIT_STACK_VERSION: "1.0.0",
@@ -96,7 +96,7 @@ describe("runLifecycleScript", () => {
     const dir = await mkdtemp(path.join(tmpdir(), "pit-scripts-"));
     tmpDirs.push(dir);
     await writeFile(path.join(dir, "marker.txt"), "found");
-    const result = await runLifecycleScript("postinstall", "cat marker.txt", dir, {
+    const result = await runLifecycleScript("cat marker.txt", dir, {
       PIT_TARGET_DIR: "/tmp/target",
       PIT_STACK_NAME: "test",
       PIT_STACK_VERSION: "1.0.0",
@@ -109,7 +109,6 @@ describe("runLifecycleScript", () => {
     const dir = await mkdtemp(path.join(tmpdir(), "pit-scripts-"));
     tmpDirs.push(dir);
     const result = await runLifecycleScript(
-      "postinstall",
       'test "$PIT_STACK_NAME" = "my-stack"',
       dir,
       {

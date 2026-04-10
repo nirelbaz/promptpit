@@ -23,7 +23,6 @@ export interface ScriptEntry {
 }
 
 export function runLifecycleScript(
-  _phase: "preinstall" | "postinstall",
   script: string,
   cwd: string,
   env: ScriptEnv,
@@ -124,7 +123,7 @@ export async function executeScripts(
       PIT_SOURCE: entry.source,
     };
 
-    const result = await runLifecycleScript(entry.phase, entry.script, entry.stackDir, env);
+    const result = await runLifecycleScript(entry.script, entry.stackDir, env);
 
     if (result.success) {
       spin.succeed(`${entry.phase} (${entry.stackName}) completed`);
