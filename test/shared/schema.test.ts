@@ -36,6 +36,24 @@ describe("stackManifestSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("accepts 4-part version (e.g., gstack 0.10.1.0)", () => {
+    const valid = { name: "test", version: "0.10.1.0" };
+    const result = stackManifestSchema.safeParse(valid);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts 3-part semver with pre-release", () => {
+    const valid = { name: "test", version: "1.0.0-beta.1" };
+    const result = stackManifestSchema.safeParse(valid);
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects 4-part version with leading zeros in 4th digit", () => {
+    const bad = { name: "test", version: "1.0.0.01" };
+    const result = stackManifestSchema.safeParse(bad);
+    expect(result.success).toBe(false);
+  });
+
   it("rejects semver with leading zeros", () => {
     const bad = { name: "test", version: "01.0.0" };
     const result = stackManifestSchema.safeParse(bad);

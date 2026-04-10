@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const semverRegex = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[\w.]+)?(\+[\w.]+)?$/;
+const semverRegex = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(\.(0|[1-9]\d*))?(-[\w.]+)?(\+[\w.]+)?$/;
 
 // --- Stack Manifest (stack.json) ---
 
@@ -12,7 +12,7 @@ export const stackManifestSchema = z.object({
       /^[a-zA-Z0-9_@][a-zA-Z0-9_.\-/]*$/,
       "Only alphanumeric, dash, underscore, dot, @, and / allowed",
     ),
-  version: z.string().regex(semverRegex, "Must be valid semver (e.g., 1.0.0)"),
+  version: z.string().regex(semverRegex, "Must be valid semver (e.g., 1.0.0 or 1.0.0.0)"),
   description: z.string().optional(),
   license: z.string().optional(),
   author: z.string().optional(),
