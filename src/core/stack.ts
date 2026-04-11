@@ -8,7 +8,7 @@ import {
   type StackManifest,
   type McpConfig,
 } from "../shared/schema.js";
-import { readFileOrNull, writeFileEnsureDir } from "../shared/utils.js";
+import { readFileOrNull, writeFileEnsureDir, writeFileBufferEnsureDir } from "../shared/utils.js";
 import { readSkillsFromDir, readAgentsFromDir, readRulesFromDir, readCommandsFromDir } from "../adapters/adapter-utils.js";
 
 
@@ -142,6 +142,12 @@ export async function writeStack(
       path.join(outputDir, "skills", skill.name, "SKILL.md"),
       skill.content,
     );
+    const skillDir = path.join(outputDir, "skills", skill.name);
+    for (const file of skill.supportingFiles ?? []) {
+      const resolved = path.resolve(skillDir, file.relativePath);
+      if (!resolved.startsWith(skillDir + path.sep)) continue;
+      await writeFileBufferEnsureDir(resolved, file.content);
+    }
   }
 
   for (const agent of bundle.agents) {

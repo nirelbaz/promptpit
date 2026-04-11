@@ -3,7 +3,7 @@ import { watch } from "node:fs";
 import { writeFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { detectAdapters } from "../adapters/registry.js";
-import { readManifest, writeManifest, computeHash } from "../core/manifest.js";
+import { readManifest, writeManifest, computeSkillHash } from "../core/manifest.js";
 import { exists } from "../shared/utils.js";
 import { readSkillsFromDir } from "../adapters/adapter-utils.js";
 import type { PlatformAdapter } from "../adapters/types.js";
@@ -142,7 +142,10 @@ async function handleChanges(
     for (const entry of manifest.installs) {
       for (const record of Object.values(entry.adapters)) {
         if (record.skills?.[skillName]) {
-          record.skills[skillName] = { hash: computeHash(skill.content) };
+          record.skills[skillName] = {
+            hash: computeSkillHash(skill.content, skill.supportingFiles),
+            supportingFiles: skill.supportingFiles?.map((f) => f.relativePath) ?? [],
+          };
           manifestChanged = true;
         }
       }

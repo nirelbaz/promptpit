@@ -1,7 +1,7 @@
 import path from "node:path";
 import { readStack } from "../core/stack.js";
 import { installCanonical } from "../core/skill-store.js";
-import { readManifest, writeManifest, upsertInstall, computeHash, computeMcpServerHash } from "../core/manifest.js";
+import { readManifest, writeManifest, upsertInstall, computeHash, computeSkillHash, computeMcpServerHash } from "../core/manifest.js";
 import { detectAdapters } from "../adapters/registry.js";
 import { validateEnvNames } from "../core/security.js";
 import { writeFileEnsureDir, removeDir, readFileOrNull, exists } from "../shared/utils.js";
@@ -29,6 +29,8 @@ export interface InstallOptions {
   trust?: boolean;
   ignoreScripts?: boolean;
   ignoreScriptErrors?: boolean;
+  preInstall?: string;
+  postInstall?: string;
 }
 
 export async function installStack(
@@ -192,6 +194,29 @@ export async function installStack(
     ];
     const preScripts = collectScripts(scriptChainEntries, "preinstall");
     const postScripts = collectScripts(scriptChainEntries, "postinstall");
+
+    // Append CLI-provided scripts (run after manifest scripts)
+    if (opts.preInstall) {
+      preScripts.push({
+        phase: "preinstall",
+        script: opts.preInstall,
+        stackDir: resolvedSource,
+        stackName: finalBundle.manifest.name,
+        stackVersion: finalBundle.manifest.version,
+        source,
+      });
+    }
+    if (opts.postInstall) {
+      postScripts.push({
+        phase: "postinstall",
+        script: opts.postInstall,
+        stackDir: resolvedSource,
+        stackName: finalBundle.manifest.name,
+        stackVersion: finalBundle.manifest.version,
+        source,
+      });
+    }
+
     const isRemoteSource = (src: string) => !!parseGitHubSource(src);
 
     // Run preinstall scripts (before any files are written)
@@ -251,6 +276,14 @@ export async function installStack(
             file: dest,
             action: skillExists ? "modify" : "create",
           });
+          for (const f of skill.supportingFiles ?? []) {
+            const fDest = path.join(base, skill.name, f.relativePath);
+            canonicalEntries.push({
+              file: fDest,
+              action: (await exists(fDest)) ? "modify" : "create",
+              detail: "supporting file",
+            });
+          }
         }
       } else {
         const canonSpin = spinner("Writing canonical skills...");
@@ -430,9 +463,12 @@ export async function installStack(
 
         // Hash skills from in-memory content
         if (finalBundle.skills.length > 0) {
-          const skills: Record<string, { hash: string }> = {};
+          const skills: Record<string, { hash: string; supportingFiles?: string[] }> = {};
           for (const skill of finalBundle.skills) {
-            skills[skill.name] = { hash: computeHash(skill.content) };
+            skills[skill.name] = {
+              hash: computeSkillHash(skill.content, skill.supportingFiles),
+              supportingFiles: skill.supportingFiles?.map((f) => f.relativePath) ?? [],
+            };
           }
           if (Object.keys(skills).length > 0) {
             record.skills = skills;

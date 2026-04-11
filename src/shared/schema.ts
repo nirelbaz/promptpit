@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const semverRegex = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[\w.]+)?(\+[\w.]+)?$/;
+const semverRegex = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(\.(0|[1-9]\d*))?(-[\w.]+)?(\+[\w.]+)?$/;
 
 // --- Stack Manifest (stack.json) ---
 
@@ -12,7 +12,7 @@ export const stackManifestSchema = z.object({
       /^[a-zA-Z0-9_@][a-zA-Z0-9_.\-/]*$/,
       "Only alphanumeric, dash, underscore, dot, @, and / allowed",
     ),
-  version: z.string().regex(semverRegex, "Must be valid semver (e.g., 1.0.0)"),
+  version: z.string().regex(semverRegex, "Must be valid semver (e.g., 1.0.0 or 1.0.0.0)"),
   description: z.string().optional(),
   license: z.string().optional(),
   author: z.string().optional(),
@@ -55,8 +55,11 @@ const stringOrArray = z.preprocess(
  * Passthrough: any other tool-specific fields.
  */
 export const skillFrontmatterSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().min(1),
+  name: z.string().min(1).max(64).regex(
+    /^[a-z0-9][a-z0-9-]*$/,
+    "Must be 1-64 lowercase alphanumeric characters or hyphens, starting with alphanumeric",
+  ),
+  description: z.string().min(1).max(1024),
   license: z.string().optional(),
   metadata: z.record(z.unknown()).optional(),
   "allowed-tools": stringOrArray.optional(),
@@ -181,11 +184,20 @@ export type McpConfig = z.infer<typeof mcpConfigSchema>;
 
 // --- Stack Bundle (the full .promptpit/ contents in memory) ---
 
+export interface SupportingFile {
+  /** Path relative to the skill directory root (e.g., "scripts/setup.sh") */
+  relativePath: string;
+  /** File content as a Buffer */
+  content: Buffer;
+}
+
 export interface SkillEntry {
   name: string;
   path: string;
   frontmatter: SkillFrontmatter;
   content: string;
+  /** Non-SKILL.md files in the skill directory (scripts, references, assets, etc.) */
+  supportingFiles?: SupportingFile[];
 }
 
 export interface StackBundle {
@@ -229,9 +241,14 @@ const artifactHashSchema = z.object({
   hash: z.string(),
 });
 
+const skillArtifactHashSchema = z.object({
+  hash: z.string(),
+  supportingFiles: z.array(z.string()).optional(),
+});
+
 const adapterInstallSchema = z.object({
   instructions: artifactHashSchema.optional(),
-  skills: z.record(artifactHashSchema).optional(),
+  skills: z.record(skillArtifactHashSchema).optional(),
   agents: z.record(artifactHashSchema).optional(),
   rules: z.record(artifactHashSchema).optional(),
   commands: z.record(artifactHashSchema).optional(),

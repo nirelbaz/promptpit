@@ -7,6 +7,7 @@ import {
   writeManifest,
   upsertInstall,
   computeHash,
+  computeSkillHash,
   normalizeForHash,
   computeMcpServerHash,
   emptyManifest,
@@ -163,6 +164,41 @@ describe("manifest", () => {
 
     it("produces different hashes for different content", () => {
       expect(computeHash("a")).not.toBe(computeHash("b"));
+    });
+  });
+
+  describe("computeSkillHash", () => {
+    it("returns same hash as computeHash when no supporting files", () => {
+      const content = "---\nname: test\n---\nBody";
+      expect(computeSkillHash(content)).toBe(computeHash(content));
+      expect(computeSkillHash(content, undefined)).toBe(computeHash(content));
+      expect(computeSkillHash(content, [])).toBe(computeHash(content));
+    });
+
+    it("produces a different hash when supporting files are present", () => {
+      const content = "---\nname: test\n---\nBody";
+      const files = [{ relativePath: "scripts/setup.sh", content: Buffer.from("echo hi") }];
+      expect(computeSkillHash(content, files)).not.toBe(computeHash(content));
+    });
+
+    it("produces consistent hashes regardless of file order", () => {
+      const content = "skill content";
+      const filesA = [
+        { relativePath: "b.txt", content: Buffer.from("b") },
+        { relativePath: "a.txt", content: Buffer.from("a") },
+      ];
+      const filesB = [
+        { relativePath: "a.txt", content: Buffer.from("a") },
+        { relativePath: "b.txt", content: Buffer.from("b") },
+      ];
+      expect(computeSkillHash(content, filesA)).toBe(computeSkillHash(content, filesB));
+    });
+
+    it("detects changes in supporting file content", () => {
+      const content = "skill";
+      const v1 = [{ relativePath: "setup.sh", content: Buffer.from("v1") }];
+      const v2 = [{ relativePath: "setup.sh", content: Buffer.from("v2") }];
+      expect(computeSkillHash(content, v1)).not.toBe(computeSkillHash(content, v2));
     });
   });
 

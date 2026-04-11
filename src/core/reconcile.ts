@@ -1,8 +1,9 @@
 import path from "node:path";
-import { readManifest, computeHash, computeMcpServerHash } from "./manifest.js";
+import { readManifest, computeHash, computeSkillHash, computeMcpServerHash } from "./manifest.js";
+import { readFile } from "node:fs/promises";
 import { readFileOrNull } from "../shared/utils.js";
 import { readMcpFromToml } from "../adapters/toml-utils.js";
-import { parseJsonc, resolveRuleDest, buildInlineContent } from "../adapters/adapter-utils.js";
+import { parseJsonc, resolveRuleDest, buildInlineContent, collectSupportingFilesFromDir } from "../adapters/adapter-utils.js";
 import { ruleToClaudeFormat } from "../adapters/claude-code.js";
 import { ruleToMdc } from "../adapters/cursor.js";
 import { ruleToInstructionsMd, agentToGitHubAgent } from "../adapters/copilot.js";
@@ -36,6 +37,7 @@ export interface ReconciledArtifact {
   path: string;
   state: ArtifactState;
   actualContent?: string;
+  supportingFileCount?: number;
 }
 
 export interface ReconciledAdapter {
@@ -114,26 +116,49 @@ async function reconcileAdapter(
   // Check skills — use canonical .agents/skills/ path (all adapters read from here)
   const skillEntries = record.skills ?? {};
   for (const [skillName, skillRecord] of Object.entries(skillEntries)) {
-    const skillPath = path.join(root, ".agents", "skills", skillName, "SKILL.md");
+    const skillDir = path.join(root, ".agents", "skills", skillName);
+    const skillPath = path.join(skillDir, "SKILL.md");
     let skillState: ArtifactState = "synced";
     let actualContent: string | undefined;
     const content = await readFileOrNull(skillPath);
     if (content == null) {
       skillState = "deleted";
     } else {
-      const currentHash = computeHash(content);
+      // Only hash supporting files that were tracked during install (avoids
+      // false drift from pre-existing files in the skill directory)
+      const trackedPaths = skillRecord.supportingFiles;
+      let supportingFiles: import("../shared/schema.js").SupportingFile[] | undefined;
+      if (trackedPaths && trackedPaths.length > 0) {
+        const files: import("../shared/schema.js").SupportingFile[] = [];
+        for (const relPath of trackedPaths) {
+          try {
+            const buf = await readFile(path.join(skillDir, relPath));
+            files.push({ relativePath: relPath, content: buf });
+          } catch {
+            // File missing — will cause hash mismatch → drifted
+          }
+        }
+        supportingFiles = files.length > 0 ? files : undefined;
+      } else if (!trackedPaths) {
+        // Legacy manifest without supportingFiles list — fall back to full dir scan
+        const allFiles = await collectSupportingFilesFromDir(skillDir);
+        supportingFiles = allFiles.length > 0 ? allFiles : undefined;
+      }
+      const currentHash = computeSkillHash(content, supportingFiles);
       if (currentHash !== skillRecord.hash) {
         skillState = "drifted";
         actualContent = content;
       }
     }
+    const fileCount = skillRecord.supportingFiles?.length ?? 0;
     worstState = escalateState(worstState, skillState);
     artifacts.push({
       type: "skill",
       name: skillName,
-      path: skillPath,
+      path: skillDir,
       state: skillState,
       actualContent,
+      ...(fileCount > 0 && { supportingFileCount: fileCount }),
     });
   }
 
