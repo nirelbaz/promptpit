@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.2 (2026-04-11)
+
+### Added
+
+- **Full skill directory support.** `pit collect` and `pit install` now handle entire skill directories, not just the SKILL.md file. Supporting files like `references/`, `scripts/`, and `assets/` are collected, installed, and tracked in the manifest. Skills that ship binaries, setup scripts, or documentation files now round-trip correctly.
+- **Skill frontmatter schema tightened to match the [Agent Skills](https://agentskills.io) spec.** Name validation enforces 1-64 chars, lowercase alphanumeric + hyphens. Description capped at 1024 chars. Validation warnings now show the specific field name that failed.
+- **4-part version format** in stack manifests (e.g., `0.10.1.0`) for projects that use build number versioning.
+- `--pre-install` and `--post-install` CLI flags on `pit install` for running custom commands before/after install without defining them in stack.json.
+
+### Fixed
+
+- `pit status` now detects drift in skill supporting files, not just the main SKILL.md.
+- `pit watch` correctly updates manifest hashes when supporting files change.
+- Supporting files array is always written to the manifest, even when empty, preventing false drift on re-install.
+- Path traversal guard on supporting file paths prevents writing outside the skill directory.
+
 ## 0.4.1 (2026-04-10)
 
 ### Added

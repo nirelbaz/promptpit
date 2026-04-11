@@ -12,6 +12,7 @@ pit init           # scaffold a new .promptpit/ stack
 pit collect        # bundle your AI config into .promptpit/
 pit install        # write it out for each tool
 pit status         # see what drifted
+pit diff           # text diff between installed and source
 pit watch          # live-sync skill changes
 pit validate       # check if a stack is well-formed
 pit check          # CI integration — verify config is fresh and in sync
@@ -65,7 +66,7 @@ Scans for Claude Code, Cursor, Codex CLI, Copilot, and Standards configs, merges
 .promptpit/
 ├── stack.json          # Manifest (name, version, skills, compatibility)
 ├── agent.promptpit.md  # Agent instructions (from CLAUDE.md, .cursorrules, AGENTS.md, etc.)
-├── skills/             # SKILL.md files
+├── skills/             # SKILL.md files + supporting files (references/, scripts/, assets/)
 ├── rules/              # Conditional rules (globs, alwaysApply)
 ├── agents/             # Custom agent definitions (tools, model)
 ├── mcp.json            # MCP server configs (secrets replaced with placeholders)
@@ -132,7 +133,7 @@ pit writes AGENTS.md (cross-tool standard, read by 60+ tools) and .mcp.json (pro
 
 Rules are translated per-adapter: `.claude/rules/*.md` (Claude Code), `.cursor/rules/*.mdc` (Cursor), `.github/instructions/*.instructions.md` (Copilot). Agents are written natively to Claude Code (`.claude/agents/*.md`) and Copilot (`.github/agents/*.agent.md`), and inlined into instructions for tools without native agent support.
 
-Skills are installed to `.agents/skills/` as the canonical location (matching the [Agent Skills](https://agentskills.io) ecosystem convention), then symlinked into tool-native paths. Tools that need different formats (like Cursor's .mdc) get translated copies. Windows falls back to copies when symlinks aren't available.
+Skills are installed to `.agents/skills/` as the canonical location (matching the [Agent Skills](https://agentskills.io) ecosystem convention), then symlinked into tool-native paths. Full skill directories are preserved, including supporting files like `references/`, `scripts/`, and `assets/`. Tools that need different formats (like Cursor's .mdc) get translated copies. Windows falls back to copies when symlinks aren't available.
 
 Adding a new tool is one file plus one registry entry. See [CONTRIBUTING.md](CONTRIBUTING.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -150,7 +151,7 @@ Adding a new tool is one file plus one registry entry. See [CONTRIBUTING.md](CON
 git clone https://github.com/nirelbaz/promptpit.git
 cd promptpit
 npm install
-npm test          # 624 tests, vitest
+npm test          # 699 tests, vitest
 npm run build     # builds dist/cli.js via tsup
 npm run lint      # TypeScript strict mode check
 ```
@@ -160,8 +161,8 @@ npm run lint      # TypeScript strict mode check
 See [TODOS.md](TODOS.md) for the full roadmap. The big milestones:
 
 - **v0.3 (Team Platform):** Done. Five adapters (Claude Code, Cursor, Codex, Copilot, Standards), seven commands, drift detection, dry-run previews, CI integration, portable rules and agents.
-- **v0.4 (Stack Composer):** Done. Stack composition via `extends` in stack.json, `pit install --save`, upstream drift detection, conflict warnings with last-declared-wins, `pit collect --include-extends`.
-- **v0.5:** `pit diff`, `pit update`, `pit uninstall`, selective install/collect.
+- **v0.4 (Stack Composer):** Done. Stack composition via `extends`, `pit diff`, install lifecycle scripts, full Agent Skills spec alignment (supporting files, tightened schema), `pit collect --include-extends`.
+- **v0.5:** `pit update`, `pit uninstall`, selective install/collect, interactive conflict resolution.
 - **v1.0 (Ecosystem Bridge):** Multi-source install (skills.sh, SkillsMP, cursor.directory), `pit publish`, `pit search`.
 
 ## Acknowledgments

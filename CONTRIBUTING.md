@@ -34,7 +34,7 @@ This is the most likely contribution. Each AI tool (Claude Code, Cursor, etc.) i
 
 1. Create `src/adapters/{tool}.ts` — see `cursor.ts` for a good reference (it has custom skill format conversion)
 2. Register it in `src/adapters/registry.ts`
-3. Add a fixture setup in `ADAPTER_FIXTURES` in `test/adapters/contract.test.ts` — the 7 contract tests will run automatically against your adapter
+3. Add a fixture setup in `ADAPTER_FIXTURES` in `test/adapters/contract.test.ts` — the 8 contract tests will run automatically against your adapter
 
 The adapter needs to implement:
 - `detect(root)` — check if this tool is configured in the project
@@ -45,10 +45,10 @@ The adapter needs to implement:
 
 ```
 src/
-├── cli.ts              # Commander.js entry point (init, collect, install, status, watch, validate, check)
-├── commands/           # init.ts, collect.ts, install.ts, status.ts, watch.ts, validate.ts, check.ts
+├── cli.ts              # Commander.js entry point (init, collect, install, status, diff, watch, validate, check)
+├── commands/           # init.ts, collect.ts, install.ts, status.ts, diff.ts, watch.ts, validate.ts, check.ts
 ├── adapters/           # One file per AI tool + registry + shared utils (standards.ts, copilot.ts, codex.ts, etc.)
-├── core/               # stack.ts (bundle I/O), skill-store.ts, manifest.ts (install ledger), merger.ts, security.ts, validate.ts
+├── core/               # stack.ts (bundle I/O), skill-store.ts, manifest.ts (install ledger), merger.ts, reconcile.ts, security.ts, validate.ts
 ├── sources/            # github.ts (clone + auto-collect)
 └── shared/             # schema.ts (Zod types + manifest schema), markers.ts, utils.ts, io.ts
 
@@ -65,8 +65,11 @@ test/
 
 ## Slash commands (Claude Code)
 
-If you use Claude Code, the repo includes two slash commands in `.claude/commands/`:
+If you use Claude Code, the repo includes slash commands in `.claude/commands/`:
 
+- `/develop` — full workflow: design, plan, implement, review, simplify.
+- `/ship` — push branch and create a PR.
+- `/pre-pr-check` — chains /review, adapter verification, and /simplify into a single pre-PR quality gate.
 - `/version [X.Y.Z]` — bump version in `package.json` and add a CHANGELOG entry. Run on your feature branch before opening a PR.
 - `/release` — tag the current version on main and push the tag. Run on main after merging a version bump PR.
 

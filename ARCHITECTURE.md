@@ -2,16 +2,16 @@
 
 ## Overview
 
-promptpit is the composition layer for AI agent configuration. It bundles instructions, skills ([Agent Skills](https://agentskills.io) spec), MCP servers, and env vars into one distributable stack, then installs it across multiple AI coding tools. Seven commands: `pit init` (scaffold a stack), `pit collect` (bundle configs), `pit install` (write them into each tool's format), `pit status` (show what's installed and drifted), `pit watch` (live-sync skill changes), `pit validate` (check stack validity), and `pit check` (CI sync verification). The core design principle is that promptpit knows nothing about specific AI tools, adapters do.
+promptpit is the composition layer for AI agent configuration. It bundles instructions, skills ([Agent Skills](https://agentskills.io) spec), MCP servers, and env vars into one distributable stack, then installs it across multiple AI coding tools. Eight commands: `pit init` (scaffold a stack), `pit collect` (bundle configs), `pit install` (write them into each tool's format), `pit status` (show what's installed and drifted), `pit diff` (text diff between installed and source), `pit watch` (live-sync skill changes), `pit validate` (check stack validity), and `pit check` (CI sync verification). The core design principle is that promptpit knows nothing about specific AI tools, adapters do.
 
 ## Data flow
 
 ```
 collect:
-  detect adapters → read each tool's configs (instructions, skills, rules, agents, MCP) → strip installed markers → merge (hash dedup) → strip secrets → write .promptpit/
+  detect adapters → read each tool's configs (instructions, skills + supporting files, rules, agents, MCP) → strip installed markers → merge (hash dedup) → strip secrets → write .promptpit/
 
 install:
-  read .promptpit/ (or clone from GitHub) → resolve extends chain (if present) → merge stacks (last-declared-wins) → write canonical .agents/skills/ → detect adapters → symlink or copy+translate skills, rules, and agents to each tool's format → write manifest (.promptpit/installed.json)
+  read .promptpit/ (or clone from GitHub) → resolve extends chain (if present) → merge stacks (last-declared-wins) → write canonical .agents/skills/ (full directories with supporting files) → detect adapters → symlink or copy+translate skills, rules, and agents to each tool's format → run lifecycle scripts (pre/post-install) → write manifest (.promptpit/installed.json)
 
 status:
   read manifest → compute content hashes of installed files → compare → report synced/drifted/deleted
@@ -37,7 +37,7 @@ src/adapters/
 └── standards.ts      # Cross-tool standards: AGENTS.md (instructions), .mcp.json (MCP servers), .agents/skills/
 ```
 
-Adding a tool means one file plus one registry entry. The contract tests in `test/adapters/contract.test.ts` automatically validate any registered adapter against 8 checks (including agent capability declaration).
+Adding a tool means one file plus one registry entry. The contract tests in `test/adapters/contract.test.ts` automatically validate any registered adapter against 8 checks (including agent capability declaration and supporting file handling).
 
 ### Why composition over inheritance
 
@@ -52,7 +52,7 @@ The original design used a `BaseAdapter` class. It was replaced with plain funct
 .promptpit/
 ├── stack.json          # Manifest: name, version, skills list, compatibility, extends, instructionStrategy
 ├── agent.promptpit.md  # Agent instructions (merged from CLAUDE.md, .cursorrules, etc.)
-├── skills/             # SKILL.md files, one per directory
+├── skills/             # SKILL.md files + supporting files (references/, scripts/, assets/), one per directory
 ├── rules/              # Conditional rules (*.md with name, description, globs, alwaysApply frontmatter)
 ├── agents/             # Custom agent definitions (*.md with name, description, tools, model frontmatter)
 ├── mcp.json            # MCP server configs (secrets replaced with ${PLACEHOLDER})
