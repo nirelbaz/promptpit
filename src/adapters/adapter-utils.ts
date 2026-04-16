@@ -530,3 +530,50 @@ export function mcpDryRunEntry(
     }),
   };
 }
+
+// --- MCP Removal (for uninstall) ---
+
+export interface RemoveMcpResult {
+  modified: boolean;
+  deleted: boolean;
+}
+
+export async function removeMcpFromJson(
+  filePath: string,
+  serverNames: string[],
+  rootKey = "mcpServers",
+): Promise<RemoveMcpResult> {
+  const raw = await readFileOrNull(filePath);
+  if (!raw) return { modified: false, deleted: false };
+
+  let config: Record<string, unknown>;
+  try {
+    config = parseJsonc(raw) as Record<string, unknown>;
+  } catch {
+    return { modified: false, deleted: false };
+  }
+
+  const mcp = config[rootKey] as Record<string, unknown> | undefined;
+  if (!mcp) return { modified: false, deleted: false };
+
+  let removed = 0;
+  for (const name of serverNames) {
+    if (name in mcp) {
+      delete mcp[name];
+      removed++;
+    }
+  }
+
+  if (removed === 0) return { modified: false, deleted: false };
+
+  if (Object.keys(mcp).length === 0) {
+    const otherKeys = Object.keys(config).filter((k) => k !== rootKey);
+    if (otherKeys.length === 0) {
+      await removeFileOrSymlink(filePath);
+      return { modified: false, deleted: true };
+    }
+  }
+
+  await writeFileEnsureDir(filePath, JSON.stringify(config, null, 2) + "\n");
+  return { modified: true, deleted: false };
+}
