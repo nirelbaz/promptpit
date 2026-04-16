@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.3 (2026-04-16)
+
+### Added
+
+- **`pit update` command** — smart re-install that's drift-aware. Re-resolves your stack, re-installs any pieces that have updated upstream, and leaves locally-drifted files alone (with a warning) so you don't lose in-progress edits. Use `--force` to overwrite drifted files, `--dry-run` to preview changes, `--stack <name>` to update a single stack.
+- **`pit uninstall` command** — clean removal of an installed stack. Deletes installed artifacts across all adapters, removes manifest entries, and protects canonical skills shared with other stacks.
+- Install manifest now records `resolvedCommit` per stack, enabling `pit update` to detect when an upstream stack has moved forward.
+
+### Changed
+
+- Artifact removal logic extracted into `src/core/artifact-ops.ts` for reuse across `uninstall` and `update`.
+- Adapter record building extracted into `manifest.ts` for shared use.
+
 ## 0.4.2 (2026-04-11)
 
 ### Added
