@@ -2,7 +2,13 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { rename } from "node:fs/promises";
 import { installManifestSchema } from "../shared/schema.js";
-import type { InstallManifest, InstallEntry, McpServerConfig, SupportingFile } from "../shared/schema.js";
+import type { InstallManifest, InstallEntry, McpServerConfig, SupportingFile, AdapterInstallRecord, StackBundle } from "../shared/schema.js";
+import type { PlatformAdapter, WriteOptions } from "../adapters/types.js";
+import { buildInlineContent } from "../adapters/adapter-utils.js";
+import { ruleToClaudeFormat } from "../adapters/claude-code.js";
+import { ruleToMdc } from "../adapters/cursor.js";
+import { ruleToInstructionsMd, agentToGitHubAgent } from "../adapters/copilot.js";
+import { agentToCodexToml } from "../adapters/toml-utils.js";
 import { readFileOrNull, writeFileEnsureDir } from "../shared/utils.js";
 
 const MANIFEST_FILE = "installed.json";
@@ -108,4 +114,111 @@ export function computeMcpServerHash(serverConfig: McpServerConfig | Record<stri
     }
   }
   return computeHash(sortedStringify(canonical));
+}
+
+// --- Shared adapter hash computation ---
+
+export interface AdapterWriteContext {
+  adapter: PlatformAdapter;
+  writeOpts: WriteOptions;
+}
+
+/**
+ * Build per-adapter hash records for the install manifest.
+ * Used by both install and update commands.
+ */
+export function buildAdapterRecords(
+  contexts: AdapterWriteContext[],
+  bundle: StackBundle,
+  target: string,
+): Record<string, AdapterInstallRecord> {
+  const adapterRecords: Record<string, AdapterInstallRecord> = {};
+
+  for (const { adapter, writeOpts } of contexts) {
+    const record: AdapterInstallRecord = {};
+
+    // Hash instructions
+    const skipAdapterInstructions =
+      (adapter.id === "standards" && writeOpts.skipInstructions) ||
+      (adapter.id !== "standards" && writeOpts.preferUniversal && adapter.capabilities.nativelyReads?.instructions);
+    if (!skipAdapterInstructions && (bundle.agentInstructions || (bundle.agents.length > 0 && adapter.capabilities.agents === "inline"))) {
+      const configPath = adapter.paths.project(target).config;
+      if (configPath) {
+        const written = adapter.capabilities.agents === "inline"
+          ? buildInlineContent(bundle.agentInstructions, bundle.agents) ?? ""
+          : bundle.agentInstructions;
+        record.instructions = { hash: computeHash(written.trim()) };
+      }
+    }
+
+    // Hash skills
+    if (bundle.skills.length > 0) {
+      const skills: Record<string, { hash: string; supportingFiles?: string[] }> = {};
+      for (const skill of bundle.skills) {
+        skills[skill.name] = {
+          hash: computeSkillHash(skill.content, skill.supportingFiles),
+          supportingFiles: skill.supportingFiles?.map((f) => f.relativePath) ?? [],
+        };
+      }
+      if (Object.keys(skills).length > 0) {
+        record.skills = skills;
+      }
+    }
+
+    // Hash agents (native adapters translate per-file)
+    if (bundle.agents.length > 0 && adapter.capabilities.agents === "native") {
+      const agents: Record<string, { hash: string }> = {};
+      for (const agent of bundle.agents) {
+        let translated = agent.content;
+        if (adapter.id === "copilot") translated = agentToGitHubAgent(agent.content);
+        else if (adapter.id === "codex") translated = agentToCodexToml(agent.content);
+        agents[agent.name] = { hash: computeHash(translated) };
+      }
+      if (Object.keys(agents).length > 0) {
+        record.agents = agents;
+      }
+    }
+
+    // Hash rules (translated content per adapter)
+    if (bundle.rules.length > 0 && adapter.capabilities.rules) {
+      const rules: Record<string, { hash: string }> = {};
+      for (const rule of bundle.rules) {
+        let translated = rule.content;
+        if (adapter.id === "claude-code") translated = ruleToClaudeFormat(rule.content);
+        else if (adapter.id === "cursor") translated = ruleToMdc(rule.content);
+        else if (adapter.id === "copilot") translated = ruleToInstructionsMd(rule.content);
+        rules[rule.name] = { hash: computeHash(translated) };
+      }
+      if (Object.keys(rules).length > 0) {
+        record.rules = rules;
+      }
+    }
+
+    // Hash MCP
+    const skipAdapterMcp =
+      (adapter.id === "standards" && writeOpts.skipMcp) ||
+      (adapter.id !== "standards" && writeOpts.preferUniversal && adapter.capabilities.nativelyReads?.mcp);
+    if (!skipAdapterMcp && adapter.capabilities.mcpStdio && Object.keys(bundle.mcpServers).length > 0) {
+      const mcp: Record<string, { hash: string }> = {};
+      for (const [serverName, serverConfig] of Object.entries(bundle.mcpServers)) {
+        mcp[serverName] = { hash: computeMcpServerHash(serverConfig) };
+      }
+      record.mcp = mcp;
+    }
+
+    // Hash commands
+    if (bundle.commands.length > 0 && adapter.capabilities.commands) {
+      const commands: Record<string, { hash: string }> = {};
+      for (const command of bundle.commands) {
+        commands[command.name] = { hash: computeHash(command.content) };
+      }
+      record.commands = commands;
+    }
+
+    if (record.instructions || record.skills || record.agents || record.rules || record.mcp || record.commands) {
+      adapterRecords[adapter.id] = record;
+    }
+  }
+
+  return adapterRecords;
 }
