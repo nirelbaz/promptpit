@@ -383,15 +383,15 @@ export async function updateStacks(
   target: string,
   opts: UpdateOptions = {},
 ): Promise<UpdateResult> {
-  const manifest = await readManifest(target);
+  let manifest = await readManifest(target);
   if (manifest.installs.length === 0) {
     throw new Error("No stacks installed. Run `pit install` first.");
   }
 
-  // Filter stacks
+  // Filter stacks (snapshot entries before any mutations)
   const entries = opts.stackName
     ? manifest.installs.filter((e) => e.stack === opts.stackName)
-    : manifest.installs;
+    : [...manifest.installs];
 
   if (opts.stackName && entries.length === 0) {
     const installed = manifest.installs.map((e) => e.stack);
@@ -571,12 +571,19 @@ export async function updateStacks(
         await installCanonical(target, filtered.skills, {});
       }
 
-      // Build writeOpts (reuse install's dedup pattern)
+      // Build writeOpts — preserve original installMode dedup settings
       const writeOpts: WriteOptions = {};
-      const mcpReaders = detected.filter((d) => d.adapter.id !== "standards" && d.adapter.capabilities.nativelyReads?.mcp);
-      const instrReaders = detected.filter((d) => d.adapter.id !== "standards" && d.adapter.capabilities.nativelyReads?.instructions);
-      if (mcpReaders.length > 0) writeOpts.skipMcp = true;
-      if (instrReaders.length > 0) writeOpts.skipInstructions = true;
+      if (entry.installMode === "prefer-universal") {
+        writeOpts.preferUniversal = true;
+      } else if (entry.installMode === "force-standards") {
+        // force-standards: no dedup needed, standards writes everything
+      } else {
+        // Default dedup: skip standards when tool-specific adapters read natively
+        const mcpReaders = detected.filter((d) => d.adapter.id !== "standards" && d.adapter.capabilities.nativelyReads?.mcp);
+        const instrReaders = detected.filter((d) => d.adapter.id !== "standards" && d.adapter.capabilities.nativelyReads?.instructions);
+        if (mcpReaders.length > 0) writeOpts.skipMcp = true;
+        if (instrReaders.length > 0) writeOpts.skipInstructions = true;
+      }
 
       for (const { adapter } of detected) {
         const adapterWriteOpts: WriteOptions = { ...writeOpts };
@@ -611,12 +618,39 @@ export async function updateStacks(
         await removeDeletedArtifacts(target, entry.stack, manifest, entry, delta.removed, opts);
       }
 
-      // Update manifest
+      // Update manifest — build records from filtered bundle, then merge back
+      // skipped artifacts from old entry so they stay tracked
       const finalContexts: AdapterWriteContext[] = detected.map(({ adapter }) => ({
         adapter,
         writeOpts: adapter.id === "standards" ? writeOpts : {},
       }));
       const adapterRecords = buildAdapterRecords(finalContexts, filtered, target);
+
+      // Preserve old manifest entries for skipped (drifted) artifacts
+      for (const skip of skipped) {
+        for (const [adapterId, oldRecord] of Object.entries(entry.adapters)) {
+          if (!adapterRecords[adapterId]) adapterRecords[adapterId] = {};
+          const rec = adapterRecords[adapterId]!;
+          if (skip.type === "instructions" && oldRecord.instructions && !rec.instructions) {
+            rec.instructions = oldRecord.instructions;
+          } else if (skip.type === "skill" && oldRecord.skills?.[skip.name] && !rec.skills?.[skip.name]) {
+            rec.skills = rec.skills ?? {};
+            rec.skills[skip.name] = oldRecord.skills[skip.name]!;
+          } else if (skip.type === "agent" && oldRecord.agents?.[skip.name] && !rec.agents?.[skip.name]) {
+            rec.agents = rec.agents ?? {};
+            rec.agents[skip.name] = oldRecord.agents[skip.name]!;
+          } else if (skip.type === "rule" && oldRecord.rules?.[skip.name] && !rec.rules?.[skip.name]) {
+            rec.rules = rec.rules ?? {};
+            rec.rules[skip.name] = oldRecord.rules[skip.name]!;
+          } else if (skip.type === "command" && oldRecord.commands?.[skip.name] && !rec.commands?.[skip.name]) {
+            rec.commands = rec.commands ?? {};
+            rec.commands[skip.name] = oldRecord.commands[skip.name]!;
+          } else if (skip.type === "mcp" && oldRecord.mcp?.[skip.name] && !rec.mcp?.[skip.name]) {
+            rec.mcp = rec.mcp ?? {};
+            rec.mcp[skip.name] = oldRecord.mcp[skip.name]!;
+          }
+        }
+      }
 
       const newEntry: InstallEntry = {
         stack: finalBundle.manifest.name,
@@ -629,8 +663,8 @@ export async function updateStacks(
         adapters: adapterRecords,
       };
 
-      const updatedManifest = upsertInstall(manifest, newEntry);
-      await writeManifest(target, updatedManifest);
+      manifest = upsertInstall(manifest, newEntry);
+      await writeManifest(target, manifest);
 
       anyUpdated = true;
       results.push({
