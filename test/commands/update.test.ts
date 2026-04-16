@@ -377,4 +377,164 @@ describe("updateStacks", () => {
     expect(result.stacks[0]!.modified.length).toBe(0);
     expect(result.stacks[0]!.removed.length).toBe(0);
   });
+
+  // --- MCP server delta tests ---
+
+  it("detects added and modified MCP servers", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-update-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(V1_STACK, target, {});
+
+    // v2 adds analytics MCP, modifies dev-db args
+    const result = await updateStacks(target, { localSource: V2_STACK });
+
+    expect(result.stacks[0]!.added.some((a) => a.type === "mcp" && a.name === "analytics")).toBe(true);
+    expect(result.stacks[0]!.modified.some((a) => a.type === "mcp" && a.name === "dev-db")).toBe(true);
+  });
+
+  it("skips drifted MCP server during update", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-update-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(V1_STACK, target, {});
+
+    // Claude Code stores MCP in .claude/settings.json
+    const mcpPath = path.join(target, ".claude", "settings.json");
+    const mcpContent = await readFile(mcpPath, "utf-8");
+    const mcpJson = JSON.parse(mcpContent);
+    mcpJson.mcpServers["dev-db"].args = ["-y", "server-postgres", "--custom-flag"];
+    await writeFile(mcpPath, JSON.stringify(mcpJson, null, 2));
+
+    // Update from v2 (which also modifies dev-db)
+    const result = await updateStacks(target, { localSource: V2_STACK });
+
+    // dev-db should be skipped (drifted)
+    expect(result.stacks[0]!.skipped.some((s) => s.type === "mcp" && s.name === "dev-db")).toBe(true);
+
+    // But analytics should still be added
+    expect(result.stacks[0]!.added.some((a) => a.type === "mcp" && a.name === "analytics")).toBe(true);
+
+    // Verify custom flag preserved
+    const updatedMcp = JSON.parse(await readFile(mcpPath, "utf-8"));
+    expect(updatedMcp.mcpServers["dev-db"].args).toContain("--custom-flag");
+  });
+
+  // --- Command delta tests ---
+
+  it("removes deleted commands from disk", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-update-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(V1_STACK, target, {});
+
+    // Verify deploy command exists after v1
+    const cmdPath = path.join(target, ".claude", "commands", "deploy.md");
+    expect(await exists(cmdPath)).toBe(true);
+
+    // v2 has no commands — deploy should be removed
+    await updateStacks(target, { localSource: V2_STACK });
+
+    expect(await exists(cmdPath)).toBe(false);
+  });
+
+  it("includes command removal in delta report", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-update-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(V1_STACK, target, {});
+
+    const result = await updateStacks(target, { localSource: V2_STACK });
+
+    expect(result.stacks[0]!.removed.some((a) => a.type === "command" && a.name === "deploy")).toBe(true);
+  });
+
+  // --- Full delta with all artifact types ---
+
+  it("reports complete delta across all artifact types", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-update-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(V1_STACK, target, {});
+    const result = await updateStacks(target, { localSource: V2_STACK });
+
+    const delta = result.stacks[0]!;
+
+    // Added: reviewer skill, analytics MCP
+    const addedTypes = delta.added.map((a) => a.type);
+    expect(addedTypes).toContain("skill");
+    expect(addedTypes).toContain("mcp");
+
+    // Modified: naming rule, dev-db MCP, instructions
+    const modifiedTypes = delta.modified.map((a) => a.type);
+    expect(modifiedTypes).toContain("rule");
+    expect(modifiedTypes).toContain("mcp");
+
+    // Removed: helper agent, deploy command
+    const removedTypes = delta.removed.map((a) => a.type);
+    expect(removedTypes).toContain("agent");
+    expect(removedTypes).toContain("command");
+
+    // Unchanged: linter skill
+    expect(delta.unchanged).toBeGreaterThan(0);
+  });
+
+  // --- Force with MCP ---
+
+  it("force overwrites drifted MCP servers", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-update-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(V1_STACK, target, {});
+
+    // Claude Code stores MCP in .claude/settings.json
+    const mcpPath = path.join(target, ".claude", "settings.json");
+    const mcpContent = await readFile(mcpPath, "utf-8");
+    const mcpJson = JSON.parse(mcpContent);
+    mcpJson.mcpServers["dev-db"].args = ["-y", "server-postgres", "--custom"];
+    await writeFile(mcpPath, JSON.stringify(mcpJson, null, 2));
+
+    // Force update
+    const result = await updateStacks(target, { localSource: V2_STACK, force: true });
+
+    // Should not skip anything
+    expect(result.stacks[0]!.skipped.length).toBe(0);
+
+    // dev-db should have v2 args (--ssl, not --custom)
+    const updatedMcp = JSON.parse(await readFile(mcpPath, "utf-8"));
+    expect(updatedMcp.mcpServers["dev-db"].args).toContain("--ssl");
+    expect(updatedMcp.mcpServers["dev-db"].args).not.toContain("--custom");
+  });
+
+  // --- Dry-run with full delta ---
+
+  it("dry-run reports all artifact types without writing", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-update-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(V1_STACK, target, {});
+
+    const result = await updateStacks(target, {
+      localSource: V2_STACK,
+      dryRun: true,
+    });
+
+    const delta = result.stacks[0]!;
+    // Should report all deltas
+    expect(delta.added.length + delta.modified.length + delta.removed.length).toBeGreaterThan(0);
+
+    // But manifest should still be v1
+    const manifest = await readManifest(target);
+    expect(manifest.installs[0]!.stackVersion).toBe("1.0.0");
+
+    // And deploy command should still exist
+    expect(await exists(path.join(target, ".claude", "commands", "deploy.md"))).toBe(true);
+  });
 });

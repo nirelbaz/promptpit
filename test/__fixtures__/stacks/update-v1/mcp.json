@@ -1,0 +1,9 @@
+{
+  "dev-db": {
+    "command": "npx",
+    "args": ["-y", "server-postgres"],
+    "env": {
+      "DATABASE_URL": "${DATABASE_URL}"
+    }
+  }
+}
