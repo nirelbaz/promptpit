@@ -1,0 +1,8 @@
+{
+  "name": "update-test",
+  "version": "1.1.0",
+  "description": "Fixture for update command tests (v2)",
+  "skills": ["skills/linter", "skills/reviewer"],
+  "rules": ["rules/naming"],
+  "compatibility": ["claude-code"]
+}
