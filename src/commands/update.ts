@@ -240,6 +240,21 @@ function filterBundleForDrift(
     return true;
   });
 
+  // Filter MCP servers
+  const filteredMcpServers: typeof bundle.mcpServers = {};
+  for (const [name, config] of Object.entries(bundle.mcpServers)) {
+    if (!isDrifted(reconciled, stackName, "mcp", name)) {
+      filteredMcpServers[name] = config;
+      continue;
+    }
+    const changing = changingArtifacts.some((a) => a.type === "mcp" && a.name === name);
+    if (changing) {
+      skipped.push({ type: "mcp", name, reason: "drifted" });
+    } else {
+      filteredMcpServers[name] = config;
+    }
+  }
+
   return {
     filtered: {
       ...bundle,
@@ -248,6 +263,7 @@ function filterBundleForDrift(
       agents: filteredAgents,
       rules: filteredRules,
       commands: filteredCommands,
+      mcpServers: filteredMcpServers,
     },
     skipped,
   };
