@@ -9,6 +9,7 @@ import { checkCommand } from "./commands/check.js";
 import { diffCommand } from "./commands/diff.js";
 import type { DiffOptions } from "./commands/diff.js";
 import { uninstallStack } from "./commands/uninstall.js";
+import { updateStacks } from "./commands/update.js";
 import path from "node:path";
 import { log } from "./shared/io.js";
 
@@ -169,6 +170,57 @@ Examples:
     try {
       const targetDir = path.resolve(dir);
       await uninstallStack(stack, targetDir, opts);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        log.error(err.message);
+      }
+      process.exit(1);
+    }
+  });
+
+program
+  .command("update")
+  .description("Update installed stacks to their latest versions")
+  .argument("[stack]", "Update a specific stack by name (default: all)")
+  .argument("[dir]", "Project directory", ".")
+  .option("--check", "Only check for updates, don't apply")
+  .option("--dry-run", "Show what would change without writing")
+  .option("-f, --force", "Overwrite drifted artifacts (default: skip them)")
+  .option("-v, --verbose", "Show detailed diffs for changed artifacts")
+  .option("--ignore-scripts", "Skip lifecycle scripts")
+  .option("--trust", "Trust remote stack scripts (skip consent prompt)")
+  .option("--json", "Machine-readable output (for --check)")
+  .addHelpText("after", `
+Examples:
+  pit update                  # update all installed stacks
+  pit update my-stack         # update a specific stack
+  pit update --check          # check for updates without applying
+  pit update --dry-run        # preview what would change
+  pit update --force          # overwrite drifted artifacts
+  pit update --check --json   # machine-readable update check
+`)
+  .action(async (stack: string | undefined, dir: string, opts: {
+    check?: boolean;
+    dryRun?: boolean;
+    force?: boolean;
+    verbose?: boolean;
+    ignoreScripts?: boolean;
+    trust?: boolean;
+    json?: boolean;
+  }) => {
+    try {
+      const root = path.resolve(dir);
+      const result = await updateStacks(root, { ...opts, stackName: stack });
+
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+      }
+
+      if (opts.check && result.stacks.some((s) =>
+        s.added.length > 0 || s.modified.length > 0 || s.removed.length > 0
+      )) {
+        process.exit(1);
+      }
     } catch (err: unknown) {
       if (err instanceof Error) {
         log.error(err.message);

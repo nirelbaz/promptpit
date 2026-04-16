@@ -268,6 +268,7 @@ const installEntrySchema = z.object({
   stack: z.string().min(1),
   stackVersion: z.string(),
   source: z.string().optional(),
+  resolvedCommit: z.string().optional(),
   installedAt: z.string(),
   installMode: z.enum(["force-standards", "prefer-universal"]).optional(),
   resolvedExtends: z.array(resolvedExtendsEntrySchema).optional(),

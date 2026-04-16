@@ -2,7 +2,7 @@
 
 ## Project
 
-PromptPit (`pit`) — the composition layer for AI agent configuration. Bundles instructions, skills (Agent Skills spec), MCP servers, and env vars into one distributable stack that installs across Claude Code, Cursor, and other AI coding tools. Nine commands: `pit init` (scaffold a stack), `pit collect` (bundle configs), `pit install` (install stacks), `pit uninstall` (remove installed stacks), `pit status` (show what's installed and drifted), `pit diff` (text diff between installed and source), `pit watch` (live-sync skill changes), `pit validate` (check stack validity), and `pit check` (CI sync verification). Translation is the entry point, stack management is the product.
+PromptPit (`pit`) — the composition layer for AI agent configuration. Bundles instructions, skills (Agent Skills spec), MCP servers, and env vars into one distributable stack that installs across Claude Code, Cursor, and other AI coding tools. Ten commands: `pit init` (scaffold a stack), `pit collect` (bundle configs), `pit install` (install stacks), `pit uninstall` (remove installed stacks), `pit update` (smart re-install with drift awareness), `pit status` (show what's installed and drifted), `pit diff` (text diff between installed and source), `pit watch` (live-sync skill changes), `pit validate` (check stack validity), and `pit check` (CI sync verification). Translation is the entry point, stack management is the product.
 
 ## Commands
 
@@ -20,9 +20,9 @@ Adapter pattern with composition. Each AI tool is a plain object implementing `P
 ```
 src/
 ├── cli.ts              # Commander.js entry point
-├── commands/           # init.ts, collect.ts, install.ts, status.ts, watch.ts, validate.ts, check.ts, diff.ts
+├── commands/           # init.ts, collect.ts, install.ts, uninstall.ts, update.ts, status.ts, watch.ts, validate.ts, check.ts, diff.ts
 ├── adapters/           # claude-code.ts, cursor.ts, codex.ts, standards.ts, copilot.ts, registry.ts, types.ts, adapter-utils.ts, toml-utils.ts
-├── core/               # stack.ts, skill-store.ts, manifest.ts, merger.ts, resolve.ts, reconcile.ts, security.ts, validate.ts
+├── core/               # stack.ts, skill-store.ts, manifest.ts, artifact-ops.ts, merger.ts, resolve.ts, reconcile.ts, security.ts, validate.ts
 ├── sources/            # github.ts (clone + auto-collect)
 └── shared/             # schema.ts (Zod + types), markers.ts, utils.ts, io.ts
 ```

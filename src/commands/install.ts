@@ -1,21 +1,17 @@
 import path from "node:path";
 import { readStack } from "../core/stack.js";
 import { installCanonical } from "../core/skill-store.js";
-import { readManifest, writeManifest, upsertInstall, computeHash, computeSkillHash, computeMcpServerHash } from "../core/manifest.js";
+import { readManifest, writeManifest, upsertInstall, buildAdapterRecords } from "../core/manifest.js";
 import { detectAdapters } from "../adapters/registry.js";
 import { validateEnvNames } from "../core/security.js";
 import { writeFileEnsureDir, removeDir, readFileOrNull, exists } from "../shared/utils.js";
 import { log, spinner, printDryRunReport } from "../shared/io.js";
-import { parseGitHubSource, cloneAndResolve } from "../sources/github.js";
-import { ruleToClaudeFormat } from "../adapters/claude-code.js";
-import { ruleToMdc } from "../adapters/cursor.js";
-import { ruleToInstructionsMd, agentToGitHubAgent } from "../adapters/copilot.js";
-import { agentToCodexToml } from "../adapters/toml-utils.js";
-import { buildInlineContent } from "../adapters/adapter-utils.js";
+import { parseGitHubSource, cloneAndResolve, getRepoCommitSha } from "../sources/github.js";
+import type { AdapterWriteContext } from "../core/manifest.js";
 import { collectScripts, executeScripts } from "../core/scripts.js";
 import type { WriteOptions, DryRunEntry } from "../adapters/types.js";
 import type { DryRunSection } from "../shared/io.js";
-import type { InstallEntry, AdapterInstallRecord, StackBundle } from "../shared/schema.js";
+import type { InstallEntry, StackBundle } from "../shared/schema.js";
 import { canonicalSkillBase } from "../core/skill-store.js";
 
 export interface InstallOptions {
@@ -71,6 +67,9 @@ export async function installStack(
     resolvedSource = resolved.stackDir;
     tmpDir = resolved.tmpDir;
   }
+
+  // Capture cloned repo dir before --save may reassign resolvedSource
+  const clonedRepoDir = gh ? path.dirname(resolvedSource) : undefined;
 
   try {
     const spin = spinner("Reading stack bundle...");
@@ -441,101 +440,17 @@ export async function installStack(
       const manifest = await readManifest(target);
 
       // Build adapter records with content hashes
-      const adapterRecords: Record<string, AdapterInstallRecord> = {};
-      for (const { adapter } of detected) {
-        const record: AdapterInstallRecord = {};
-
-        // Hash instructions — inline-agent adapters embed agents in the marker block,
-        // so hash what actually gets written to disk (buildInlineContent result)
-        // Skip recording if the adapter was told not to write instructions
-        const skipAdapterInstructions =
-          (adapter.id === "standards" && writeOpts.skipInstructions) ||
-          (adapter.id !== "standards" && writeOpts.preferUniversal && adapter.capabilities.nativelyReads?.instructions);
-        if (!skipAdapterInstructions && (finalBundle.agentInstructions || (finalBundle.agents.length > 0 && adapter.capabilities.agents === "inline"))) {
-          const configPath = adapter.paths.project(target).config;
-          if (configPath) {
-            const written = adapter.capabilities.agents === "inline"
-              ? buildInlineContent(finalBundle.agentInstructions, finalBundle.agents) ?? ""
-              : finalBundle.agentInstructions;
-            record.instructions = { hash: computeHash(written.trim()) };
-          }
-        }
-
-        // Hash skills from in-memory content
-        if (finalBundle.skills.length > 0) {
-          const skills: Record<string, { hash: string; supportingFiles?: string[] }> = {};
-          for (const skill of finalBundle.skills) {
-            skills[skill.name] = {
-              hash: computeSkillHash(skill.content, skill.supportingFiles),
-              supportingFiles: skill.supportingFiles?.map((f) => f.relativePath) ?? [],
-            };
-          }
-          if (Object.keys(skills).length > 0) {
-            record.skills = skills;
-          }
-        }
-
-        // Hash agents — native adapters translate per-file, so hash translated content
-        if (finalBundle.agents.length > 0 && adapter.capabilities.agents === "native") {
-          const agents: Record<string, { hash: string }> = {};
-          for (const agent of finalBundle.agents) {
-            let translated = agent.content;
-            if (adapter.id === "copilot") translated = agentToGitHubAgent(agent.content);
-            else if (adapter.id === "codex") translated = agentToCodexToml(agent.content);
-            agents[agent.name] = { hash: computeHash(translated) };
-          }
-          if (Object.keys(agents).length > 0) {
-            record.agents = agents;
-          }
-        }
-
-        // Hash rules (translated content per adapter)
-        if (finalBundle.rules.length > 0 && adapter.capabilities.rules) {
-          const rules: Record<string, { hash: string }> = {};
-          for (const rule of finalBundle.rules) {
-            // Hash the translated content (what's actually written to disk)
-            let translated = rule.content;
-            if (adapter.id === "claude-code") translated = ruleToClaudeFormat(rule.content);
-            else if (adapter.id === "cursor") translated = ruleToMdc(rule.content);
-            else if (adapter.id === "copilot") translated = ruleToInstructionsMd(rule.content);
-            rules[rule.name] = { hash: computeHash(translated) };
-          }
-          if (Object.keys(rules).length > 0) {
-            record.rules = rules;
-          }
-        }
-
-        // Hash MCP for any adapter that supports it
-        // Skip recording if the adapter was told not to write MCP
-        const skipAdapterMcp =
-          (adapter.id === "standards" && writeOpts.skipMcp) ||
-          (adapter.id !== "standards" && writeOpts.preferUniversal && adapter.capabilities.nativelyReads?.mcp);
-        if (!skipAdapterMcp && adapter.capabilities.mcpStdio && Object.keys(finalBundle.mcpServers).length > 0) {
-          const mcp: Record<string, { hash: string }> = {};
-          for (const [serverName, serverConfig] of Object.entries(finalBundle.mcpServers)) {
-            mcp[serverName] = { hash: computeMcpServerHash(serverConfig) };
-          }
-          record.mcp = mcp;
-        }
-
-        // Hash commands
-        if (finalBundle.commands.length > 0 && adapter.capabilities.commands) {
-          const commands: Record<string, { hash: string }> = {};
-          for (const command of finalBundle.commands) {
-            commands[command.name] = { hash: computeHash(command.content) };
-          }
-          record.commands = commands;
-        }
-
-        if (record.instructions || record.skills || record.agents || record.rules || record.mcp || record.commands) {
-          adapterRecords[adapter.id] = record;
-        }
-      }
+      const contexts: AdapterWriteContext[] = detected.map(({ adapter }) => ({
+        adapter,
+        writeOpts,
+      }));
+      const adapterRecords = buildAdapterRecords(contexts, finalBundle, target);
 
       const entry: InstallEntry = {
         stack: finalBundle.manifest.name,
         stackVersion: finalBundle.manifest.version,
         source: gh ? source : undefined,
+        resolvedCommit: clonedRepoDir ? getRepoCommitSha(clonedRepoDir) : undefined,
         installedAt: new Date().toISOString(),
         ...(opts.forceStandards && { installMode: "force-standards" as const }),
         ...(opts.preferUniversal && { installMode: "prefer-universal" as const }),

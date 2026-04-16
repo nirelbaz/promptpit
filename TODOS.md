@@ -72,8 +72,8 @@ Discovered via `/audit-adapters` using the AI Stack Expert knowledge base. See `
 
 ### Tier 2 — Phase 2 features
 9. ~~Stack composition (`extends`) — headline feature~~ **Completed:** v0.4.0 (2026-04-09)
-10. Uninstall command — needed for safe stack iteration
-11. Update command — depends on composition logic
+10. ~~Uninstall command — needed for safe stack iteration~~ **Completed:** PR #76
+11. Update command — smart re-install with drift awareness (design spec: `docs/superpowers/specs/2026-04-16-update-command-design.md`)
 12. Everything else in Phase 2
 
 ### Tier 3 — Tier 2 adapters
@@ -91,17 +91,20 @@ Goal: let teams layer stacks on top of each other. Company base stack + team ove
 ### ~~Stack composition (`extends`)~~ **Completed v0.4.0**
 ~~`"extends": ["github:company/base-stack@1.0.0"]` in stack.json. `pit install` recursively fetches and resolves the dependency graph. Base instructions merge first, team overrides layer on top. Provisional merge semantics: last-declared-wins with a warning on conflicts, explicit `overrides` block in stack.json for intentional resolution. This is the feature that makes multi-team setups practical.~~
 
-### Interactive conflict resolution (`--resolve`)
-`pit install --resolve` — when extends produce conflicts (same-named skill, rule, MCP server, etc.), show an interactive picker instead of silently applying last-declare
-d-wins. For each conflict, display the two versions side-by-side and let the user choose which to keep. Saves choices to an `overrides` block in stack.json so subsequent
-installs don't re-ask. Non-TTY environments (CI) fall back to last-declared-wins with warnings. This is the interactive counterpart to the static `overrides` block that
-was deferred during the extends design.
+### Interactive conflict resolution (`--interactive`)
+Cross-command interactive picker for conflict resolution. Two use cases:
+
+1. **Install extends conflicts** (`pit install --interactive`): when extends produce conflicts (same-named skill, rule, MCP server, etc.), show an interactive picker instead of silently applying last-declared-wins. For each conflict, display the two versions side-by-side and let the user choose which to keep. Saves choices to an `overrides` block in stack.json so subsequent installs don't re-ask.
+
+2. **Update drift conflicts** (`pit update --interactive`): when a drifted artifact also changed upstream, show the user's version and the upstream version side-by-side. Let the user choose per-artifact: keep mine, take upstream, or view diff. Saves choices to manifest so subsequent updates don't re-ask.
+
+Non-TTY environments (CI) fall back to last-declared-wins (install) or skip-drifted (update) with warnings.
 
 ### ~~Diff command~~ **Completed v0.4.1**
 ~~`pit diff` — show the actual text diff between installed config and `.promptpit/` source. Distinct from `pit status` (which shows hash-level drift). This is a UI feature, not a composition feature.~~
 
-### Update command
-`pit update` — diff what changed in a stack since last install, apply only the delta. Needs version comparison and conflict resolution for user-modified content.
+### Update command — **In Progress**
+`pit update` — smart re-install with drift awareness. Handles both remote and local stacks. Fetches latest, computes delta (added/modified/removed/unchanged), skips drifted artifacts by default. `--force` to overwrite, `--check` for CI. Design spec: `docs/superpowers/specs/2026-04-16-update-command-design.md`.
 
 ### ~~Formalize Agent Skills alignment~~ **Completed v0.4.2**
 ~~PromptPit already parses Agent Skills frontmatter (`skillFrontmatterSchema` in `schema.ts`). Formalize: ensure full spec compliance (name: 1-64 chars lowercase alphanumeric + hyphens; description: 1-1024 chars), support optional `scripts/`, `references/`, `assets/` directories, and document that `.promptpit/` is "Agent Skills + composition." Critical change: `readSkillsFromDir` currently collects only the `.md` file — must collect the entire skill directory (source, binaries, assets) so installed skills can reference supporting files. **Depends on: install lifecycle scripts** (stacks like gstack need a postinstall `./setup` to build binaries after the full directory is copied). Together these two features enable stacks with non-trivial skills (compiled binaries, symlink structures, platform-specific setup).~~
@@ -118,11 +121,14 @@ Translate `$ARGUMENTS` (Claude Code) <-> `$1` (Cursor) <-> `${input:arguments}` 
 ### ~~Install lifecycle scripts~~ **Completed v0.4.1**
 ~~`scripts.preinstall` and `scripts.postinstall` in stack.json. Run shell commands before/after `pit install` writes files. Primary use case: stacks like gstack that ship a `setup.sh` (builds binaries, creates symlinks, runs platform-specific setup) that the author expects to run after the stack is copied. `preinstall` runs before any files are written, `postinstall` runs after all adapters finish. Scripts execute from the stack's root directory. Security: local stacks (`.promptpit/`) run scripts without prompting (you own the code). Remote stacks (`github:owner/repo`) show the script content and require explicit consent before execution. `--trust` flag to skip the prompt (for CI or known stacks). `--ignore-scripts` flag to skip scripts entirely. `pit install --dry-run` shows which scripts would run without executing them. **Paired with: Formalize Agent Skills alignment** (full directory collection) — together these enable non-trivial stacks like gstack where skills include binaries and need post-copy setup.~~
 
-### Uninstall command
-`pit uninstall <stack>` — clean reverse of install. Markers make instruction removal straightforward. Skills/MCP/env is messier (what if the user modified them?). Basic version: remove marked blocks + delete unmodified skill files.
+### ~~Uninstall command~~ **Completed** PR #76
+~~`pit uninstall <stack>` — clean reverse of install. Markers make instruction removal straightforward. Skills/MCP/env is messier (what if the user modified them?). Basic version: remove marked blocks + delete unmodified skill files.~~
 
 ### Selective install/collect
 `pit install --select` / `pit collect --select` — interactive picker for skills, MCP servers, env vars. Power-user feature for teams where you want conventions but not MCP servers.
+
+### Atomic install/update writes
+If `pit install` or `pit update` crashes midway (e.g., disk error after writing some artifacts but before updating the manifest), the installed state is inconsistent — some artifacts are the new version while the manifest still records old hashes. Next `pit status` shows false drift everywhere. Fix: write all artifacts to a temp staging directory, then atomically swap into place. Recovery path today: re-run `pit install`.
 
 ## Phase 2.5 — Tier 2 Adapters (community-contributed)
 

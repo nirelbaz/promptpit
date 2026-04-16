@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { stackManifestSchema, skillFrontmatterSchema, mcpServerSchema, mcpConfigSchema, agentFrontmatterSchema } from "../../src/shared/schema.js";
+import { stackManifestSchema, skillFrontmatterSchema, mcpServerSchema, mcpConfigSchema, agentFrontmatterSchema, installManifestSchema } from "../../src/shared/schema.js";
 
 describe("stackManifestSchema", () => {
   it("validates a complete stack manifest", () => {
@@ -213,5 +213,41 @@ describe("mcpConfigSchema", () => {
     const config = { bad: { command: "npx", env: { KEY: 123 } } };
     const result = mcpConfigSchema.safeParse(config);
     expect(result.success).toBe(false);
+  });
+});
+
+describe("installManifestSchema", () => {
+  it("accepts resolvedCommit in install entry", () => {
+    const manifest = {
+      version: 1,
+      installs: [
+        {
+          stack: "test",
+          stackVersion: "1.0.0",
+          source: "github:org/repo",
+          resolvedCommit: "abc123def456",
+          installedAt: new Date().toISOString(),
+          adapters: {},
+        },
+      ],
+    };
+    const result = installManifestSchema.safeParse(manifest);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts install entry without resolvedCommit", () => {
+    const manifest = {
+      version: 1,
+      installs: [
+        {
+          stack: "test",
+          stackVersion: "1.0.0",
+          installedAt: new Date().toISOString(),
+          adapters: {},
+        },
+      ],
+    };
+    const result = installManifestSchema.safeParse(manifest);
+    expect(result.success).toBe(true);
   });
 });
