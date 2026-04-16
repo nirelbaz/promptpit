@@ -151,4 +151,230 @@ describe("updateStacks", () => {
       updateStacks(target, { stackName: "nonexistent" }),
     ).rejects.toThrow("not installed");
   });
+
+  it("updates by stack name when multiple stacks installed", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-update-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    // Install the update-test stack
+    await installStack(V1_STACK, target, {});
+
+    // Update only the specific stack by name
+    const result = await updateStacks(target, {
+      stackName: "update-test",
+      localSource: V2_STACK,
+    });
+
+    expect(result.stacks.length).toBe(1);
+    expect(result.stacks[0]!.stack).toBe("update-test");
+    expect(result.updated).toBe(true);
+  });
+
+  it("--check mode reports changes without applying them", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-update-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(V1_STACK, target, {});
+
+    // Run update in check mode
+    const result = await updateStacks(target, {
+      localSource: V2_STACK,
+      check: true,
+    });
+
+    // Should report changes
+    expect(result.stacks[0]!.added.length).toBeGreaterThan(0);
+    expect(result.stacks[0]!.modified.length).toBeGreaterThan(0);
+    expect(result.stacks[0]!.removed.length).toBeGreaterThan(0);
+
+    // But should NOT have applied them
+    const manifest = await readManifest(target);
+    expect(manifest.installs[0]!.stackVersion).toBe("1.0.0"); // Still v1
+    expect(result.updated).toBe(false);
+  });
+
+  it("--dry-run mode reports changes without writing", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-update-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(V1_STACK, target, {});
+
+    const result = await updateStacks(target, {
+      localSource: V2_STACK,
+      dryRun: true,
+    });
+
+    // Should report the delta
+    expect(result.stacks[0]!.added.length).toBeGreaterThan(0);
+
+    // But should NOT have applied
+    const manifest = await readManifest(target);
+    expect(manifest.installs[0]!.stackVersion).toBe("1.0.0"); // Still v1
+  });
+
+  it("--json mode suppresses log output", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-update-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(V1_STACK, target, {});
+
+    // Should not throw with json mode
+    const result = await updateStacks(target, {
+      localSource: V1_STACK,
+      json: true,
+    });
+    expect(result.updated).toBe(false);
+  });
+
+  it("skips drifted instructions as atomic unit", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-update-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(V1_STACK, target, {});
+
+    // Drift the CLAUDE.md instructions (add text inside the marker block)
+    const claudeMd = await readFile(path.join(target, "CLAUDE.md"), "utf-8");
+    const driftedContent = claudeMd.replace(
+      "Use TypeScript strict mode.",
+      "Use TypeScript strict mode. MY CUSTOM RULE.",
+    );
+    await writeFile(path.join(target, "CLAUDE.md"), driftedContent);
+
+    // Update from v2 (which modifies instructions)
+    const result = await updateStacks(target, { localSource: V2_STACK });
+
+    // Instructions should be skipped
+    const instrSkipped = result.stacks[0]!.skipped.some(
+      (s) => s.type === "instructions",
+    );
+    expect(instrSkipped).toBe(true);
+
+    // Verify custom content preserved
+    const currentClaudeMd = await readFile(path.join(target, "CLAUDE.md"), "utf-8");
+    expect(currentClaudeMd).toContain("MY CUSTOM RULE");
+  });
+
+  it("preserves skipped artifact manifest entries after update", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-update-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(V1_STACK, target, {});
+
+    // Drift the naming rule
+    const rulePath = path.join(target, ".claude", "rules", "naming.md");
+    const originalRule = await readFile(rulePath, "utf-8");
+    await writeFile(rulePath, originalRule + "\nMy custom addition.\n");
+
+    // Update from v2
+    await updateStacks(target, { localSource: V2_STACK });
+
+    // Verify the skipped rule is still tracked in the manifest
+    const manifest = await readManifest(target);
+    const entry = manifest.installs[0]!;
+    const ccRecord = entry.adapters["claude-code"];
+    expect(ccRecord?.rules?.["naming"]).toBeDefined();
+    expect(ccRecord?.rules?.["naming"]?.hash).toBeDefined();
+  });
+
+  it("updates modified instructions when not drifted", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-update-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(V1_STACK, target, {});
+
+    // Update from v2 without drifting anything
+    const result = await updateStacks(target, { localSource: V2_STACK });
+
+    // Instructions should be modified (not skipped)
+    const instrSkipped = result.stacks[0]!.skipped.some(
+      (s) => s.type === "instructions",
+    );
+    expect(instrSkipped).toBe(false);
+
+    // Verify v2 instructions are installed
+    const claudeMd = await readFile(path.join(target, "CLAUDE.md"), "utf-8");
+    expect(claudeMd).toContain("Always write tests");
+  });
+
+  it("handles missing local source gracefully", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-update-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(V1_STACK, target, {});
+
+    // Update with a source that doesn't exist
+    const result = await updateStacks(target, {
+      localSource: "/tmp/nonexistent-source",
+    });
+
+    // Should skip gracefully (no crash)
+    expect(result.updated).toBe(false);
+  });
+
+  it("reports correct delta categories", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-update-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(V1_STACK, target, {});
+    const result = await updateStacks(target, { localSource: V2_STACK });
+
+    const delta = result.stacks[0]!;
+
+    // v2 adds reviewer skill
+    expect(delta.added.some((a) => a.type === "skill" && a.name === "reviewer")).toBe(true);
+
+    // v2 modifies naming rule
+    expect(delta.modified.some((a) => a.type === "rule" && a.name === "naming")).toBe(true);
+
+    // v2 removes helper agent
+    expect(delta.removed.some((a) => a.type === "agent" && a.name === "helper")).toBe(true);
+
+    // v2 keeps linter skill unchanged
+    expect(delta.unchanged).toBeGreaterThan(0);
+  });
+
+  it("--check with --json returns structured data", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-update-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(V1_STACK, target, {});
+
+    const result = await updateStacks(target, {
+      localSource: V2_STACK,
+      check: true,
+      json: true,
+    });
+
+    // Structured result should have version info
+    expect(result.stacks[0]!.oldVersion).toBe("1.0.0");
+    expect(result.stacks[0]!.newVersion).toBe("1.1.0");
+    expect(result.stacks[0]!.stack).toBe("update-test");
+  });
+
+  it("check mode reports up-to-date when nothing changed", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-update-"));
+    tmpDirs.push(target);
+    await writeFile(path.join(target, "CLAUDE.md"), "# Existing\n");
+
+    await installStack(V1_STACK, target, {});
+
+    const result = await updateStacks(target, {
+      localSource: V1_STACK,
+      check: true,
+    });
+
+    expect(result.stacks[0]!.added.length).toBe(0);
+    expect(result.stacks[0]!.modified.length).toBe(0);
+    expect(result.stacks[0]!.removed.length).toBe(0);
+  });
 });
