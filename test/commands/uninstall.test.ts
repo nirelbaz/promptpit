@@ -225,4 +225,72 @@ describe("uninstallStack", () => {
       expect(Object.keys(after.mcpServers ?? {}).length).toBe(0);
     }
   });
+
+  it("dry-run with --verbose shows diff details", async () => {
+    const target = await setupInstalled();
+
+    // Capture console output by running dry-run — just verify it doesn't crash
+    await uninstallStack("test-stack", target, { dryRun: true, verbose: true });
+
+    // Files should remain untouched
+    const manifest = await readManifest(target);
+    expect(manifest.installs).toHaveLength(1);
+  });
+
+  it("handles already-deleted files gracefully", async () => {
+    const target = await setupInstalled();
+
+    // Delete files that uninstall would remove
+    const { rm: rmFs } = await import("node:fs/promises");
+    await rmFs(path.join(target, ".claude", "skills", "browse"), { recursive: true, force: true });
+    await rmFs(path.join(target, ".claude", "agents", "reviewer.md"), { force: true });
+
+    // Should not crash
+    await uninstallStack("test-stack", target, {});
+
+    // Manifest should still be cleaned up
+    expect(await exists(path.join(target, ".promptpit", "installed.json"))).toBe(false);
+  });
+
+  it("skips modified canonical skill without --force", async () => {
+    const target = await setupInstalled();
+    const canonicalSkillPath = path.join(target, ".agents", "skills", "browse", "SKILL.md");
+    expect(await exists(canonicalSkillPath)).toBe(true);
+
+    // Modify the canonical skill
+    await writeFile(canonicalSkillPath, "modified canonical content\n");
+
+    await uninstallStack("test-stack", target, {});
+
+    // Canonical skill should be preserved (modified)
+    expect(await exists(canonicalSkillPath)).toBe(true);
+    const content = await readFile(canonicalSkillPath, "utf-8");
+    expect(content).toBe("modified canonical content\n");
+  });
+
+  it("removes modified canonical skill with --force", async () => {
+    const target = await setupInstalled();
+    const canonicalSkillPath = path.join(target, ".agents", "skills", "browse", "SKILL.md");
+    await writeFile(canonicalSkillPath, "modified canonical content\n");
+
+    await uninstallStack("test-stack", target, { force: true });
+
+    expect(await exists(path.join(target, ".agents", "skills", "browse"))).toBe(false);
+  });
+
+  it("handles unknown adapter in manifest gracefully", async () => {
+    const target = await setupInstalled();
+
+    // Inject a fake adapter into the manifest
+    const manifest = await readManifest(target);
+    manifest.installs[0]!.adapters["unknown-tool"] = {
+      instructions: { hash: "sha256:fake" },
+    };
+    await writeManifest(target, manifest);
+
+    // Should warn but not crash
+    await uninstallStack("test-stack", target, {});
+
+    expect(await exists(path.join(target, ".promptpit", "installed.json"))).toBe(false);
+  });
 });
