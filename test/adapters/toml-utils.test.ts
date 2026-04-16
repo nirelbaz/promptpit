@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { readMcpFromToml, writeMcpToToml, readAgentsFromToml, agentToCodexToml } from "../../src/adapters/toml-utils.js";
+import { readMcpFromToml, writeMcpToToml, readAgentsFromToml, agentToCodexToml, removeMcpSectionsFromToml } from "../../src/adapters/toml-utils.js";
 import { parse as parseToml } from "smol-toml";
 import { computeMcpServerHash } from "../../src/core/manifest.js";
 import type { McpConfig } from "../../src/shared/schema.js";
@@ -566,5 +566,63 @@ Write clean code.
     const toml = agentToCodexToml(md);
     const parsed = parseToml(toml) as Record<string, unknown>;
     expect(parsed.tools).toEqual(["Read", "Edit", "Bash"]);
+  });
+});
+
+describe("removeMcpSectionsFromToml", () => {
+  it("removes specified server sections", () => {
+    const toml = `model = "o4-mini"
+
+[mcp_servers.keep]
+command = "keep-cmd"
+
+[mcp_servers.remove]
+command = "remove-cmd"
+args = ["-y", "pkg"]
+`;
+    const result = removeMcpSectionsFromToml(toml, ["remove"]);
+    expect(result).toContain("[mcp_servers.keep]");
+    expect(result).toContain('command = "keep-cmd"');
+    expect(result).not.toContain("[mcp_servers.remove]");
+    expect(result).not.toContain("remove-cmd");
+    expect(result).toContain('model = "o4-mini"');
+  });
+
+  it("removes multiple sections", () => {
+    const toml = `[mcp_servers.a]
+command = "a"
+
+[mcp_servers.b]
+command = "b"
+
+[mcp_servers.c]
+command = "c"
+`;
+    const result = removeMcpSectionsFromToml(toml, ["a", "c"]);
+    expect(result).not.toContain("[mcp_servers.a]");
+    expect(result).toContain("[mcp_servers.b]");
+    expect(result).not.toContain("[mcp_servers.c]");
+  });
+
+  it("removes section with env sub-table", () => {
+    const toml = `[mcp_servers.target]
+command = "cmd"
+
+[mcp_servers.target.env]
+KEY = "value"
+
+[mcp_servers.other]
+command = "other"
+`;
+    const result = removeMcpSectionsFromToml(toml, ["target"]);
+    expect(result).not.toContain("[mcp_servers.target]");
+    expect(result).not.toContain("KEY");
+    expect(result).toContain("[mcp_servers.other]");
+  });
+
+  it("returns content unchanged when server not found", () => {
+    const toml = `[mcp_servers.keep]\ncommand = "cmd"\n`;
+    const result = removeMcpSectionsFromToml(toml, ["nonexistent"]);
+    expect(result).toContain("[mcp_servers.keep]");
   });
 });

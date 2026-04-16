@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, readFile, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { writeWithMarkers, readAgentsFromDir, readSkillsFromDir, readRulesFromDir, readMcpFromSettings, formatAgentsInlineSection, buildInlineContent, readCommandsFromDir, detectCommandParamSyntax } from "../../src/adapters/adapter-utils.js";
+import { writeWithMarkers, readAgentsFromDir, readSkillsFromDir, readRulesFromDir, readMcpFromSettings, formatAgentsInlineSection, buildInlineContent, readCommandsFromDir, detectCommandParamSyntax, removeMcpFromJson } from "../../src/adapters/adapter-utils.js";
+import { exists } from "../../src/shared/utils.js";
 import type { AgentEntry } from "../../src/shared/schema.js";
 
 describe("writeWithMarkers", () => {
@@ -677,5 +678,91 @@ describe("detectCommandParamSyntax", () => {
 
   it("returns null for no params", () => {
     expect(detectCommandParamSyntax("Just do the thing")).toBeNull();
+  });
+});
+
+describe("removeMcpFromJson", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(path.join(tmpdir(), "pit-mcp-remove-"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("removes specified servers from mcpServers", async () => {
+    const filePath = path.join(tmpDir, ".mcp.json");
+    await writeFile(filePath, JSON.stringify({
+      mcpServers: {
+        keep: { command: "keep-cmd" },
+        remove1: { command: "remove-cmd" },
+        remove2: { command: "remove-cmd-2" },
+      },
+    }, null, 2));
+
+    const result = await removeMcpFromJson(filePath, ["remove1", "remove2"]);
+    expect(result).toEqual({ modified: true, deleted: false });
+
+    const content = JSON.parse(await readFile(filePath, "utf-8"));
+    expect(content.mcpServers).toEqual({ keep: { command: "keep-cmd" } });
+  });
+
+  it("deletes file when mcpServers becomes empty and no other keys", async () => {
+    const filePath = path.join(tmpDir, ".mcp.json");
+    await writeFile(filePath, JSON.stringify({
+      mcpServers: { only: { command: "cmd" } },
+    }, null, 2));
+
+    const result = await removeMcpFromJson(filePath, ["only"]);
+    expect(result).toEqual({ modified: false, deleted: true });
+    expect(await exists(filePath)).toBe(false);
+  });
+
+  it("keeps file with empty mcpServers when other keys exist", async () => {
+    const filePath = path.join(tmpDir, "settings.json");
+    await writeFile(filePath, JSON.stringify({
+      permissions: { allow: ["Read"] },
+      mcpServers: { only: { command: "cmd" } },
+    }, null, 2));
+
+    const result = await removeMcpFromJson(filePath, ["only"]);
+    expect(result).toEqual({ modified: true, deleted: false });
+
+    const content = JSON.parse(await readFile(filePath, "utf-8"));
+    expect(content.mcpServers).toEqual({});
+    expect(content.permissions).toEqual({ allow: ["Read"] });
+  });
+
+  it("returns not modified when file does not exist", async () => {
+    const result = await removeMcpFromJson(path.join(tmpDir, "nope.json"), ["x"]);
+    expect(result).toEqual({ modified: false, deleted: false });
+  });
+
+  it("returns not modified when server names not found", async () => {
+    const filePath = path.join(tmpDir, ".mcp.json");
+    await writeFile(filePath, JSON.stringify({
+      mcpServers: { keep: { command: "cmd" } },
+    }, null, 2));
+
+    const result = await removeMcpFromJson(filePath, ["nonexistent"]);
+    expect(result).toEqual({ modified: false, deleted: false });
+  });
+
+  it("removes servers using custom root key", async () => {
+    const filePath = path.join(tmpDir, "mcp.json");
+    await writeFile(filePath, JSON.stringify({
+      servers: {
+        keep: { command: "keep-cmd" },
+        remove: { command: "remove-cmd" },
+      },
+    }, null, 2));
+
+    const result = await removeMcpFromJson(filePath, ["remove"], "servers");
+    expect(result).toEqual({ modified: true, deleted: false });
+
+    const content = JSON.parse(await readFile(filePath, "utf-8"));
+    expect(content.servers).toEqual({ keep: { command: "keep-cmd" } });
   });
 });

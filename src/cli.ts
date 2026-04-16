@@ -8,6 +8,7 @@ import { validateCommand, ExitError } from "./commands/validate.js";
 import { checkCommand } from "./commands/check.js";
 import { diffCommand } from "./commands/diff.js";
 import type { DiffOptions } from "./commands/diff.js";
+import { uninstallStack } from "./commands/uninstall.js";
 import path from "node:path";
 import { log } from "./shared/io.js";
 
@@ -149,6 +150,32 @@ Examples:
       }
     },
   );
+
+program
+  .command("uninstall")
+  .description("Remove an installed stack and its artifacts")
+  .argument("<stack>", "Name of the installed stack to remove")
+  .argument("[dir]", "Project directory", ".")
+  .option("--force", "Remove files even if modified since install")
+  .option("--dry-run", "Preview what would be removed without writing")
+  .option("-v, --verbose", "Show full diffs in dry-run output")
+  .addHelpText("after", `
+Examples:
+  pit uninstall my-stack            # remove my-stack from current dir
+  pit uninstall my-stack --dry-run  # preview what would be removed
+  pit uninstall my-stack --force    # remove even modified files
+`)
+  .action(async (stack: string, dir: string, opts: { force?: boolean; dryRun?: boolean; verbose?: boolean }) => {
+    try {
+      const targetDir = path.resolve(dir);
+      await uninstallStack(stack, targetDir, opts);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        log.error(err.message);
+      }
+      process.exit(1);
+    }
+  });
 
 program
   .command("status")

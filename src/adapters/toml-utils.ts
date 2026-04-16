@@ -81,7 +81,7 @@ function toTomlString(s: string): string {
  * Returns start (header line) and end (last content line + 1, excluding
  * trailing blank lines so inter-section spacing is preserved).
  */
-function findSectionRange(
+export function findSectionRange(
   lines: string[],
   serverName: string,
 ): { start: number; end: number } | null {
@@ -274,4 +274,35 @@ export function agentToCodexToml(agentContent: string): string {
   }
 
   return stringify(tomlObj) + "\n";
+}
+
+/**
+ * Remove MCP server sections from a config.toml string by name.
+ * Surgically removes [mcp_servers.NAME] sections (including sub-tables)
+ * while preserving all other content.
+ */
+export function removeMcpSectionsFromToml(
+  content: string,
+  serverNames: string[],
+): string {
+  const lines = content.split("\n");
+
+  // Process in reverse so earlier indices stay valid after splicing
+  for (const name of [...serverNames].reverse()) {
+    const range = findSectionRange(lines, name);
+    if (!range) continue;
+    // Include trailing blank lines in removal
+    let end = range.end;
+    while (end < lines.length && lines[end]!.trim() === "") {
+      end++;
+    }
+    lines.splice(range.start, end - range.start);
+  }
+
+  // Clean up multiple consecutive blank lines
+  return lines
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/^\n+/, "")
+    .replace(/\n*$/, "\n");
 }
