@@ -489,7 +489,21 @@ export async function updateStacks(
         resolvedNodes = depNodes;
       }
 
-      const contexts: AdapterWriteContext[] = detected.map(({ adapter }) => ({ adapter, writeOpts: {} }));
+      // Build dedup-aware writeOpts (must match install's dedup logic for accurate delta)
+      const deltaWriteOpts: WriteOptions = {};
+      if (entry.installMode === "prefer-universal") {
+        deltaWriteOpts.preferUniversal = true;
+      } else if (!entry.installMode || entry.installMode !== "force-standards") {
+        const mcpReaders = detected.filter((d) => d.adapter.id !== "standards" && d.adapter.capabilities.nativelyReads?.mcp);
+        const instrReaders = detected.filter((d) => d.adapter.id !== "standards" && d.adapter.capabilities.nativelyReads?.instructions);
+        if (mcpReaders.length > 0) deltaWriteOpts.skipMcp = true;
+        if (instrReaders.length > 0) deltaWriteOpts.skipInstructions = true;
+      }
+
+      const contexts: AdapterWriteContext[] = detected.map(({ adapter }) => ({
+        adapter,
+        writeOpts: adapter.id === "standards" ? deltaWriteOpts : {},
+      }));
       const newAdapterRecords = buildAdapterRecords(contexts, finalBundle, target);
 
       // Compute delta
@@ -529,11 +543,12 @@ export async function updateStacks(
         finalBundle, entry.stack, delta, reconciled, !!opts.force,
       );
 
-      // Print delta summary
-      if (!opts.json && !opts.dryRun) {
+      // Print delta summary (for both regular and dry-run modes)
+      if (!opts.json) {
         const versionChanged = entry.stackVersion !== finalBundle.manifest.version;
+        const prefix = opts.dryRun ? "Would update" : "Updating";
         log.info(
-          `Updating ${entry.stack}${versionChanged ? ` (${entry.stackVersion} → ${finalBundle.manifest.version})` : ""}...`,
+          `${prefix} ${entry.stack}${versionChanged ? ` (${entry.stackVersion} → ${finalBundle.manifest.version})` : ""}...`,
         );
         for (const a of delta.added) console.log(chalk.green(`  + ${a.type}: ${a.name}`));
         for (const a of delta.modified) {
@@ -545,6 +560,11 @@ export async function updateStacks(
           }
         }
         for (const a of delta.removed) console.log(chalk.red(`  - ${a.type}: ${a.name}`));
+
+        if (opts.dryRun) {
+          console.log();
+          log.info("Dry run — no files were modified.");
+        }
       }
 
       if (opts.dryRun) {
