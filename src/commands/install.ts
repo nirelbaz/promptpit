@@ -6,7 +6,7 @@ import { detectAdapters } from "../adapters/registry.js";
 import { validateEnvNames } from "../core/security.js";
 import { writeFileEnsureDir, removeDir, readFileOrNull, exists } from "../shared/utils.js";
 import { log, spinner, printDryRunReport } from "../shared/io.js";
-import { parseGitHubSource, cloneAndResolve } from "../sources/github.js";
+import { parseGitHubSource, cloneAndResolve, getRepoCommitSha } from "../sources/github.js";
 import { ruleToClaudeFormat } from "../adapters/claude-code.js";
 import { ruleToMdc } from "../adapters/cursor.js";
 import { ruleToInstructionsMd, agentToGitHubAgent } from "../adapters/copilot.js";
@@ -71,6 +71,9 @@ export async function installStack(
     resolvedSource = resolved.stackDir;
     tmpDir = resolved.tmpDir;
   }
+
+  // Capture cloned repo dir before --save may reassign resolvedSource
+  const clonedRepoDir = gh ? path.dirname(resolvedSource) : undefined;
 
   try {
     const spin = spinner("Reading stack bundle...");
@@ -536,6 +539,7 @@ export async function installStack(
         stack: finalBundle.manifest.name,
         stackVersion: finalBundle.manifest.version,
         source: gh ? source : undefined,
+        resolvedCommit: clonedRepoDir ? getRepoCommitSha(clonedRepoDir) : undefined,
         installedAt: new Date().toISOString(),
         ...(opts.forceStandards && { installMode: "force-standards" as const }),
         ...(opts.preferUniversal && { installMode: "prefer-universal" as const }),
