@@ -6,9 +6,8 @@ import type { AdapterWriteContext } from "../core/manifest.js";
 import { readStack } from "../core/stack.js";
 import { installCanonical, canonicalSkillBase } from "../core/skill-store.js";
 import { reconcileAll } from "../core/reconcile.js";
-import { detectAdapters } from "../adapters/registry.js";
+import { detectAdapters, getAdapter } from "../adapters/registry.js";
 import { parseGitHubSource, cloneAndResolve, getRepoCommitSha } from "../sources/github.js";
-import { getAdapter } from "../adapters/registry.js";
 import { removeDir, readFileOrNull, exists, writeFileEnsureDir, removeFileOrSymlink } from "../shared/utils.js";
 import { log, spinner } from "../shared/io.js";
 import { agentFileName, ruleFileNames, removeCheckedFile, removeEmptyDir, isSkillShared, isArtifactShared } from "../core/artifact-ops.js";
@@ -124,21 +123,15 @@ function computeDelta(
   const removed: ArtifactDelta[] = [];
   let unchanged = 0;
 
-  // Added: in new but not in old
-  for (const [key] of newArtifacts) {
-    if (!oldArtifacts.has(key)) {
-      const [type, name] = key.split(":", 2) as [ArtifactDelta["type"], string];
-      added.push({ type, name });
-    }
-  }
-
-  // Modified or unchanged
+  // Single pass over new artifacts: classify as added, modified, or unchanged
   for (const [key, newHash] of newArtifacts) {
+    const [type, name] = key.split(":", 2) as [ArtifactDelta["type"], string];
     const oldHash = oldArtifacts.get(key);
-    if (oldHash && oldHash !== newHash) {
-      const [type, name] = key.split(":", 2) as [ArtifactDelta["type"], string];
+    if (!oldHash) {
+      added.push({ type, name });
+    } else if (oldHash !== newHash) {
       modified.push({ type, name });
-    } else if (oldHash && oldHash === newHash) {
+    } else {
       unchanged++;
     }
   }
@@ -403,6 +396,17 @@ export async function updateStacks(
   const results: StackUpdateResult[] = [];
   let anyUpdated = false;
 
+  // Detect adapters once (shared across all stack updates)
+  const detected = await detectAdapters(target);
+  if (detected.length === 0) {
+    const { claudeCodeAdapter } = await import("../adapters/claude-code.js");
+    detected.push({ adapter: claudeCodeAdapter, detection: { detected: true, configPaths: [] } });
+  }
+  if (!detected.some((d) => d.adapter.id === "standards")) {
+    const { standardsAdapter } = await import("../adapters/standards.js");
+    detected.push({ adapter: standardsAdapter, detection: { detected: true, configPaths: [] } });
+  }
+
   for (const entry of entries) {
     let tmpDir: string | null = null;
     let newBundle: StackBundle;
@@ -417,12 +421,11 @@ export async function updateStacks(
     let resolvedNodes: Array<{ source: string; stackDir: string; bundle: StackBundle }> = [];
 
     const source = entry.source;
-    const isRemote = source && !!parseGitHubSource(source);
+    const gh = source ? parseGitHubSource(source) : null;
 
     // --- Check upstream for remote stacks ---
-    if (isRemote) {
-      const gh = parseGitHubSource(source!);
-      if (gh?.ref) {
+    if (gh) {
+      if (gh.ref) {
         if (!opts.json) log.info(`${entry.stack}: pinned at ${gh.ref}, skipping`);
         results.push({
           stack: entry.stack, oldVersion: entry.stackVersion, newVersion: entry.stackVersion,
@@ -444,7 +447,7 @@ export async function updateStacks(
       // Fetch new bundle
       const fetchSpin = spinner(`Fetching ${entry.stack}...`);
       try {
-        const resolved = await cloneAndResolve(parseGitHubSource(source!)!);
+        const resolved = await cloneAndResolve(gh);
         resolvedSource = resolved.stackDir;
         tmpDir = resolved.tmpDir;
         resolvedCommit = getRepoCommitSha(path.dirname(resolvedSource));
@@ -473,7 +476,7 @@ export async function updateStacks(
         const graph = await resolveGraph(resolvedSource);
         const merged = mergeGraph(graph, {
           instructionStrategy: newBundle.manifest.instructionStrategy ?? "concatenate",
-          skipRootInstructions: !isRemote,
+          skipRootInstructions: !gh,
         });
         finalBundle = merged.bundle;
         const depNodes = graph.nodes.filter((n) => n.depth > 0);
@@ -484,17 +487,6 @@ export async function updateStacks(
           resolvedAt: new Date().toISOString(),
         }));
         resolvedNodes = depNodes;
-      }
-
-      // Detect adapters to compute new hashes
-      const detected = await detectAdapters(target);
-      if (detected.length === 0) {
-        const { claudeCodeAdapter } = await import("../adapters/claude-code.js");
-        detected.push({ adapter: claudeCodeAdapter, detection: { detected: true, configPaths: [] } });
-      }
-      if (!detected.some((d) => d.adapter.id === "standards")) {
-        const { standardsAdapter } = await import("../adapters/standards.js");
-        detected.push({ adapter: standardsAdapter, detection: { detected: true, configPaths: [] } });
       }
 
       const contexts: AdapterWriteContext[] = detected.map(({ adapter }) => ({ adapter, writeOpts: {} }));
