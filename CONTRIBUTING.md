@@ -45,17 +45,17 @@ The adapter needs to implement:
 
 ```
 src/
-├── cli.ts              # Commander.js entry point (init, collect, install, status, diff, watch, validate, check)
-├── commands/           # init.ts, collect.ts, install.ts, status.ts, diff.ts, watch.ts, validate.ts, check.ts
+├── cli.ts              # Commander.js entry point (init, collect, install, uninstall, update, status, diff, watch, validate, check)
+├── commands/           # init.ts, collect.ts, install.ts, uninstall.ts, update.ts, status.ts, diff.ts, watch.ts, validate.ts, check.ts
 ├── adapters/           # One file per AI tool + registry + shared utils (standards.ts, copilot.ts, codex.ts, etc.)
-├── core/               # stack.ts (bundle I/O), skill-store.ts, manifest.ts (install ledger), merger.ts, reconcile.ts, security.ts, validate.ts
+├── core/               # stack.ts (bundle I/O), skill-store.ts, manifest.ts (install ledger), artifact-ops.ts (removal helpers), merger.ts, reconcile.ts, security.ts, validate.ts
 ├── sources/            # github.ts (clone + auto-collect)
 └── shared/             # schema.ts (Zod types + manifest schema), markers.ts, utils.ts, io.ts
 
 test/
 ├── adapters/           # Contract tests (parameterized) + per-adapter tests
-├── commands/           # collect, install, status, check integration tests
-├── core/               # manifest, merger, security, stack, validate unit tests
+├── commands/           # collect, install, uninstall, update, status, check integration tests
+├── core/               # manifest, merger, artifact-ops, security, stack, validate unit tests
 ├── shared/             # markers, markers-strip, schema tests
 ├── sources/            # github source tests
 ├── e2e/                # Round-trip, dedup, journey, and install→status integration tests

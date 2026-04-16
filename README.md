@@ -11,6 +11,8 @@ Every AI tool has its own config files. pit turns them into one bundle you can s
 pit init           # scaffold a new .promptpit/ stack
 pit collect        # bundle your AI config into .promptpit/
 pit install        # write it out for each tool
+pit uninstall      # remove an installed stack cleanly
+pit update         # smart re-install with drift awareness
 pit status         # see what drifted
 pit diff           # text diff between installed and source
 pit watch          # live-sync skill changes
@@ -151,7 +153,7 @@ Adding a new tool is one file plus one registry entry. See [CONTRIBUTING.md](CON
 git clone https://github.com/nirelbaz/promptpit.git
 cd promptpit
 npm install
-npm test          # 699 tests, vitest
+npm test          # 767 tests, vitest
 npm run build     # builds dist/cli.js via tsup
 npm run lint      # TypeScript strict mode check
 ```
@@ -161,8 +163,8 @@ npm run lint      # TypeScript strict mode check
 See [TODOS.md](TODOS.md) for the full roadmap. The big milestones:
 
 - **v0.3 (Team Platform):** Done. Five adapters (Claude Code, Cursor, Codex, Copilot, Standards), seven commands, drift detection, dry-run previews, CI integration, portable rules and agents.
-- **v0.4 (Stack Composer):** Done. Stack composition via `extends`, `pit diff`, install lifecycle scripts, full Agent Skills spec alignment (supporting files, tightened schema), `pit collect --include-extends`.
-- **v0.5:** `pit update`, `pit uninstall`, selective install/collect, interactive conflict resolution.
+- **v0.4 (Stack Composer):** Done. Stack composition via `extends`, `pit diff`, `pit uninstall`, `pit update`, install lifecycle scripts, full Agent Skills spec alignment (supporting files, tightened schema), `pit collect --include-extends`.
+- **v0.5:** Selective install/collect, interactive conflict resolution, atomic install/update writes.
 - **v1.0 (Ecosystem Bridge):** Multi-source install (skills.sh, SkillsMP, cursor.directory), `pit publish`, `pit search`.
 
 ## Acknowledgments

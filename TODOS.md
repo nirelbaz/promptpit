@@ -73,7 +73,7 @@ Discovered via `/audit-adapters` using the AI Stack Expert knowledge base. See `
 ### Tier 2 — Phase 2 features
 9. ~~Stack composition (`extends`) — headline feature~~ **Completed:** v0.4.0 (2026-04-09)
 10. ~~Uninstall command — needed for safe stack iteration~~ **Completed:** PR #76
-11. Update command — smart re-install with drift awareness (design spec: `docs/superpowers/specs/2026-04-16-update-command-design.md`)
+11. ~~Update command — smart re-install with drift awareness~~ **Completed:** v0.4.3 (PR #77)
 12. Everything else in Phase 2
 
 ### Tier 3 — Tier 2 adapters
@@ -103,8 +103,8 @@ Non-TTY environments (CI) fall back to last-declared-wins (install) or skip-drif
 ### ~~Diff command~~ **Completed v0.4.1**
 ~~`pit diff` — show the actual text diff between installed config and `.promptpit/` source. Distinct from `pit status` (which shows hash-level drift). This is a UI feature, not a composition feature.~~
 
-### Update command — **In Progress**
-`pit update` — smart re-install with drift awareness. Handles both remote and local stacks. Fetches latest, computes delta (added/modified/removed/unchanged), skips drifted artifacts by default. `--force` to overwrite, `--check` for CI. Design spec: `docs/superpowers/specs/2026-04-16-update-command-design.md`.
+### ~~Update command~~ **Completed v0.4.3**
+~~`pit update` — smart re-install with drift awareness. Handles both remote and local stacks. Fetches latest, computes delta (added/modified/removed/unchanged), skips drifted artifacts by default. `--force` to overwrite, `--dry-run` for preview, `--stack <name>` to update a single stack.~~
 
 ### ~~Formalize Agent Skills alignment~~ **Completed v0.4.2**
 ~~PromptPit already parses Agent Skills frontmatter (`skillFrontmatterSchema` in `schema.ts`). Formalize: ensure full spec compliance (name: 1-64 chars lowercase alphanumeric + hyphens; description: 1-1024 chars), support optional `scripts/`, `references/`, `assets/` directories, and document that `.promptpit/` is "Agent Skills + composition." Critical change: `readSkillsFromDir` currently collects only the `.md` file — must collect the entire skill directory (source, binaries, assets) so installed skills can reference supporting files. **Depends on: install lifecycle scripts** (stacks like gstack need a postinstall `./setup` to build binaries after the full directory is copied). Together these two features enable stacks with non-trivial skills (compiled binaries, symlink structures, platform-specific setup).~~
