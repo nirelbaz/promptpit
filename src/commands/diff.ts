@@ -75,6 +75,28 @@ function generateDiff(expected: string, actual: string, filePath: string): strin
   );
 }
 
+/**
+ * Render a colorized unified diff between two content strings, labeled with
+ * a single path. Used by `pit update --interactive` when the user picks
+ * "view diff" for a drifted+changing artifact.
+ */
+export function renderSingleArtifactDiff(
+  expected: string,
+  actual: string,
+  filePath: string,
+  labels?: { expected?: string; actual?: string },
+): string {
+  const patch = createTwoFilesPatch(
+    filePath,
+    filePath,
+    expected,
+    actual,
+    labels?.expected ?? "upstream",
+    labels?.actual ?? "local",
+  );
+  return colorizeDiff(patch);
+}
+
 /** Colorize a unified diff patch line-by-line. */
 function colorizeDiff(patch: string): string {
   const lines = patch.split("\n");

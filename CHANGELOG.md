@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.5.0 (2026-04-17)
+
+### Added
+
+- **`pit install --interactive`** — prompt to resolve `extends` conflicts. When two stacks declare the same skill, rule, MCP server, or env var, the picker surfaces each conflict and lets you choose which source wins. Choices persist to `installed.json` (and to `stack.json` as declarative `overrides` when `--save` is also passed) so you don't re-answer on the next install.
+- **`pit install --select`** — interactively pick which artifacts to include, across all six categories (skills, agents, rules, commands, MCP servers, env vars). Deselections persist in `installed.json` under `excluded` and are respected on every subsequent install. Useful for "give me the conventions, skip the MCP servers."
+- **`pit install --reset-exclusions`** — wipe the saved `excluded` list and reinstate all artifacts in one go. `--force` on its own no longer reintroduces artifacts the user opted out of.
+- **`pit update --interactive`** — per-drifted-artifact prompt (`keep mine`, `take upstream`, `view diff`, `skip`). "Keep mine" tracks the fork in the manifest (`forked: true`, `baselineHash: <upstream-at-fork>`) so future `pit update` runs still surface upstream changes relative to the baseline. Prevents silent divergence from upstream security fixes.
+- **`pit collect --select`** — interactively prune the bundle written to `.promptpit/` to just the artifacts you want.
+- **Declarative `overrides` in `stack.json`** — authors can pin conflict resolutions by writing `overrides: { "rule:security": "github:company/base-stack" }`. Normalized source matching means version bumps (`@1.0.0` → `@2.0.0`) don't invalidate saved overrides.
+- **Forked state in `pit status`** — artifacts the user chose to keep-local during `update --interactive` render with a `forked (baseline <hash>)` detail, so divergence is visible rather than silent.
+- Install manifest gains `.passthrough()` validation so unknown fields survive when older pit versions write the manifest.
+- New shared module `src/shared/interactive.ts` wrapping `@clack/prompts` with `isInteractive()` / `requireInteractive()` TTY detection. Any interactive flag errors out fast with an actionable message in non-TTY environments (CI, piped stdin) instead of silently falling back.
+
+### Dependencies
+
+- Added `@clack/prompts@^1.2.0` for the interactive prompts.
+
+### Notes
+
+- `pit init`'s readline-based prompter is unchanged in this release. The shared `@clack/prompts` wrapper coexists with it — migration is a cosmetic consistency win that touches tests, deferred to avoid scope creep.
+
 ## 0.4.3 (2026-04-16)
 
 ### Added

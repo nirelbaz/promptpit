@@ -207,6 +207,19 @@ export interface MergeOptions {
   skipRootInstructions?: boolean;
 }
 
+/**
+ * Result of `applyOverrides`. Entries still requiring a decision live in
+ * `unresolved`; `warnings` captures normalized-match and dangling-override
+ * advisories callers should log.
+ */
+export interface OverrideApplication {
+  bundle: StackBundle;
+  sources: Map<string, string>;
+  unresolved: ConflictEntry[];
+  applied: ConflictEntry[];
+  warnings: string[];
+}
+
 // --- Merge implementation ---
 
 export function mergeGraph(
@@ -398,4 +411,208 @@ export function mergeGraph(
     conflicts,
     sources,
   };
+}
+
+// --- Override application ---
+
+/**
+ * Strip `@ref` from a github source identifier so version bumps don't
+ * invalidate existing overrides. Local paths are returned unchanged.
+ */
+export function normalizeOverrideSource(source: string): string {
+  const m = source.match(/^(github:[^@]+)@.+$/);
+  return m ? m[1]! : source;
+}
+
+/**
+ * Apply a set of declarative conflict resolutions to a merged stack.
+ *
+ * Override keys are `"type:name"` (e.g., `"skill:deploy"`). Values are the
+ * source identifier of the node whose definition should win. Matching
+ * prefers exact source match, then falls back to a normalized match
+ * (stripping `@version` from github sources) and emits a warning. Dangling
+ * overrides — keys whose source isn't in the graph even after normalization
+ * — emit a warning and are ignored.
+ *
+ * Any conflict the overrides can't resolve is returned in `unresolved` so
+ * the caller can prompt interactively or fall back to last-declared-wins.
+ */
+export function applyOverrides(
+  merged: MergedStack,
+  graph: ResolvedGraph,
+  overrides: Record<string, string> | undefined,
+): OverrideApplication {
+  const warnings: string[] = [];
+  const applied: ConflictEntry[] = [];
+  const unresolved: ConflictEntry[] = [];
+
+  if (!overrides || Object.keys(overrides).length === 0) {
+    return {
+      bundle: merged.bundle,
+      sources: merged.sources,
+      unresolved: merged.conflicts.slice(),
+      applied,
+      warnings,
+    };
+  }
+
+  // Clone so we can mutate safely.
+  const sources = new Map(merged.sources);
+  const bundle: StackBundle = {
+    ...merged.bundle,
+    skills: merged.bundle.skills.slice(),
+    agents: merged.bundle.agents.slice(),
+    rules: merged.bundle.rules.slice(),
+    commands: merged.bundle.commands.slice(),
+    mcpServers: { ...merged.bundle.mcpServers },
+    envExample: { ...merged.bundle.envExample },
+  };
+
+  const graphSources = new Map(graph.nodes.map((n) => [n.source, n]));
+  const normalizedGraphSources = new Map(
+    graph.nodes.map((n) => [normalizeOverrideSource(n.source), n]),
+  );
+
+  const resolveSourceNode = (wanted: string): ResolvedNode | undefined => {
+    // 1. Exact source-string match (handles the "author writes the same string
+    //    they used in extends" case).
+    const exact = graphSources.get(wanted);
+    if (exact) return exact;
+
+    // 2. Normalized github match (strips @version so version bumps don't
+    //    silently invalidate saved overrides).
+    const normalized = normalizedGraphSources.get(
+      normalizeOverrideSource(wanted),
+    );
+    if (normalized) {
+      warnings.push(
+        `override source "${wanted}" resolved via normalized match to "${normalized.source}" — verify with pit diff`,
+      );
+      return normalized;
+    }
+
+    // 3. Local absolute-path match against each node's stackDir. Handles
+    //    users who wrote an absolute path in overrides even though the
+    //    extends entry was relative.
+    if (path.isAbsolute(wanted)) {
+      const match = graph.nodes.find((n) => path.resolve(n.stackDir) === path.resolve(wanted));
+      if (match) return match;
+    }
+
+    return undefined;
+  };
+
+  for (const conflict of merged.conflicts) {
+    const key = `${conflict.type}:${conflict.name}`;
+    const wantedSource = overrides[key];
+
+    if (!wantedSource) {
+      unresolved.push(conflict);
+      continue;
+    }
+
+    // Override picks the current winner — nothing to swap.
+    if (
+      wantedSource === conflict.winner ||
+      normalizeOverrideSource(wantedSource) ===
+        normalizeOverrideSource(conflict.winner)
+    ) {
+      applied.push(conflict);
+      continue;
+    }
+
+    const wantedNode = resolveSourceNode(wantedSource);
+    if (!wantedNode) {
+      warnings.push(
+        `override for ${key} references "${wantedSource}" which is not in the extends graph — ignoring`,
+      );
+      unresolved.push(conflict);
+      continue;
+    }
+
+    const swapped = swapArtifact(bundle, conflict, wantedNode);
+    if (swapped) {
+      sources.set(
+        conflict.type === "mcp"
+          ? `mcp:${conflict.name}`
+          : conflict.type === "env"
+            ? `env:${conflict.name}`
+            : conflict.name,
+        wantedNode.source,
+      );
+      applied.push(conflict);
+    } else {
+      warnings.push(
+        `override for ${key} could not locate a matching artifact in "${wantedNode.source}" — ignoring`,
+      );
+      unresolved.push(conflict);
+    }
+  }
+
+  return { bundle, sources, unresolved, applied, warnings };
+}
+
+/**
+ * Replace the merged entry for a conflict with the version from `node`.
+ * Returns true if the swap succeeded.
+ */
+function swapArtifact(
+  bundle: StackBundle,
+  conflict: ConflictEntry,
+  node: ResolvedNode,
+): boolean {
+  switch (conflict.type) {
+    case "skill": {
+      const replacement = node.bundle.skills.find(
+        (s) => s.name === conflict.name,
+      );
+      if (!replacement) return false;
+      const idx = bundle.skills.findIndex((s) => s.name === conflict.name);
+      if (idx < 0) return false;
+      bundle.skills[idx] = replacement;
+      return true;
+    }
+    case "agent": {
+      const replacement = node.bundle.agents.find(
+        (a) => a.name === conflict.name,
+      );
+      if (!replacement) return false;
+      const idx = bundle.agents.findIndex((a) => a.name === conflict.name);
+      if (idx < 0) return false;
+      bundle.agents[idx] = replacement;
+      return true;
+    }
+    case "rule": {
+      const replacement = node.bundle.rules.find(
+        (r) => r.name === conflict.name,
+      );
+      if (!replacement) return false;
+      const idx = bundle.rules.findIndex((r) => r.name === conflict.name);
+      if (idx < 0) return false;
+      bundle.rules[idx] = replacement;
+      return true;
+    }
+    case "command": {
+      const replacement = node.bundle.commands.find(
+        (c) => c.name === conflict.name,
+      );
+      if (!replacement) return false;
+      const idx = bundle.commands.findIndex((c) => c.name === conflict.name);
+      if (idx < 0) return false;
+      bundle.commands[idx] = replacement;
+      return true;
+    }
+    case "mcp": {
+      const replacement = node.bundle.mcpServers[conflict.name];
+      if (!replacement) return false;
+      bundle.mcpServers[conflict.name] = replacement;
+      return true;
+    }
+    case "env": {
+      const replacement = node.bundle.envExample[conflict.name];
+      if (replacement === undefined) return false;
+      bundle.envExample[conflict.name] = replacement;
+      return true;
+    }
+  }
 }

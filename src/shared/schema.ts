@@ -28,6 +28,13 @@ export const stackManifestSchema = z.object({
     preinstall: z.string().min(1).optional(),
     postinstall: z.string().min(1).optional(),
   }).optional(),
+  // Declarative conflict resolutions, keyed by "type:name"
+  // (e.g., "skill:deploy", "mcp:filesystem"). Values are the source
+  // identifier of the extends entry whose definition should win. Stack-local
+  // only: not inherited through extends chains. Per-adapter scoping is a
+  // future extension; v0.5 resolves at the source-bundle layer (adapter-
+  // agnostic) which is where conflicts actually arise.
+  overrides: z.record(z.string()).optional(),
 });
 
 export type StackManifest = z.infer<typeof stackManifestSchema>;
@@ -237,13 +244,21 @@ export function isDangerousEnvName(name: string): boolean {
 
 // --- Install Manifest (.promptpit/installed.json) ---
 
+// `forked` marks an artifact where the user chose "keep mine" during
+// `pit update --interactive`. `hash` is the local content hash at fork time;
+// `baselineHash` is what upstream had at the same moment, so future updates
+// can still surface upstream changes relative to the baseline.
 const artifactHashSchema = z.object({
   hash: z.string(),
+  forked: z.literal(true).optional(),
+  baselineHash: z.string().optional(),
 });
 
 const skillArtifactHashSchema = z.object({
   hash: z.string(),
   supportingFiles: z.array(z.string()).optional(),
+  forked: z.literal(true).optional(),
+  baselineHash: z.string().optional(),
 });
 
 const adapterInstallSchema = z.object({
@@ -264,6 +279,9 @@ const resolvedExtendsEntrySchema = z.object({
   resolvedAt: z.string(),
 });
 
+// `.passthrough()` preserves unknown fields on read-and-write round-trips,
+// so older pit versions don't strip newer schema additions (overrides,
+// excluded, forked/baselineHash) when writing the manifest.
 const installEntrySchema = z.object({
   stack: z.string().min(1),
   stackVersion: z.string(),
@@ -273,7 +291,14 @@ const installEntrySchema = z.object({
   installMode: z.enum(["force-standards", "prefer-universal"]).optional(),
   resolvedExtends: z.array(resolvedExtendsEntrySchema).optional(),
   adapters: z.record(adapterInstallSchema),
-});
+  // Interactive conflict resolutions chosen by the user during
+  // `pit install --interactive`. Same "type:name" key shape as stack.json
+  // overrides.
+  overrides: z.record(z.string()).optional(),
+  // Artifacts the user opted out of via `pit install --select`. Format:
+  // "type:name". Cleared by `--reset-exclusions`.
+  excluded: z.array(z.string()).optional(),
+}).passthrough();
 
 export type InstallEntry = z.infer<typeof installEntrySchema>;
 

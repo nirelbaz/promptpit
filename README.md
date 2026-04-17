@@ -107,6 +107,41 @@ Layer stacks on top of each other with `extends` in stack.json:
 
 Base instructions merge first, your overrides layer on top. `pit install --save` adds a stack to your extends list in one command. `pit collect --include-extends` flattens the chain into a self-contained bundle.
 
+### Interactive conflict resolution and selective install
+
+When stacks collide on a skill, rule, MCP server, or env var, pit defaults to last-declared-wins. `--interactive` lets you choose per conflict instead:
+
+```sh
+pit install --interactive           # pick a winner for each extends conflict
+pit install --interactive --save    # also write the picks to stack.json as declarative `overrides`
+pit update --interactive            # resolve drifted+changed artifacts (keep mine / take upstream / view diff / skip)
+```
+
+Picking `keep mine` during an update tracks the fork in the manifest (`forked: true`, `baselineHash`), so future updates still surface upstream changes rather than silently diverging.
+
+For power users who want the conventions but not the MCP servers (or vice versa), `--select` prunes artifacts by category:
+
+```sh
+pit install --select                # pick which artifacts to install; deselections persist
+pit install --reset-exclusions      # clear the saved deselections and install everything again
+pit collect --select                # trim the bundle during collect
+```
+
+All interactive flags require a TTY. In CI (or with piped stdin) they error out with an actionable message rather than silently falling back.
+
+You can also pin resolutions declaratively in `stack.json`:
+
+```json
+{
+  "overrides": {
+    "rule:security": "github:company/base-stack",
+    "mcp:filesystem": "."
+  }
+}
+```
+
+Version bumps to a github source (`@1.0.0` → `@2.0.0`) don't invalidate these — they're matched against the normalized source with a warning.
+
 ### Validate and check
 
 ```sh

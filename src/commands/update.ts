@@ -5,7 +5,8 @@ import { readManifest, writeManifest, upsertInstall, buildAdapterRecords } from 
 import type { AdapterWriteContext } from "../core/manifest.js";
 import { readStack } from "../core/stack.js";
 import { installCanonical, canonicalSkillBase } from "../core/skill-store.js";
-import { reconcileAll } from "../core/reconcile.js";
+import { reconcileAll, buildExpectedContent } from "../core/reconcile.js";
+import type { ArtifactType } from "../core/reconcile.js";
 import { detectAdapters, getAdapter } from "../adapters/registry.js";
 import { parseGitHubSource, cloneAndResolve, getRepoCommitSha } from "../sources/github.js";
 import { removeDir, readFileOrNull, exists, writeFileEnsureDir, removeFileOrSymlink } from "../shared/utils.js";
@@ -15,6 +16,9 @@ import { removeMcpFromJson } from "../adapters/adapter-utils.js";
 import { removeMcpSectionsFromToml } from "../adapters/toml-utils.js";
 import { stripMarkerBlock } from "../shared/markers.js";
 import { collectScripts, executeScripts } from "../core/scripts.js";
+import { applyExcluded } from "../core/merger.js";
+import { chooseDriftAction, requireInteractive, type DriftAction } from "../shared/interactive.js";
+import { renderSingleArtifactDiff } from "./diff.js";
 import type { WriteOptions } from "../adapters/types.js";
 import type { InstallManifest, InstallEntry, StackBundle, AdapterInstallRecord } from "../shared/schema.js";
 
@@ -27,6 +31,7 @@ export interface UpdateOptions {
   ignoreScripts?: boolean;
   trust?: boolean;
   json?: boolean;
+  interactive?: boolean;
   /** Override source for local stacks (used by tests) */
   localSource?: string;
 }
@@ -85,22 +90,28 @@ function checkRemoteCommit(source: string, currentCommit?: string): string | nul
 
 function collectArtifactHashes(record: AdapterInstallRecord, map: Map<string, string>): void {
   if (record.instructions) {
-    map.set("instructions:instructions", record.instructions.hash);
+    // For forked artifacts, compare against the baseline (last upstream at
+    // fork time) so delta detects NEW upstream changes rather than showing
+    // the user's own kept changes as "modified".
+    map.set(
+      "instructions:instructions",
+      record.instructions.baselineHash ?? record.instructions.hash,
+    );
   }
   for (const [name, entry] of Object.entries(record.skills ?? {})) {
-    map.set(`skill:${name}`, entry.hash);
+    map.set(`skill:${name}`, entry.baselineHash ?? entry.hash);
   }
   for (const [name, entry] of Object.entries(record.agents ?? {})) {
-    map.set(`agent:${name}`, entry.hash);
+    map.set(`agent:${name}`, entry.baselineHash ?? entry.hash);
   }
   for (const [name, entry] of Object.entries(record.rules ?? {})) {
-    map.set(`rule:${name}`, entry.hash);
+    map.set(`rule:${name}`, entry.baselineHash ?? entry.hash);
   }
   for (const [name, entry] of Object.entries(record.commands ?? {})) {
-    map.set(`command:${name}`, entry.hash);
+    map.set(`command:${name}`, entry.baselineHash ?? entry.hash);
   }
   for (const [name, entry] of Object.entries(record.mcp ?? {})) {
-    map.set(`mcp:${name}`, entry.hash);
+    map.set(`mcp:${name}`, entry.baselineHash ?? entry.hash);
   }
 }
 
@@ -165,6 +176,242 @@ function isDrifted(
     }
   }
   return false;
+}
+
+// --- Interactive drift resolution ---
+
+/**
+ * A conflict where an artifact has drifted locally AND is about to be
+ * modified by the incoming update. These are the cases `--interactive`
+ * prompts on.
+ */
+interface DriftCandidate {
+  type: ArtifactDelta["type"];
+  name: string;
+  /** Hash of the user's current file content (from reconcile's actualContent). */
+  localHash: string;
+  /** Hash of the new upstream content (from the incoming bundle). */
+  upstreamHash: string;
+  /** The adapter where drift was detected (first match). Used for diff rendering. */
+  adapterId: string;
+  /** The artifact's on-disk path in that adapter, for diff labeling. */
+  filePath: string;
+  /** Current on-disk content, for rendering the diff. */
+  actualContent: string;
+}
+
+/**
+ * Collect all artifacts that are both drifted locally and changing upstream.
+ * Pure function: reads reconciled + delta, returns the list. Prompting is
+ * deferred to `promptDriftResolutions` so no I/O happens during the filter.
+ */
+function collectDriftCandidates(
+  stackName: string,
+  delta: ReturnType<typeof computeDelta>,
+  reconciled: Awaited<ReturnType<typeof reconcileAll>>,
+  newRecords: Record<string, AdapterInstallRecord>,
+): DriftCandidate[] {
+  const candidates: DriftCandidate[] = [];
+  const changing = [...delta.added, ...delta.modified];
+  const stack = reconciled.stacks.find((s) => s.stack === stackName);
+  if (!stack) return candidates;
+
+  for (const a of changing) {
+    // Find drifted artifact (first match across adapters). Requires
+    // `actualHash` which reconcile sets for every drifted artifact using
+    // the type-specific hash function (computeSkillHash for skills,
+    // computeMcpServerHash for mcp, computeHash for text). Using the raw
+    // actualContent here would be wrong for skills and mcp.
+    let drifted: {
+      adapterId: string;
+      path: string;
+      actualContent: string;
+      localHash: string;
+    } | null = null;
+    for (const adapter of stack.adapters) {
+      for (const artifact of adapter.artifacts) {
+        if (
+          artifact.type === a.type &&
+          artifact.name === a.name &&
+          artifact.state === "drifted" &&
+          artifact.actualHash
+        ) {
+          drifted = {
+            adapterId: adapter.adapterId,
+            path: artifact.path,
+            actualContent: artifact.actualContent ?? "",
+            localHash: artifact.actualHash,
+          };
+          break;
+        }
+      }
+      if (drifted) break;
+    }
+    if (!drifted) continue;
+
+    // Pull upstream hash from the new adapter records.
+    let upstreamHash: string | undefined;
+    for (const record of Object.values(newRecords)) {
+      upstreamHash = getRecordHash(record, a.type, a.name);
+      if (upstreamHash) break;
+    }
+    if (!upstreamHash) continue;
+
+    candidates.push({
+      type: a.type,
+      name: a.name,
+      localHash: drifted.localHash,
+      upstreamHash,
+      adapterId: drifted.adapterId,
+      filePath: drifted.path,
+      actualContent: drifted.actualContent,
+    });
+  }
+
+  return candidates;
+}
+
+function getRecordHash(
+  record: AdapterInstallRecord,
+  type: ArtifactDelta["type"],
+  name: string,
+): string | undefined {
+  switch (type) {
+    case "instructions":
+      return record.instructions?.hash;
+    case "skill":
+      return record.skills?.[name]?.hash;
+    case "agent":
+      return record.agents?.[name]?.hash;
+    case "rule":
+      return record.rules?.[name]?.hash;
+    case "command":
+      return record.commands?.[name]?.hash;
+    case "mcp":
+      return record.mcp?.[name]?.hash;
+  }
+}
+
+
+/**
+ * Copy the entry for a skipped (drifted) artifact from the old manifest
+ * record into the new one. When `forkInfo` is present, the entry is stamped
+ * with the local hash plus the upstream baseline so `pit status` can show
+ * the fork and future updates can diff against the baseline. Without
+ * `forkInfo`, the old entry is preserved verbatim (default "skip" behavior).
+ */
+function preserveSkippedArtifact(
+  rec: AdapterInstallRecord,
+  oldRecord: AdapterInstallRecord,
+  type: ArtifactDelta["type"],
+  name: string,
+  forkInfo: { localHash: string; baselineHash: string } | undefined,
+): void {
+  const forked = forkInfo && {
+    forked: true as const,
+    hash: forkInfo.localHash,
+    baselineHash: forkInfo.baselineHash,
+  };
+
+  switch (type) {
+    case "instructions": {
+      if (!oldRecord.instructions || rec.instructions) return;
+      rec.instructions = forked ?? oldRecord.instructions;
+      return;
+    }
+    case "skill": {
+      const old = oldRecord.skills?.[name];
+      if (!old || rec.skills?.[name]) return;
+      rec.skills = rec.skills ?? {};
+      // Preserve supportingFiles on fork — reconcile's per-tracked-path scan
+      // degrades to a full-dir scan otherwise.
+      rec.skills[name] = forked ? { ...old, ...forked } : old;
+      return;
+    }
+    case "agent": {
+      const old = oldRecord.agents?.[name];
+      if (!old || rec.agents?.[name]) return;
+      rec.agents = rec.agents ?? {};
+      rec.agents[name] = forked ?? old;
+      return;
+    }
+    case "rule": {
+      const old = oldRecord.rules?.[name];
+      if (!old || rec.rules?.[name]) return;
+      rec.rules = rec.rules ?? {};
+      rec.rules[name] = forked ?? old;
+      return;
+    }
+    case "command": {
+      const old = oldRecord.commands?.[name];
+      if (!old || rec.commands?.[name]) return;
+      rec.commands = rec.commands ?? {};
+      rec.commands[name] = forked ?? old;
+      return;
+    }
+    case "mcp": {
+      const old = oldRecord.mcp?.[name];
+      if (!old || rec.mcp?.[name]) return;
+      rec.mcp = rec.mcp ?? {};
+      rec.mcp[name] = forked ?? old;
+      return;
+    }
+  }
+}
+
+/**
+ * Prompt the user to resolve each drift candidate. Returns a map of
+ * `"type:name"` → chosen action. The `d` (view diff) branch loops: we
+ * print the diff, then re-ask until the user picks a terminal option.
+ */
+async function promptDriftResolutions(
+  candidates: DriftCandidate[],
+  bundle: StackBundle,
+): Promise<
+  Map<string, { action: DriftAction; localHash: string; upstreamHash: string }>
+> {
+  const resolutions = new Map<
+    string,
+    { action: DriftAction; localHash: string; upstreamHash: string }
+  >();
+
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i]!;
+    const key = `${c.type}:${c.name}`;
+    let choice: DriftAction;
+    // Loop for the 'd' (view diff) branch.
+    while (true) {
+      choice = await chooseDriftAction(
+        `[${i + 1}/${candidates.length}] ${c.type} "${c.name}" changed upstream AND locally`,
+      );
+      if (choice !== "diff") break;
+
+      const expected = buildExpectedContent(
+        bundle,
+        c.adapterId,
+        c.type as ArtifactType,
+        c.name,
+      );
+      if (expected == null) {
+        log.info("(source unavailable for diff)");
+        continue;
+      }
+      const rendered = renderSingleArtifactDiff(
+        expected,
+        c.actualContent,
+        c.filePath,
+      );
+      console.log(rendered);
+    }
+
+    resolutions.set(key, {
+      action: choice,
+      localHash: c.localHash,
+      upstreamHash: c.upstreamHash,
+    });
+  }
+
+  return resolutions;
 }
 
 // --- Filter bundle for drift ---
@@ -538,10 +785,71 @@ export async function updateStacks(
       // Reconcile current drift state
       const reconciled = await reconcileAll(target);
 
-      // Filter bundle for drift
-      const { filtered, skipped } = filterBundleForDrift(
-        finalBundle, entry.stack, delta, reconciled, !!opts.force,
-      );
+      // Drift-resolution paths:
+      //   - `--force`: overwrite everything (no drift filter at all)
+      //   - `--interactive`: prompt per drifted+changing artifact, honor choices
+      //   - default: skip drifted+changing artifacts, preserve old hash
+      let filtered: StackBundle;
+      let skipped: Array<ArtifactDelta & { reason: string }>;
+      const forkedArtifacts: Map<
+        string,
+        { localHash: string; baselineHash: string }
+      > = new Map();
+
+      if (opts.interactive) {
+        requireInteractive("--interactive");
+        const candidates = collectDriftCandidates(
+          entry.stack,
+          delta,
+          reconciled,
+          newAdapterRecords,
+        );
+
+        if (candidates.length === 0) {
+          // No drifted+changing artifacts to prompt on — apply everything.
+          filtered = finalBundle;
+          skipped = [];
+        } else {
+          const resolutions = await promptDriftResolutions(candidates, finalBundle);
+          // Build the per-artifact filter from resolutions.
+          const keepMine: ArtifactDelta[] = [];
+          const skipList: ArtifactDelta[] = [];
+          for (const candidate of candidates) {
+            const key = `${candidate.type}:${candidate.name}`;
+            const res = resolutions.get(key);
+            if (!res) continue;
+            if (res.action === "keep") {
+              keepMine.push({ type: candidate.type, name: candidate.name });
+              forkedArtifacts.set(key, {
+                localHash: res.localHash,
+                baselineHash: res.upstreamHash,
+              });
+            } else if (res.action === "skip") {
+              skipList.push({ type: candidate.type, name: candidate.name });
+            }
+            // "upstream" falls through — included in the filter as normal.
+          }
+
+          filtered = applyExcluded(
+            finalBundle,
+            [...keepMine, ...skipList].map((a) => `${a.type}:${a.name}`),
+          );
+          skipped = [
+            ...keepMine.map((a) => ({ ...a, reason: "kept local" as const })),
+            ...skipList.map((a) => ({ ...a, reason: "skipped" as const })),
+          ];
+        }
+      } else {
+        const result = filterBundleForDrift(
+          finalBundle,
+          entry.stack,
+          delta,
+          reconciled,
+          !!opts.force,
+        );
+        filtered = result.filtered;
+        skipped = result.skipped;
+      }
 
       // Print delta summary (for both regular and dry-run modes)
       if (!opts.json) {
@@ -638,29 +946,21 @@ export async function updateStacks(
       }));
       const adapterRecords = buildAdapterRecords(finalContexts, filtered, target);
 
-      // Preserve old manifest entries for skipped (drifted) artifacts
+      // Preserve old manifest entries for skipped (drifted) artifacts — keeps
+      // them trackable without changing their recorded hash. Forked entries
+      // (keep-mine) record the local hash plus the upstream baseline so
+      // future updates still see new upstream changes.
       for (const skip of skipped) {
+        const forkInfo = forkedArtifacts.get(`${skip.type}:${skip.name}`);
         for (const [adapterId, oldRecord] of Object.entries(entry.adapters)) {
           if (!adapterRecords[adapterId]) adapterRecords[adapterId] = {};
-          const rec = adapterRecords[adapterId]!;
-          if (skip.type === "instructions" && oldRecord.instructions && !rec.instructions) {
-            rec.instructions = oldRecord.instructions;
-          } else if (skip.type === "skill" && oldRecord.skills?.[skip.name] && !rec.skills?.[skip.name]) {
-            rec.skills = rec.skills ?? {};
-            rec.skills[skip.name] = oldRecord.skills[skip.name]!;
-          } else if (skip.type === "agent" && oldRecord.agents?.[skip.name] && !rec.agents?.[skip.name]) {
-            rec.agents = rec.agents ?? {};
-            rec.agents[skip.name] = oldRecord.agents[skip.name]!;
-          } else if (skip.type === "rule" && oldRecord.rules?.[skip.name] && !rec.rules?.[skip.name]) {
-            rec.rules = rec.rules ?? {};
-            rec.rules[skip.name] = oldRecord.rules[skip.name]!;
-          } else if (skip.type === "command" && oldRecord.commands?.[skip.name] && !rec.commands?.[skip.name]) {
-            rec.commands = rec.commands ?? {};
-            rec.commands[skip.name] = oldRecord.commands[skip.name]!;
-          } else if (skip.type === "mcp" && oldRecord.mcp?.[skip.name] && !rec.mcp?.[skip.name]) {
-            rec.mcp = rec.mcp ?? {};
-            rec.mcp[skip.name] = oldRecord.mcp[skip.name]!;
-          }
+          preserveSkippedArtifact(
+            adapterRecords[adapterId]!,
+            oldRecord,
+            skip.type,
+            skip.name,
+            forkInfo,
+          );
         }
       }
 
@@ -673,6 +973,9 @@ export async function updateStacks(
         ...(entry.installMode && { installMode: entry.installMode }),
         ...(resolvedExtendsEntries.length > 0 && { resolvedExtends: resolvedExtendsEntries }),
         adapters: adapterRecords,
+        // Preserve user's interactive-install decisions across updates.
+        ...(entry.overrides && { overrides: entry.overrides }),
+        ...(entry.excluded && { excluded: entry.excluded }),
       };
 
       manifest = upsertInstall(manifest, newEntry);

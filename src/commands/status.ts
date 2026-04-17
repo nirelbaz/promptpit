@@ -23,6 +23,9 @@ export interface ArtifactDetail {
   path: string;
   state: ArtifactState;
   detail?: string;
+  /** True when the user accepted a drift fork via `pit update --interactive --keep`. */
+  forked?: boolean;
+  baselineHash?: string;
 }
 
 export interface AdapterStatus {
@@ -60,11 +63,25 @@ export interface StatusResult {
 
 // Map a ReconciledArtifact to the ArtifactDetail shape used by status display
 function toArtifactDetail(artifact: ReconciledArtifact): ArtifactDetail {
-  let detail: string | undefined;
+  const parts: string[] = [];
   if (artifact.supportingFileCount && artifact.supportingFileCount > 0) {
-    detail = `+${artifact.supportingFileCount} file${artifact.supportingFileCount !== 1 ? "s" : ""}`;
+    parts.push(`+${artifact.supportingFileCount} file${artifact.supportingFileCount !== 1 ? "s" : ""}`);
   }
-  return { name: artifact.name, path: artifact.path, state: artifact.state, detail };
+  if (artifact.forked) {
+    parts.push(
+      artifact.baselineHash
+        ? `forked (baseline ${artifact.baselineHash.slice(0, 8)})`
+        : "forked",
+    );
+  }
+  return {
+    name: artifact.name,
+    path: artifact.path,
+    state: artifact.state,
+    detail: parts.length > 0 ? parts.join(" · ") : undefined,
+    ...(artifact.forked && { forked: true }),
+    ...(artifact.baselineHash && { baselineHash: artifact.baselineHash }),
+  };
 }
 
 // Map a ReconciledAdapter to the AdapterStatus shape used by status display

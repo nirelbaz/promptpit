@@ -1,13 +1,15 @@
 import path from "node:path";
 import { detectAdapters } from "../adapters/registry.js";
-import { mergeAdapterConfigs, hasVersionPins } from "../core/merger.js";
+import { mergeAdapterConfigs, hasVersionPins, applyExcluded } from "../core/merger.js";
 import { stripSecrets } from "../core/security.js";
 import { LARGE_INSTRUCTION_THRESHOLD } from "../core/validate.js";
 import { writeStack } from "../core/stack.js";
+import { pickExclusions } from "../core/select.js";
 import { stripAllMarkerBlocks } from "../shared/markers.js";
 import { readFileOrNull, exists } from "../shared/utils.js";
 import type { StackBundle } from "../shared/schema.js";
 import { log, spinner, printDryRunReport } from "../shared/io.js";
+import { requireInteractive } from "../shared/interactive.js";
 import type { DryRunEntry } from "../adapters/types.js";
 import type { DryRunSection } from "../shared/io.js";
 
@@ -33,6 +35,7 @@ export interface CollectOptions {
   dryRun?: boolean;
   verbose?: boolean;
   includeExtends?: boolean;
+  select?: boolean;
 }
 
 export async function collectStack(
@@ -190,6 +193,23 @@ export async function collectStack(
     bundle.mcpServers = merged.bundle.mcpServers;
     bundle.envExample = merged.bundle.envExample;
     bundle.manifest = cleanManifest;
+  }
+
+  // Interactive artifact selection (after extends-flatten so users see the
+  // full picked set, not just the root stack).
+  if (opts.select) {
+    requireInteractive("--select");
+    const excluded = await pickExclusions(bundle);
+    if (excluded.length > 0) {
+      const filtered = applyExcluded(bundle, excluded);
+      bundle.manifest = filtered.manifest;
+      bundle.skills = filtered.skills;
+      bundle.agents = filtered.agents;
+      bundle.rules = filtered.rules;
+      bundle.commands = filtered.commands;
+      bundle.mcpServers = filtered.mcpServers;
+      bundle.envExample = filtered.envExample;
+    }
   }
 
   if (opts.dryRun) {
