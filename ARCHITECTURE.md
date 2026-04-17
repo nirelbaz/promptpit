@@ -37,7 +37,7 @@ src/adapters/
 └── standards.ts      # Cross-tool standards: AGENTS.md (instructions), .mcp.json (MCP servers), .agents/skills/
 ```
 
-Adding a tool means one file plus one registry entry. The contract tests in `test/adapters/contract.test.ts` automatically validate any registered adapter against 8 checks (including agent capability declaration and supporting file handling).
+Adding a tool means one file plus one registry entry. The contract tests in `test/adapters/contract.test.ts` automatically validate any registered adapter against 9 checks (including agent capability declaration and supporting file handling).
 
 ### Why composition over inheritance
 

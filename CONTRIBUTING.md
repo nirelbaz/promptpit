@@ -34,7 +34,7 @@ This is the most likely contribution. Each AI tool (Claude Code, Cursor, etc.) i
 
 1. Create `src/adapters/{tool}.ts` — see `cursor.ts` for a good reference (it has custom skill format conversion)
 2. Register it in `src/adapters/registry.ts`
-3. Add a fixture setup in `ADAPTER_FIXTURES` in `test/adapters/contract.test.ts` — the 8 contract tests will run automatically against your adapter
+3. Add a fixture setup in `ADAPTER_FIXTURES` in `test/adapters/contract.test.ts` — the 9 contract tests will run automatically against your adapter
 
 The adapter needs to implement:
 - `detect(root)` — check if this tool is configured in the project
@@ -48,9 +48,9 @@ src/
 ├── cli.ts              # Commander.js entry point (init, collect, install, uninstall, update, status, diff, watch, validate, check)
 ├── commands/           # init.ts, collect.ts, install.ts, uninstall.ts, update.ts, status.ts, diff.ts, watch.ts, validate.ts, check.ts
 ├── adapters/           # One file per AI tool + registry + shared utils (standards.ts, copilot.ts, codex.ts, etc.)
-├── core/               # stack.ts (bundle I/O), skill-store.ts, manifest.ts (install ledger), artifact-ops.ts (removal helpers), merger.ts, reconcile.ts, security.ts, validate.ts
+├── core/               # stack.ts (bundle I/O), skill-store.ts, manifest.ts (install ledger), artifact-ops.ts (removal helpers), merger.ts, resolve.ts (extends graph), reconcile.ts (overrides/excluded/fork tracking), select.ts (interactive picker), scripts.ts (lifecycle hooks), security.ts, validate.ts
 ├── sources/            # github.ts (clone + auto-collect)
-└── shared/             # schema.ts (Zod types + manifest schema), markers.ts, utils.ts, io.ts
+└── shared/             # schema.ts (Zod types + manifest schema), markers.ts, utils.ts, io.ts, interactive.ts (@clack/prompts wrapper with TTY guard)
 
 test/
 ├── adapters/           # Contract tests (parameterized) + per-adapter tests

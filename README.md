@@ -188,7 +188,7 @@ Adding a new tool is one file plus one registry entry. See [CONTRIBUTING.md](CON
 git clone https://github.com/nirelbaz/promptpit.git
 cd promptpit
 npm install
-npm test          # 767 tests, vitest
+npm test          # 839 tests, vitest
 npm run build     # builds dist/cli.js via tsup
 npm run lint      # TypeScript strict mode check
 ```
@@ -199,7 +199,7 @@ See [TODOS.md](TODOS.md) for the full roadmap. The big milestones:
 
 - **v0.3 (Team Platform):** Done. Five adapters (Claude Code, Cursor, Codex, Copilot, Standards), seven commands, drift detection, dry-run previews, CI integration, portable rules and agents.
 - **v0.4 (Stack Composer):** Done. Stack composition via `extends`, `pit diff`, `pit uninstall`, `pit update`, install lifecycle scripts, full Agent Skills spec alignment (supporting files, tightened schema), `pit collect --include-extends`.
-- **v0.5:** Selective install/collect, interactive conflict resolution, atomic install/update writes.
+- **v0.5:** Selective install/collect and interactive conflict resolution shipped in v0.5.0. Atomic install/update writes still to come.
 - **v1.0 (Ecosystem Bridge):** Multi-source install (skills.sh, SkillsMP, cursor.directory), `pit publish`, `pit search`.
 
 ## Acknowledgments

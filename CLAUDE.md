@@ -22,9 +22,9 @@ src/
 ├── cli.ts              # Commander.js entry point
 ├── commands/           # init.ts, collect.ts, install.ts, uninstall.ts, update.ts, status.ts, watch.ts, validate.ts, check.ts, diff.ts
 ├── adapters/           # claude-code.ts, cursor.ts, codex.ts, standards.ts, copilot.ts, registry.ts, types.ts, adapter-utils.ts, toml-utils.ts
-├── core/               # stack.ts, skill-store.ts, manifest.ts, artifact-ops.ts, merger.ts, resolve.ts, reconcile.ts, security.ts, validate.ts
+├── core/               # stack.ts, skill-store.ts, manifest.ts, artifact-ops.ts, merger.ts, resolve.ts, reconcile.ts, select.ts, scripts.ts, security.ts, validate.ts
 ├── sources/            # github.ts (clone + auto-collect)
-└── shared/             # schema.ts (Zod + types), markers.ts, utils.ts, io.ts
+└── shared/             # schema.ts (Zod + types), markers.ts, utils.ts, io.ts, interactive.ts (@clack/prompts wrapper with TTY guard)
 ```
 
 ## Key Decisions
@@ -48,7 +48,7 @@ src/
 
 ## Testing
 
-Tests use vitest with real filesystem (not memfs) for E2E. Test fixtures in `test/__fixtures__/`. Contract tests in `test/adapters/contract.test.ts` are parameterized across all adapters (7 checks each).
+Tests use vitest with real filesystem (not memfs) for E2E. Test fixtures in `test/__fixtures__/`. Contract tests in `test/adapters/contract.test.ts` are parameterized across all adapters (9 checks each).
 
 ## Slash Commands
 
