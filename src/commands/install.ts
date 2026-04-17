@@ -9,9 +9,16 @@ import { log, spinner, printDryRunReport } from "../shared/io.js";
 import { parseGitHubSource, cloneAndResolve, getRepoCommitSha } from "../sources/github.js";
 import type { AdapterWriteContext } from "../core/manifest.js";
 import { collectScripts, executeScripts } from "../core/scripts.js";
+import { applyExcluded } from "../core/merger.js";
+import { pickExclusions } from "../core/select.js";
+import {
+  chooseOne,
+  requireInteractive,
+} from "../shared/interactive.js";
 import type { WriteOptions, DryRunEntry } from "../adapters/types.js";
 import type { DryRunSection } from "../shared/io.js";
 import type { InstallEntry, StackBundle } from "../shared/schema.js";
+import type { ConflictEntry } from "../core/resolve.js";
 import { canonicalSkillBase } from "../core/skill-store.js";
 
 export interface InstallOptions {
@@ -27,6 +34,9 @@ export interface InstallOptions {
   ignoreScriptErrors?: boolean;
   preInstall?: string;
   postInstall?: string;
+  interactive?: boolean;
+  select?: boolean;
+  resetExclusions?: boolean;
 }
 
 export async function installStack(
@@ -107,6 +117,13 @@ export async function installStack(
       bundle = updatedBundle;
     }
 
+    // Read existing install manifest up front so we can apply saved
+    // overrides/exclusions to the resolved bundle before writing.
+    const existingManifest = await readManifest(target);
+    const existingEntry = existingManifest.installs.find(
+      (e: InstallEntry) => e.stack === bundle.manifest.name,
+    );
+
     // Resolve extends if present
     let finalBundle = bundle;
     let resolvedExtendsEntries: Array<{
@@ -116,10 +133,17 @@ export async function installStack(
       resolvedAt: string;
     }> = [];
     let resolvedNodes: Array<{ source: string; stackDir: string; bundle: StackBundle }> = [];
+    // Conflict resolutions chosen interactively or pre-resolved from
+    // stack.json / installed.json. Written back to the manifest.
+    const newInstallOverrides: Record<string, string> = {
+      ...(existingEntry?.overrides ?? {}),
+    };
 
     if (bundle.manifest.extends && bundle.manifest.extends.length > 0) {
       const resolveSpin = spinner("Resolving extends...");
-      const { resolveGraph, mergeGraph } = await import("../core/resolve.js");
+      const { resolveGraph, mergeGraph, applyOverrides } = await import(
+        "../core/resolve.js"
+      );
       const graph = await resolveGraph(resolvedSource);
       // Skip root instructions when installing from local .promptpit/ — they're
       // already in the target file (produced by pit collect from the same file).
@@ -133,13 +157,81 @@ export async function installStack(
         `Resolved ${graph.nodes.length - 1} extended stack(s)`,
       );
 
-      for (const conflict of merged.conflicts) {
+      // Apply declarative resolutions in precedence order:
+      //   1. stack.json overrides (stack author's intent — authoritative)
+      //   2. installed.json overrides (user's prior interactive choice)
+      const stackOverrides = bundle.manifest.overrides;
+      const manifestOverrides = existingEntry?.overrides;
+
+      // stack.json is authoritative: drop any manifest entries it has
+      // claimed so we don't keep stale user picks alongside the new
+      // declarative resolution.
+      if (stackOverrides) {
+        for (const key of Object.keys(stackOverrides)) {
+          delete newInstallOverrides[key];
+        }
+      }
+
+      const afterStack = applyOverrides(merged, graph, stackOverrides);
+      for (const w of afterStack.warnings) log.warn(w);
+      const afterManifest = applyOverrides(
+        { bundle: afterStack.bundle, sources: afterStack.sources, conflicts: afterStack.unresolved },
+        graph,
+        manifestOverrides,
+      );
+      for (const w of afterManifest.warnings) log.warn(w);
+
+      let resolvedBundle = afterManifest.bundle;
+      let unresolved: ConflictEntry[] = afterManifest.unresolved;
+
+      // Interactive resolution for whatever remains. Only enforce the TTY
+      // requirement when there are actually conflicts to prompt on —
+      // otherwise `--interactive` on a clean extends chain would error
+      // confusingly in CI.
+      if (opts.interactive && unresolved.length > 0) {
+        requireInteractive("--interactive");
+        const resolved = await promptConflictResolutions(unresolved);
+        // Re-run applyOverrides with the new picks merged into manifest
+        // overrides so the bundle reflects the choices.
+        const interactiveOverrides: Record<string, string> = {};
+        for (const conflict of unresolved) {
+          const key = `${conflict.type}:${conflict.name}`;
+          const pick = resolved.get(key);
+          if (!pick) continue;
+          // Only record non-default picks so we don't bloat the manifest
+          // with no-op entries.
+          if (pick !== conflict.winner) {
+            interactiveOverrides[key] = pick;
+            newInstallOverrides[key] = pick;
+          }
+        }
+        if (Object.keys(interactiveOverrides).length > 0) {
+          const merged2 = {
+            bundle: resolvedBundle,
+            sources: afterManifest.sources,
+            conflicts: unresolved,
+          };
+          const afterInteractive = applyOverrides(
+            merged2,
+            graph,
+            interactiveOverrides,
+          );
+          for (const w of afterInteractive.warnings) log.warn(w);
+          resolvedBundle = afterInteractive.bundle;
+          unresolved = afterInteractive.unresolved;
+        }
+      } else if (opts.interactive) {
+        log.info("No unresolved extends conflicts.");
+      }
+
+      // Warn about anything still unresolved (falls back to last-declared-wins).
+      for (const conflict of unresolved) {
         log.warn(
           `${conflict.type} "${conflict.name}" defined in both ${path.basename(conflict.from)} and ${path.basename(conflict.winner)} — using ${path.basename(conflict.winner)}`,
         );
       }
 
-      finalBundle = merged.bundle;
+      finalBundle = resolvedBundle;
 
       const depNodes = graph.nodes.filter((n) => n.depth > 0);
 
@@ -151,6 +243,56 @@ export async function installStack(
         }));
 
       resolvedNodes = depNodes;
+    } else if (opts.interactive) {
+      // No extends = no conflicts. Silent no-op rather than forcing a TTY.
+      log.info("No extends to resolve — --interactive is a no-op.");
+    }
+
+    // --- Selective install ---
+    // Apply saved exclusions first (so deselections persist across runs),
+    // then optionally prompt for a new exclusion set.
+    const savedExcluded = opts.resetExclusions
+      ? []
+      : existingEntry?.excluded ?? [];
+    if (savedExcluded.length > 0) {
+      finalBundle = applyExcluded(finalBundle, savedExcluded);
+    }
+    let newExcluded: string[] | undefined = savedExcluded.length > 0
+      ? savedExcluded
+      : undefined;
+    if (opts.select) {
+      requireInteractive("--select");
+      newExcluded = await pickExclusions(finalBundle, savedExcluded);
+      if (newExcluded.length > 0) {
+        finalBundle = applyExcluded(finalBundle, newExcluded);
+      }
+    }
+
+    // --save + --interactive: persist overrides to local stack.json too.
+    if (opts.save && opts.interactive) {
+      const localStackJsonPath = path.join(target, ".promptpit", "stack.json");
+      const localRaw = await readFileOrNull(localStackJsonPath);
+      if (localRaw) {
+        const localManifest = JSON.parse(localRaw);
+        const mergedOverrides = {
+          ...(localManifest.overrides ?? {}),
+          ...newInstallOverrides,
+        };
+        if (Object.keys(mergedOverrides).length > 0) {
+          localManifest.overrides = Object.fromEntries(
+            Object.entries(mergedOverrides).sort(([a], [b]) =>
+              a.localeCompare(b),
+            ),
+          );
+          await writeFileEnsureDir(
+            localStackJsonPath,
+            JSON.stringify(localManifest, null, 2) + "\n",
+          );
+          log.info(
+            `Saved ${Object.keys(newInstallOverrides).length} override(s) to .promptpit/stack.json`,
+          );
+        }
+      }
     }
 
     // Validate inbound env var names (security)
@@ -446,6 +588,16 @@ export async function installStack(
       }));
       const adapterRecords = buildAdapterRecords(contexts, finalBundle, target);
 
+      // Sort override keys so git merges stay line-level.
+      const sortedOverrides =
+        Object.keys(newInstallOverrides).length > 0
+          ? Object.fromEntries(
+              Object.entries(newInstallOverrides).sort(([a], [b]) =>
+                a.localeCompare(b),
+              ),
+            )
+          : undefined;
+
       const entry: InstallEntry = {
         stack: finalBundle.manifest.name,
         stackVersion: finalBundle.manifest.version,
@@ -456,6 +608,8 @@ export async function installStack(
         ...(opts.preferUniversal && { installMode: "prefer-universal" as const }),
         ...(resolvedExtendsEntries.length > 0 && { resolvedExtends: resolvedExtendsEntries }),
         adapters: adapterRecords,
+        ...(sortedOverrides && { overrides: sortedOverrides }),
+        ...(newExcluded && newExcluded.length > 0 && { excluded: newExcluded.slice().sort() }),
       };
 
       const updated = upsertInstall(manifest, entry);
@@ -515,4 +669,39 @@ export async function installStack(
       await removeDir(tmpDir);
     }
   }
+}
+
+// --- Interactive conflict resolution ---
+
+/**
+ * Prompt the user to pick a winner for each unresolved extends conflict.
+ * Returns a `Map<"type:name", chosenSource>` of the user's picks. Defaults
+ * to the `winner` (last-declared-wins) if the user selects it.
+ */
+async function promptConflictResolutions(
+  conflicts: ConflictEntry[],
+): Promise<Map<string, string>> {
+  const results = new Map<string, string>();
+
+  for (let i = 0; i < conflicts.length; i++) {
+    const conflict = conflicts[i]!;
+    const choice = await chooseOne<string>(
+      `[${i + 1}/${conflicts.length}] ${conflict.type} "${conflict.name}" — which source wins?`,
+      [
+        {
+          value: conflict.winner,
+          label: path.basename(conflict.winner),
+          hint: "last-declared (default)",
+        },
+        {
+          value: conflict.from,
+          label: path.basename(conflict.from),
+        },
+      ],
+      conflict.winner,
+    );
+    results.set(`${conflict.type}:${conflict.name}`, choice);
+  }
+
+  return results;
 }

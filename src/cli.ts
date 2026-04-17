@@ -61,18 +61,25 @@ program
   .option("--dry-run", "Show what would be collected without writing")
   .option("-v, --verbose", "Show full diffs in dry-run output")
   .option("--include-extends", "Fetch and flatten extends into the bundle")
+  .option("--select", "Interactively pick artifacts to include (requires TTY)")
   .addHelpText("after", `
 Examples:
   pit collect                 # bundle from current directory
   pit collect --dry-run       # preview what would be bundled
   pit collect --dry-run -v    # preview with full diffs
   pit collect --include-extends  # flatten extends into the bundle
+  pit collect --select        # pick which artifacts to include
 `)
-  .action(async (dir: string, opts: { output: string; dryRun?: boolean; verbose?: boolean; includeExtends?: boolean }) => {
+  .action(async (dir: string, opts: { output: string; dryRun?: boolean; verbose?: boolean; includeExtends?: boolean; select?: boolean }) => {
     try {
       const root = path.resolve(dir);
       const outputDir = path.resolve(root, opts.output);
-      await collectStack(root, outputDir, { dryRun: opts.dryRun, verbose: opts.verbose, includeExtends: opts.includeExtends });
+      await collectStack(root, outputDir, {
+        dryRun: opts.dryRun,
+        verbose: opts.verbose,
+        includeExtends: opts.includeExtends,
+        select: opts.select,
+      });
     } catch (err: unknown) {
       if (err instanceof Error) {
         log.error(err.message);
@@ -110,6 +117,18 @@ program
   )
   .option("--pre-install <script>", "Run a shell command before installing files")
   .option("--post-install <script>", "Run a shell command after installing files")
+  .option(
+    "--interactive",
+    "Prompt to resolve extends conflicts (requires TTY)",
+  )
+  .option(
+    "--select",
+    "Interactively pick artifacts to install (requires TTY)",
+  )
+  .option(
+    "--reset-exclusions",
+    "Clear the saved exclusions list before installing",
+  )
   .addHelpText("after", `
 Examples:
   pit install                          # from .promptpit/ in current dir
@@ -119,6 +138,9 @@ Examples:
   pit install --global                 # install to user-level paths
   pit install github:org/stack --save  # install + add to extends
   pit install github:org/stack --post-install ./setup  # run setup after install
+  pit install --interactive            # resolve conflicts interactively
+  pit install --select                 # pick which artifacts to install
+  pit install --reset-exclusions       # reinstate artifacts previously deselected
 `)
   .action(
     async (
@@ -137,6 +159,9 @@ Examples:
         ignoreScriptErrors?: boolean;
         preInstall?: string;
         postInstall?: string;
+        interactive?: boolean;
+        select?: boolean;
+        resetExclusions?: boolean;
       },
     ) => {
       try {
@@ -190,6 +215,10 @@ program
   .option("--ignore-scripts", "Skip lifecycle scripts")
   .option("--trust", "Trust remote stack scripts (skip consent prompt)")
   .option("--json", "Machine-readable output (for --check)")
+  .option(
+    "--interactive",
+    "Prompt per drifted+changed artifact (requires TTY)",
+  )
   .addHelpText("after", `
 Examples:
   pit update                  # update all installed stacks
@@ -197,6 +226,7 @@ Examples:
   pit update --check          # check for updates without applying
   pit update --dry-run        # preview what would change
   pit update --force          # overwrite drifted artifacts
+  pit update --interactive    # resolve drift conflicts interactively
   pit update --check --json   # machine-readable update check
 `)
   .action(async (stack: string | undefined, dir: string, opts: {
@@ -207,6 +237,7 @@ Examples:
     ignoreScripts?: boolean;
     trust?: boolean;
     json?: boolean;
+    interactive?: boolean;
   }) => {
     try {
       const root = path.resolve(dir);
