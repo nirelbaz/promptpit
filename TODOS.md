@@ -91,14 +91,8 @@ Goal: let teams layer stacks on top of each other. Company base stack + team ove
 ### ~~Stack composition (`extends`)~~ **Completed v0.4.0**
 ~~`"extends": ["github:company/base-stack@1.0.0"]` in stack.json. `pit install` recursively fetches and resolves the dependency graph. Base instructions merge first, team overrides layer on top. Provisional merge semantics: last-declared-wins with a warning on conflicts, explicit `overrides` block in stack.json for intentional resolution. This is the feature that makes multi-team setups practical.~~
 
-### Interactive conflict resolution (`--interactive`)
-Cross-command interactive picker for conflict resolution. Two use cases:
-
-1. **Install extends conflicts** (`pit install --interactive`): when extends produce conflicts (same-named skill, rule, MCP server, etc.), show an interactive picker instead of silently applying last-declared-wins. For each conflict, display the two versions side-by-side and let the user choose which to keep. Saves choices to an `overrides` block in stack.json so subsequent installs don't re-ask.
-
-2. **Update drift conflicts** (`pit update --interactive`): when a drifted artifact also changed upstream, show the user's version and the upstream version side-by-side. Let the user choose per-artifact: keep mine, take upstream, or view diff. Saves choices to manifest so subsequent updates don't re-ask.
-
-Non-TTY environments (CI) fall back to last-declared-wins (install) or skip-drifted (update) with warnings.
+### ~~Interactive conflict resolution (`--interactive`)~~ **Completed v0.5.0**
+~~Cross-command interactive picker for conflict resolution. `pit install --interactive` prompts per extends conflict; `pit update --interactive` prompts per drifted+changing artifact (keep mine / take upstream / view diff / skip). Choices persist to `installed.json` (and `stack.json` as declarative `overrides` with `--save`). "Keep mine" tracks the fork (`forked: true`, `baselineHash`) so future updates still surface upstream changes. Non-TTY environments error out with an actionable message rather than silently falling back.~~
 
 ### ~~Diff command~~ **Completed v0.4.1**
 ~~`pit diff` — show the actual text diff between installed config and `.promptpit/` source. Distinct from `pit status` (which shows hash-level drift). This is a UI feature, not a composition feature.~~
@@ -124,8 +118,8 @@ Translate `$ARGUMENTS` (Claude Code) <-> `$1` (Cursor) <-> `${input:arguments}` 
 ### ~~Uninstall command~~ **Completed** PR #76
 ~~`pit uninstall <stack>` — clean reverse of install. Markers make instruction removal straightforward. Skills/MCP/env is messier (what if the user modified them?). Basic version: remove marked blocks + delete unmodified skill files.~~
 
-### Selective install/collect
-`pit install --select` / `pit collect --select` — interactive picker for skills, MCP servers, env vars. Power-user feature for teams where you want conventions but not MCP servers.
+### ~~Selective install/collect~~ **Completed v0.5.0**
+~~`pit install --select` / `pit collect --select` — interactive picker covering all six artifact categories (skills, agents, rules, commands, MCP servers, env vars). Deselections persist in `installed.json` (`excluded` array) and are honored on every subsequent install. `pit install --reset-exclusions` wipes the saved list. `--force` respects the exclusions.~~
 
 ### Atomic install/update writes
 If `pit install` or `pit update` crashes midway (e.g., disk error after writing some artifacts but before updating the manifest), the installed state is inconsistent — some artifacts are the new version while the manifest still records old hashes. Next `pit status` shows false drift everywhere. Fix: write all artifacts to a temp staging directory, then atomically swap into place. Recovery path today: re-run `pit install`.
