@@ -37,7 +37,17 @@ export interface ReconciledArtifact {
   path: string;
   state: ArtifactState;
   actualContent?: string;
+  /** Current content hash as computed by the type-specific hasher. Set when
+   *  state is `drifted` so `pit update --interactive` can record the correct
+   *  hash for a fork (which varies: `computeSkillHash` for skills,
+   *  `computeMcpServerHash` for mcp, `computeHash` for text). */
+  actualHash?: string;
   supportingFileCount?: number;
+  /** True when the user chose "keep mine" during `pit update --interactive`. */
+  forked?: boolean;
+  /** Upstream hash at the moment the user forked. Enables visibility of
+   *  subsequent upstream changes via `pit update`. */
+  baselineHash?: string;
 }
 
 export interface ReconciledAdapter {
@@ -87,6 +97,7 @@ async function reconcileAdapter(
     if (filePath) {
       let instrState: ArtifactState = "synced";
       let actualContent: string | undefined;
+      let actualHash: string | undefined;
       const content = await readFileOrNull(filePath);
       if (content == null) {
         instrState = "deleted";
@@ -95,6 +106,7 @@ async function reconcileAdapter(
         if (markerContent != null) {
           actualContent = markerContent;
           const currentHash = computeHash(markerContent);
+          actualHash = currentHash;
           if (currentHash !== record.instructions.hash) {
             instrState = "drifted";
           }
@@ -109,6 +121,7 @@ async function reconcileAdapter(
         path: filePath,
         state: instrState,
         actualContent,
+        ...(actualHash && { actualHash }),
       });
     }
   }
@@ -120,6 +133,7 @@ async function reconcileAdapter(
     const skillPath = path.join(skillDir, "SKILL.md");
     let skillState: ArtifactState = "synced";
     let actualContent: string | undefined;
+    let actualHash: string | undefined;
     const content = await readFileOrNull(skillPath);
     if (content == null) {
       skillState = "deleted";
@@ -145,6 +159,7 @@ async function reconcileAdapter(
         supportingFiles = allFiles.length > 0 ? allFiles : undefined;
       }
       const currentHash = computeSkillHash(content, supportingFiles);
+      actualHash = currentHash;
       if (currentHash !== skillRecord.hash) {
         skillState = "drifted";
         actualContent = content;
@@ -158,6 +173,7 @@ async function reconcileAdapter(
       path: skillDir,
       state: skillState,
       actualContent,
+      ...(actualHash && { actualHash }),
       ...(fileCount > 0 && { supportingFileCount: fileCount }),
     });
   }
@@ -173,11 +189,13 @@ async function reconcileAdapter(
         const agentPath = path.join(agentsDir, `${agentName}${ext}`);
         let agentState: ArtifactState = "synced";
         let actualContent: string | undefined;
+        let actualHash: string | undefined;
         const content = await readFileOrNull(agentPath);
         if (content == null) {
           agentState = "deleted";
         } else {
           const currentHash = computeHash(content);
+          actualHash = currentHash;
           if (currentHash !== agentRecord.hash) {
             agentState = "drifted";
             actualContent = content;
@@ -190,6 +208,7 @@ async function reconcileAdapter(
           path: agentPath,
           state: agentState,
           actualContent,
+          ...(actualHash && { actualHash }),
         });
       }
     }
@@ -212,11 +231,13 @@ async function reconcileAdapter(
 
       let ruleState: ArtifactState = "synced";
       let actualContent: string | undefined;
+      let actualHash: string | undefined;
       const content = await readFileOrNull(ruleFile);
       if (content == null) {
         ruleState = "deleted";
       } else {
         const currentHash = computeHash(content);
+        actualHash = currentHash;
         if (currentHash !== ruleRecord.hash) {
           ruleState = "drifted";
           actualContent = content;
@@ -229,6 +250,7 @@ async function reconcileAdapter(
         path: ruleFile,
         state: ruleState,
         actualContent,
+        ...(actualHash && { actualHash }),
       });
     }
   }
@@ -244,11 +266,13 @@ async function reconcileAdapter(
       const commandFile = path.join(commandsBase, `${commandName}${ext}`);
       let commandState: ArtifactState = "synced";
       let actualContent: string | undefined;
+      let actualHash: string | undefined;
       const content = await readFileOrNull(commandFile);
       if (content == null) {
         commandState = "deleted";
       } else {
         const currentHash = computeHash(content);
+        actualHash = currentHash;
         if (currentHash !== commandRecord.hash) {
           commandState = "drifted";
           actualContent = content;
@@ -261,6 +285,7 @@ async function reconcileAdapter(
         path: commandFile,
         state: commandState,
         actualContent,
+        ...(actualHash && { actualHash }),
       });
     }
   }
@@ -296,12 +321,14 @@ async function reconcileAdapter(
         for (const [serverName, mcpRecord] of Object.entries(mcpEntries)) {
           let serverState: ArtifactState = "synced";
           let actualContent: string | undefined;
+          let actualHash: string | undefined;
           const serverConfig = mcpParsed[serverName];
           if (!serverConfig) {
             serverState = "deleted";
           } else {
             actualContent = JSON.stringify(serverConfig, null, 2);
             const currentHash = computeMcpServerHash(serverConfig as Record<string, unknown>);
+            actualHash = currentHash;
             if (currentHash !== mcpRecord.hash) {
               serverState = "drifted";
             }
@@ -313,6 +340,7 @@ async function reconcileAdapter(
             path: mcpPath,
             state: serverState,
             actualContent,
+            ...(actualHash && { actualHash }),
           });
         }
       }
@@ -341,6 +369,10 @@ export async function reconcileAll(root: string): Promise<ReconcileOutput> {
 
     for (const [adapterId, record] of Object.entries(entry.adapters)) {
       const reconciled = await reconcileAdapter(root, entry.stack, adapterId, record);
+      // Stamp forked metadata from the manifest onto each reconciled artifact
+      // so downstream (status, diff) can surface it. This is a post-pass so
+      // reconcileAdapter stays focused on state detection.
+      stampForkedMetadata(reconciled.artifacts, record);
       adapters.push(reconciled);
     }
 
@@ -359,6 +391,41 @@ export async function reconcileAll(root: string): Promise<ReconcileOutput> {
   }
 
   return { stacks, hasManifest: true };
+}
+
+function stampForkedMetadata(
+  artifacts: ReconciledArtifact[],
+  record: AdapterInstallRecord,
+): void {
+  for (const artifact of artifacts) {
+    let entry:
+      | { forked?: boolean; baselineHash?: string }
+      | undefined;
+    switch (artifact.type) {
+      case "instructions":
+        entry = record.instructions;
+        break;
+      case "skill":
+        entry = record.skills?.[artifact.name];
+        break;
+      case "agent":
+        entry = record.agents?.[artifact.name];
+        break;
+      case "rule":
+        entry = record.rules?.[artifact.name];
+        break;
+      case "command":
+        entry = record.commands?.[artifact.name];
+        break;
+      case "mcp":
+        entry = record.mcp?.[artifact.name];
+        break;
+    }
+    if (entry?.forked) {
+      artifact.forked = true;
+      if (entry.baselineHash) artifact.baselineHash = entry.baselineHash;
+    }
+  }
 }
 
 // --- Expected content reconstruction ---

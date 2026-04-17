@@ -1,5 +1,12 @@
 import type { PlatformConfig } from "../adapters/types.js";
-import type { SkillEntry, RuleEntry, McpConfig, AgentEntry, CommandEntry } from "../shared/schema.js";
+import type {
+  SkillEntry,
+  RuleEntry,
+  McpConfig,
+  AgentEntry,
+  CommandEntry,
+  StackBundle,
+} from "../shared/schema.js";
 import { computeHash, normalizeForHash } from "./manifest.js";
 
 export interface MergedStack {
@@ -132,5 +139,61 @@ export function mergeAdapterConfigs(
     rules: [...seenRules.values()],
     commands: [...seenCommands.values()],
     warnings,
+  };
+}
+
+// --- Bundle exclusion ---
+
+/**
+ * Drop artifacts listed in `excluded` from a stack bundle. Keys are
+ * `"type:name"` where type is one of `skill | agent | rule | command | mcp |
+ * env | instructions`. Unknown keys are silently ignored. Returns a new
+ * bundle; does not mutate the input.
+ */
+export function applyExcluded(
+  bundle: StackBundle,
+  excluded: string[] | undefined,
+): StackBundle {
+  if (!excluded || excluded.length === 0) return bundle;
+
+  const set = new Set(excluded);
+  const dropped = (type: string, name: string): boolean =>
+    set.has(`${type}:${name}`);
+
+  const filteredSkills = bundle.skills.filter((s) => !dropped("skill", s.name));
+  const filteredAgents = bundle.agents.filter((a) => !dropped("agent", a.name));
+  const filteredRules = bundle.rules.filter((r) => !dropped("rule", r.name));
+  const filteredCommands = bundle.commands.filter(
+    (c) => !dropped("command", c.name),
+  );
+
+  const filteredMcp: McpConfig = {};
+  for (const [name, cfg] of Object.entries(bundle.mcpServers)) {
+    if (!dropped("mcp", name)) filteredMcp[name] = cfg;
+  }
+
+  const filteredEnv: Record<string, string> = {};
+  for (const [name, val] of Object.entries(bundle.envExample)) {
+    if (!dropped("env", name)) filteredEnv[name] = val;
+  }
+
+  const dropInstructions = dropped("instructions", "instructions");
+
+  return {
+    ...bundle,
+    manifest: {
+      ...bundle.manifest,
+      skills: filteredSkills.map((s) => s.name),
+      agents: filteredAgents.map((a) => a.name),
+      rules: filteredRules.map((r) => r.name),
+      commands: filteredCommands.map((c) => c.name),
+    },
+    agentInstructions: dropInstructions ? "" : bundle.agentInstructions,
+    skills: filteredSkills,
+    agents: filteredAgents,
+    rules: filteredRules,
+    commands: filteredCommands,
+    mcpServers: filteredMcp,
+    envExample: filteredEnv,
   };
 }
