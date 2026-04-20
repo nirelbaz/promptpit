@@ -29,6 +29,17 @@ describe("scan", () => {
     expect(frontend.unmanagedAnnotations.some((a) => a.subpath.endsWith("packages/ui"))).toBe(true);
   });
 
+  it("counts real artifacts for each unmanagedAnnotation (not hardcoded zeros)", async () => {
+    const stacks = await scan({ cwd: fixture, globalRoots: [], depth: 5 });
+    const frontend = stacks.find((s) => s.name === "app-frontend")!;
+    const uiAnnotation = frontend.unmanagedAnnotations.find((a) =>
+      a.subpath.endsWith("packages/ui"),
+    );
+    expect(uiAnnotation).toBeDefined();
+    // packages/ui has one .cursor/rules/ui.mdc → cursor adapter should count 1 rule
+    expect(uiAnnotation!.counts.rules).toBe(1);
+  });
+
   it("prunes node_modules by default", async () => {
     const stacks = await scan({ cwd: fixture, globalRoots: [], depth: 5 });
     const junk = stacks.find((s) => s.root.includes("node_modules"));
@@ -52,13 +63,20 @@ describe("scan", () => {
     expect(hit?.manifestCorrupt).toBe(true);
   });
 
-  it("adds a virtual global stack when globalRoots given", async () => {
+  it("adds a virtual global stack when globalRoots contain AI config", async () => {
     const stacks = await scan({
       cwd: fixture,
-      globalRoots: [path.resolve(__dirname, "../__fixtures__/global-empty")],
+      globalRoots: [path.resolve(__dirname, "../__fixtures__/scan-global")],
       depth: 5,
     });
-    // global-empty fixture does not exist; scan should still complete without throwing
-    expect(stacks).toBeDefined();
+    const global = stacks.find((s) => s.kind === "global");
+    expect(global).toBeDefined();
+    expect(global!.name).toBe("user-level");
+    expect(global!.adapters.length).toBeGreaterThan(0);
+  });
+
+  it("does not add a global stack when globalRoots has no AI config", async () => {
+    const stacks = await scan({ cwd: fixture, globalRoots: [], depth: 5 });
+    expect(stacks.find((s) => s.kind === "global")).toBeUndefined();
   });
 });

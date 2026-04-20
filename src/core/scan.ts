@@ -245,11 +245,13 @@ async function materializeOne(rec: HitRecord): Promise<ScannedStack> {
       artifacts,
       drift: managed ? (overallDrift === "drifted" ? "drifted" : "synced") : "unknown",
     })),
-    unmanagedAnnotations: rec.subpathAnnotations.map((a) => ({
-      subpath: a.subpath,
-      adapterId: a.adapterId as AdapterId,
-      counts: { skills: 0, rules: 0, agents: 0, commands: 0, mcp: 0, instructions: false },
-    })),
+    unmanagedAnnotations: await Promise.all(
+      rec.subpathAnnotations.map(async (a) => ({
+        subpath: a.subpath,
+        adapterId: a.adapterId as AdapterId,
+        counts: await countAdapterArtifacts(getAdapter(a.adapterId), a.dir),
+      })),
+    ),
     overallDrift,
   };
 }
