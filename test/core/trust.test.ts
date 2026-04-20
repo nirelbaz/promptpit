@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import path from "node:path";
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { loadTrust, saveTrust, hashScript, classifyScript, trustSource, isTrusted } from "../../src/core/trust.js";
+import { loadTrust, saveTrust, hashScript, classifyScript, trustSource, isTrusted, forgetSource } from "../../src/core/trust.js";
 
 let home: string;
 beforeEach(() => { home = mkdtempSync(path.join(tmpdir(), "pit-trust-")); });
@@ -49,5 +49,21 @@ describe("trust", () => {
     const trust = await loadTrust(home, { silent: true });
     expect(trust.trusted).toEqual({});
     expect(readFileSync(p, "utf-8")).toBe("NOT JSON");
+  });
+
+  it("classifyScript categorizes real fixture scripts correctly", () => {
+    const big = readFileSync(path.resolve(__dirname, "../__fixtures__/trust-script-large/big.sh"), "utf-8");
+    const huge = readFileSync(path.resolve(__dirname, "../__fixtures__/trust-script-large/huge.sh"), "utf-8");
+    expect(classifyScript(big).category).toBe("too-large-to-preview");
+    expect(classifyScript(huge).category).toBe("too-large-to-run");
+  });
+
+  it("forgetSource removes a source, leaving others intact", async () => {
+    let trust = await loadTrust(home);
+    trust = trustSource(trust, "github:a/stack", { preinstall: hashScript("a") });
+    trust = trustSource(trust, "github:b/stack", { postinstall: hashScript("b") });
+    trust = forgetSource(trust, "github:a/stack");
+    expect(trust.trusted["github:a/stack"]).toBeUndefined();
+    expect(trust.trusted["github:b/stack"]).toBeDefined();
   });
 });
