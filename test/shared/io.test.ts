@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { printDryRunReport } from "../../src/shared/io.js";
+import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
+import { printDryRunReport, log } from "../../src/shared/io.js";
 
 describe("printDryRunReport", () => {
   const originalLog = console.log;
@@ -90,5 +90,45 @@ describe("printDryRunReport", () => {
     printDryRunReport("Dry run:", [], false);
     const joined = output.join("\n");
     expect(joined).toContain("Dry run");
+  });
+});
+
+describe("log.warnOnce", () => {
+  let logSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    log._resetWarnOnce();
+    logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+    log._resetWarnOnce();
+  });
+
+  it("emits the warning on the first call for a key", () => {
+    log.warnOnce("abc", "first warning");
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(logSpy.mock.calls[0]!.join(" ")).toContain("first warning");
+  });
+
+  it("deduplicates repeated calls with the same key", () => {
+    log.warnOnce("abc", "first warning");
+    log.warnOnce("abc", "first warning");
+    log.warnOnce("abc", "first warning");
+    expect(logSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats different keys as distinct", () => {
+    log.warnOnce("one", "msg a");
+    log.warnOnce("two", "msg b");
+    expect(logSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not dedup across _resetWarnOnce (test helper)", () => {
+    log.warnOnce("abc", "warn");
+    log._resetWarnOnce();
+    log.warnOnce("abc", "warn");
+    expect(logSpy).toHaveBeenCalledTimes(2);
   });
 });

@@ -3,11 +3,32 @@ import ora, { type Ora } from "ora";
 import { createTwoFilesPatch } from "diff";
 import type { DryRunEntry } from "../adapters/types.js";
 
+// Dedup set for warnOnce. Lives for the lifetime of the process — resets
+// naturally on each CLI invocation. Intentionally not exposed; callers drive
+// it via `log.warnOnce(key, msg)`.
+const emittedWarnKeys = new Set<string>();
+
 export const log = {
   info: (msg: string) => console.log(chalk.blue("ℹ"), msg),
   success: (msg: string) => console.log(chalk.green("✔"), msg),
   warn: (msg: string) => console.log(chalk.yellow("⚠"), msg),
   error: (msg: string) => console.error(chalk.red("✖"), msg),
+  /**
+   * Emit a warning only once per key within this process. Use for warnings
+   * that fire inside hot loops (scan/read/collect) where the same message
+   * would otherwise repeat on every invocation.
+   *
+   * Keep counts-matter warnings (e.g. validate summaries) on `log.warn`.
+   */
+  warnOnce: (key: string, msg: string) => {
+    if (emittedWarnKeys.has(key)) return;
+    emittedWarnKeys.add(key);
+    console.log(chalk.yellow("⚠"), msg);
+  },
+  /** Test helper — clears the dedup set. Do not use in production code. */
+  _resetWarnOnce: () => {
+    emittedWarnKeys.clear();
+  },
 };
 
 export function spinner(text: string): Ora {
