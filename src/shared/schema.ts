@@ -374,3 +374,15 @@ export const configSchema = z.object({
 });
 
 export type PitConfig = z.infer<typeof configSchema>;
+
+// --- Trust Store (~/.promptpit/trust.json) ---
+
+export const trustSchema = z.object({
+  version: z.literal(1),
+  trusted: z.record(z.string(), z.object({
+    trustedAt: z.string().datetime(),
+    scripts: z.record(z.string(), z.string().regex(/^sha256:[a-f0-9]{64}$/)),
+  })).default({}),
+});
+
+export type PitTrust = z.infer<typeof trustSchema>;
