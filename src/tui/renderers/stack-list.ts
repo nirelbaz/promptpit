@@ -7,6 +7,10 @@ export interface RenderOptions {
   stacks: ScannedStack[];
   scopeLabel: string;
   version?: string;
+  /** When true, an empty `stacks` array reflects active filters masking
+   *  otherwise-valid results — not an empty tree. Changes the empty message
+   *  from the onboarding card to a one-line "no match" notice. */
+  filterActive?: boolean;
 }
 
 const DIVIDER = "─".repeat(65);
@@ -20,12 +24,16 @@ export function glyphFor(kind: ScannedStack["kind"]): string {
 }
 
 export function renderStackList(opts: RenderOptions): string {
-  const { cwd, stacks, scopeLabel, version = "" } = opts;
+  const { cwd, stacks, scopeLabel, version = "", filterActive = false } = opts;
   const header = version
     ? `pit ${version} · scope: ${scopeLabel}`
     : `pit · scope: ${scopeLabel}`;
 
-  if (stacks.length === 0) return renderEmpty(cwd, scopeLabel);
+  if (stacks.length === 0) {
+    return filterActive
+      ? "No stacks match the active filters."
+      : renderEmpty(cwd, scopeLabel);
+  }
 
   const grouped = group(stacks, cwd);
   const lines: string[] = [header, DIVIDER];

@@ -41,14 +41,17 @@ export async function lsCommand(cwd: string, opts: LsOptions): Promise<number> {
   const includeGlobal =
     opts.scope === "global" || (opts.scope !== "current" && opts.global !== false);
 
+  const scopeGlobalOnly = opts.scope === "global";
   const stacks = await scan({
     cwd: opts.all ? homedir() : scanRoot,
     globalRoots: includeGlobal ? GLOBAL_ROOTS : [],
     depth,
     ignoreGlobs: cfg.scan.ignore,
+    skipLocal: scopeGlobalOnly,
   });
 
   const filtered = applyFilters(stacks, opts);
+  const filterActive = !!(opts.managed || opts.unmanaged || opts.drifted || opts.kind);
   const exitCode = opts.strict && filtered.some((s) => s.overallDrift === "drifted") ? 1 : 0;
 
   if (opts.json) {
@@ -57,6 +60,10 @@ export async function lsCommand(cwd: string, opts: LsOptions): Promise<number> {
   }
 
   if (opts.short) {
+    if (filterActive && filtered.length === 0) {
+      console.error("No stacks match the active filters.");
+      return exitCode;
+    }
     for (const s of filtered) {
       const glyph = glyphFor(s.kind);
       const version = s.kind === "managed" ? ` · v${s.promptpit!.stackVersion}` : "";
@@ -67,7 +74,7 @@ export async function lsCommand(cwd: string, opts: LsOptions): Promise<number> {
   }
 
   const scopeLabel = describeScope(opts, defaultDepth);
-  console.log(renderStackList({ cwd, stacks: filtered, scopeLabel }));
+  console.log(renderStackList({ cwd, stacks: filtered, scopeLabel, filterActive }));
   return exitCode;
 }
 

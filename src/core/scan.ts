@@ -15,6 +15,10 @@ export interface ScanOptions {
   depth?: number;
   ignoreGlobs?: string[];
   followSymlinks?: boolean;
+  /** Skip the current-tree walk entirely. Only globalRoots are materialized.
+   *  Used by `pit ls --scope global` — the header promises "global only" but
+   *  the body used to still include cwd hits. */
+  skipLocal?: boolean;
 }
 
 type AdapterArtifacts = ScannedStack["adapters"][number]["artifacts"];
@@ -62,7 +66,9 @@ export async function scan(opts: ScanOptions): Promise<ScannedStack[]> {
   const visited = new Set<string>();
   const boundary = path.resolve(opts.cwd);
 
-  await walk(opts.cwd, 0, depth, ignore, hits, visited, followSymlinks, boundary);
+  if (!opts.skipLocal) {
+    await walk(opts.cwd, 0, depth, ignore, hits, visited, followSymlinks, boundary);
+  }
 
   const stacks = await materializeStacks(hits);
 

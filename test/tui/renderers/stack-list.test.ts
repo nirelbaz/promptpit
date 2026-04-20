@@ -68,4 +68,15 @@ describe("renderStackList", () => {
     expect(out).toMatch(/No AI config found/);
     expect(out).toMatch(/pit init/);
   });
+
+  it("renders no-match notice (not onboarding) when filters masked results", () => {
+    const out = renderStackList({
+      cwd: "/u/projects/new-repo",
+      stacks: [],
+      scopeLabel: "current",
+      filterActive: true,
+    });
+    expect(out).toMatch(/No stacks match the active filters/);
+    expect(out).not.toMatch(/pit init/);
+  });
 });
