@@ -95,6 +95,31 @@ describe("scan", () => {
     expect(stacks.find((s) => s.kind === "global")).toBeDefined();
   });
 
+  it("ignores translated docs/examples trees by default", async () => {
+    // Mirrors repos like everything-claude-code where `docs/ja-JP/skills/...`
+    // contains translated copies of AI config. Without ignore these
+    // surface as dozens of bogus unmanaged stacks.
+    const root = mkdtempSync(path.join(tmpdir(), "pit-docs-ignore-"));
+    mkdirSync(path.join(root, ".promptpit"), { recursive: true });
+    writeFileSync(
+      path.join(root, ".promptpit", "stack.json"),
+      JSON.stringify({ name: "docs-root", version: "0.1.0" }),
+    );
+    writeFileSync(path.join(root, "CLAUDE.md"), "# root\n");
+    // Translated copy under docs/ — must NOT surface as a stack.
+    mkdirSync(path.join(root, "docs", "ja-JP"), { recursive: true });
+    writeFileSync(path.join(root, "docs", "ja-JP", "CLAUDE.md"), "# translated\n");
+    mkdirSync(path.join(root, "examples", "demo"), { recursive: true });
+    writeFileSync(path.join(root, "examples", "demo", "AGENTS.md"), "# example\n");
+
+    const stacks = await scan({ cwd: root, globalRoots: [], depth: 5 });
+    expect(stacks).toHaveLength(1);
+    expect(stacks[0]!.kind).toBe("managed");
+    // Neither the docs subtree nor examples subtree should show as an annotation.
+    expect(stacks[0]!.unmanagedAnnotations.find((a) => a.subpath.startsWith("docs"))).toBeUndefined();
+    expect(stacks[0]!.unmanagedAnnotations.find((a) => a.subpath.startsWith("examples"))).toBeUndefined();
+  });
+
   it("reports per-adapter drift rather than broadcasting stack-level drift", async () => {
     // Fixture: a managed stack with rules tracked for two adapters. On disk,
     // the claude-code rule file matches the recorded hash (synced) while the
