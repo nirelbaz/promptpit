@@ -96,7 +96,9 @@ describe("Standards adapter AGENT.md (singular) fallback", () => {
   });
 
   it("prefers AGENTS.md when both exist and warns about the other", async () => {
-    const warn = vi.spyOn(console, "log").mockImplementation(() => {});
+    const warn = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
     await writeFile(path.join(dir, "AGENTS.md"), "plural\n");
     await writeFile(path.join(dir, "AGENT.md"), "singular\n");
     const cfg = await standardsAdapter.read(dir);

@@ -96,42 +96,95 @@ describe("printDryRunReport", () => {
 });
 
 describe("log.warnOnce", () => {
-  let logSpy: ReturnType<typeof vi.spyOn>;
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     log._resetWarnOnce();
-    logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
   });
 
   afterEach(() => {
-    logSpy.mockRestore();
+    stderrSpy.mockRestore();
     log._resetWarnOnce();
   });
 
   it("emits the warning on the first call for a key", () => {
     log.warnOnce("abc", "first warning");
-    expect(logSpy).toHaveBeenCalledTimes(1);
-    expect(logSpy.mock.calls[0]!.join(" ")).toContain("first warning");
+    expect(stderrSpy).toHaveBeenCalledTimes(1);
+    expect(String(stderrSpy.mock.calls[0]![0])).toContain("first warning");
   });
 
   it("deduplicates repeated calls with the same key", () => {
     log.warnOnce("abc", "first warning");
     log.warnOnce("abc", "first warning");
     log.warnOnce("abc", "first warning");
-    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(stderrSpy).toHaveBeenCalledTimes(1);
   });
 
   it("treats different keys as distinct", () => {
     log.warnOnce("one", "msg a");
     log.warnOnce("two", "msg b");
-    expect(logSpy).toHaveBeenCalledTimes(2);
+    expect(stderrSpy).toHaveBeenCalledTimes(2);
   });
 
   it("does not dedup across _resetWarnOnce (test helper)", () => {
     log.warnOnce("abc", "warn");
     log._resetWarnOnce();
     log.warnOnce("abc", "warn");
-    expect(logSpy).toHaveBeenCalledTimes(2);
+    expect(stderrSpy).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * N18: every incidental notice (warnings, info banners, glyph-prefixed status)
+ * must go to stderr so `pit ls --json`, `pit check --json`, etc. keep a clean
+ * stdout. Regression test: if anyone re-routes these through `console.log`,
+ * these assertions fail.
+ */
+describe("log channel routing", () => {
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+  let stdoutSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    stdoutSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    stderrSpy.mockRestore();
+    stdoutSpy.mockRestore();
+  });
+
+  it("routes log.warn to stderr, not stdout", () => {
+    log.warn("boom");
+    expect(stderrSpy).toHaveBeenCalled();
+    expect(String(stderrSpy.mock.calls[0]![0])).toContain("boom");
+    expect(stdoutSpy).not.toHaveBeenCalled();
+  });
+
+  it("routes log.info to stderr, not stdout", () => {
+    log.info("heads up");
+    expect(stderrSpy).toHaveBeenCalled();
+    expect(String(stderrSpy.mock.calls[0]![0])).toContain("heads up");
+    expect(stdoutSpy).not.toHaveBeenCalled();
+  });
+
+  it("routes log.success to stderr, not stdout", () => {
+    log.success("done");
+    expect(stderrSpy).toHaveBeenCalled();
+    expect(stdoutSpy).not.toHaveBeenCalled();
+  });
+
+  it("routes log.error to stderr, not stdout", () => {
+    log.error("nope");
+    expect(stderrSpy).toHaveBeenCalled();
+    expect(stdoutSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -141,18 +194,20 @@ describe("log.warnOnce", () => {
  * We assert no escape sequences slip through `start` → `succeed`/`fail`/`warn`.
  */
 describe("spinner (non-TTY)", () => {
-  let logSpy: ReturnType<typeof vi.spyOn>;
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
   });
 
   afterEach(() => {
-    logSpy.mockRestore();
+    stderrSpy.mockRestore();
   });
 
   function collected(): string {
-    return logSpy.mock.calls.map((c) => c.map(String).join(" ")).join("\n");
+    return stderrSpy.mock.calls.map((c) => String(c[0])).join("");
   }
 
   it("emits no ANSI escapes on start + succeed", () => {

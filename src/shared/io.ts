@@ -17,11 +17,19 @@ if (colorDisabled) {
 // it via `log.warnOnce(key, msg)`.
 const emittedWarnKeys = new Set<string>();
 
+// N18: status/notice output must never mix with the command's data output
+// (JSON, diffs, tables). Anything routed through `log.*` is incidental —
+// warnings, info banners, success glyphs — so send it all to stderr. Commands
+// that want their output on stdout already use `console.log` directly.
+function writeNotice(line: string): void {
+  process.stderr.write(line + "\n");
+}
+
 export const log = {
-  info: (msg: string) => console.log(chalk.blue("ℹ"), msg),
-  success: (msg: string) => console.log(chalk.green("✔"), msg),
-  warn: (msg: string) => console.log(chalk.yellow("⚠"), msg),
-  error: (msg: string) => console.error(chalk.red("✖"), msg),
+  info: (msg: string) => writeNotice(`${chalk.blue("ℹ")} ${msg}`),
+  success: (msg: string) => writeNotice(`${chalk.green("✔")} ${msg}`),
+  warn: (msg: string) => writeNotice(`${chalk.yellow("⚠")} ${msg}`),
+  error: (msg: string) => writeNotice(`${chalk.red("✖")} ${msg}`),
   /**
    * Emit a warning only once per key within this process. Use for warnings
    * that fire inside hot loops (scan/read/collect) where the same message
@@ -32,7 +40,7 @@ export const log = {
   warnOnce: (key: string, msg: string) => {
     if (emittedWarnKeys.has(key)) return;
     emittedWarnKeys.add(key);
-    console.log(chalk.yellow("⚠"), msg);
+    writeNotice(`${chalk.yellow("⚠")} ${msg}`);
   },
   /** Test helper — clears the dedup set. Do not use in production code. */
   _resetWarnOnce: () => {
@@ -62,23 +70,24 @@ export function spinner(text: string): Ora {
 function createQuietSpinner(initialText: string): Ora {
   let current = initialText;
   // Print the label up front so users on non-TTY still see what's in flight.
-  console.log(current);
+  // Same channel as log.* — spinners are status, not command output.
+  writeNotice(current);
   const stub = {
     text: current,
     succeed(msg?: string) {
-      console.log(`${chalk.green("✔")} ${msg ?? current}`);
+      writeNotice(`${chalk.green("✔")} ${msg ?? current}`);
       return stub;
     },
     fail(msg?: string) {
-      console.log(`${chalk.red("✖")} ${msg ?? current}`);
+      writeNotice(`${chalk.red("✖")} ${msg ?? current}`);
       return stub;
     },
     warn(msg?: string) {
-      console.log(`${chalk.yellow("⚠")} ${msg ?? current}`);
+      writeNotice(`${chalk.yellow("⚠")} ${msg ?? current}`);
       return stub;
     },
     info(msg?: string) {
-      console.log(`${chalk.blue("ℹ")} ${msg ?? current}`);
+      writeNotice(`${chalk.blue("ℹ")} ${msg ?? current}`);
       return stub;
     },
     start(msg?: string) {

@@ -125,10 +125,13 @@ describe("collectStack", () => {
     await writeFile(path.join(projectDir, "CLAUDE.md"), largeContent);
 
     const warnings: string[] = [];
-    const warnSpy = vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
-      const line = args.join(" ");
-      if (line.includes("unusually large")) warnings.push(line);
-    });
+    const warnSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk: unknown) => {
+        const line = String(chunk);
+        if (line.includes("unusually large")) warnings.push(line);
+        return true;
+      });
 
     try {
       await collectStack(projectDir, outDir);
@@ -192,6 +195,12 @@ describe("collectStack", () => {
     const spy = vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
       logs.push(args.join(" "));
     });
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk: unknown) => {
+        logs.push(String(chunk));
+        return true;
+      });
 
     try {
       const outDir = await mkdtemp(path.join(tmpdir(), "pit-collect-summary-"));
@@ -199,6 +208,7 @@ describe("collectStack", () => {
       await rm(outDir, { recursive: true });
     } finally {
       spy.mockRestore();
+      stderrSpy.mockRestore();
     }
 
     const summaryLine = logs.find((l) => l.includes("Collected:"));
