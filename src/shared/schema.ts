@@ -350,3 +350,27 @@ export const scannedStackSchema = z.object({
 });
 
 export type ScannedStack = z.infer<typeof scannedStackSchema>;
+
+// --- User Config (~/.promptpit/config.json) ---
+
+export const configSchema = z.object({
+  version: z.literal(1),
+  scan: z.object({
+    defaultDepth: z.number().int().positive().default(5),
+    ignore: z.array(z.string()).default([
+      "node_modules", ".git", "dist", "build", ".next", "out",
+      "target", "vendor", ".venv", "__pycache__", ".turbo",
+      ".cache", "coverage",
+    ]),
+  }).default({}),
+  recents: z.object({
+    targetPaths: z.array(z.string()).max(20).default([]),
+    sources: z.array(z.string()).max(20).default([]),
+  }).default({}),
+  ui: z.object({
+    showGlobalRow: z.boolean().default(true),
+    offline: z.boolean().default(false),
+  }).default({}),
+});
+
+export type PitConfig = z.infer<typeof configSchema>;
