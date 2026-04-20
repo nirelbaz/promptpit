@@ -69,6 +69,20 @@ describe("renderStackList", () => {
     expect(out).toMatch(/pit init/);
   });
 
+  it("includes a compact-counts legend when stacks are rendered", () => {
+    const out = renderStackList({
+      cwd: "/u/projects/app-frontend",
+      stacks: [managed()],
+      scopeLabel: "current",
+    });
+    expect(out).toMatch(/legend:.*s=skills.*a=agents/);
+  });
+
+  it("omits the legend on empty-state output", () => {
+    const out = renderStackList({ cwd: "/u/x", stacks: [], scopeLabel: "current" });
+    expect(out).not.toMatch(/legend:/);
+  });
+
   it("renders no-match notice (not onboarding) when filters masked results", () => {
     const out = renderStackList({
       cwd: "/u/projects/new-repo",

@@ -16,5 +16,6 @@ exports[`renderStackList > renders managed + unmanaged + global into grouped sec
   global
   ◉  user-level                    ~
      claude-code     12s · 3a · 4 cmd
-─────────────────────────────────────────────────────────────────"
+─────────────────────────────────────────────────────────────────
+  legend:  s=skills  a=agents  rules  cmd=commands  mcp  inst=instructions file"
 `;

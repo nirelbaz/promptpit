@@ -43,6 +43,9 @@ export function renderStackList(opts: RenderOptions): string {
     for (const s of rows) lines.push(...renderRow(s));
   }
   lines.push(DIVIDER);
+  lines.push(
+    chalk.dim("  legend:  s=skills  a=agents  rules  cmd=commands  mcp  inst=instructions file"),
+  );
   return lines.join("\n");
 }
 
