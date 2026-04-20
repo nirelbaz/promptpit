@@ -42,15 +42,11 @@ async function detectUnsupportedTools(dir: string): Promise<string[]> {
   return found;
 }
 
-/** Paths under .github/prompts/ that we've already warned about, to avoid
- *  spamming users with one message per file per scan. A shared io-level
- *  dedup helper is being designed (N14); until it lands, keep this local. */
-const promptsWarningEmitted = new Set<string>();
-
 /** Copilot's prompt-files convention is `.prompt.md` under `.github/prompts/`.
  *  Repos in the wild (e.g. Azure SDK) stash `-guidelines.md` docs in the same
  *  directory. Those get silently skipped; surface a one-time info line so
- *  users can rename if they want them collected. */
+ *  users can rename if they want them collected. Deduped via `log.warnOnce`
+ *  so a large scan doesn't print one line per orphan file. */
 async function notePromptsDirectory(dir: string): Promise<void> {
   let entries: Dirent[];
   try {
@@ -63,10 +59,9 @@ async function notePromptsDirectory(dir: string): Promise<void> {
     if (!entry.name.endsWith(".md")) continue;
     if (entry.name.endsWith(".prompt.md")) continue;
     const filePath = path.join(dir, entry.name);
-    if (promptsWarningEmitted.has(filePath)) continue;
-    promptsWarningEmitted.add(filePath);
-    log.info(
-      `Note: ${filePath} doesn't match *.prompt.md and is not collected. Rename to *.prompt.md to include.`,
+    log.warnOnce(
+      `prompts-orphan:${filePath}`,
+      `${filePath} doesn't match *.prompt.md and is not collected. Rename to *.prompt.md to include.`,
     );
   }
 }
