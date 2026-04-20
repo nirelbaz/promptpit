@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`renderStackList > renders managed + unmanaged + global into grouped sections 1`] = `
-"pit  · scope: current tree (depth 5) + global
+"pit · scope: current tree (depth 5) + global
 ─────────────────────────────────────────────────────────────────
 
   current folder (/u/projects/app-frontend)

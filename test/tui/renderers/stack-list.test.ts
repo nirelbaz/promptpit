@@ -45,8 +45,22 @@ describe("renderStackList", () => {
       counts: { skills: 0, rules: 2, agents: 0, commands: 0, mcp: 0, instructions: false },
     }] });
     const out = renderStackList({ cwd: "/u/projects/app-frontend", stacks: [stack], scopeLabel: "current" });
-    expect(out).toMatch(/packages\/ui/);
-    expect(out).toMatch(/unmanaged/);
+    expect(out).toMatch(/\+\s+packages\/ui/);
+    expect(out).toContain("cursor");
+  });
+
+  it("does not treat ancestor paths as 'current folder'", () => {
+    const ancestor: ScannedStack = {
+      root: "/u/projects",
+      kind: "unmanaged",
+      name: "projects",
+      manifestCorrupt: false,
+      adapters: [{ id: "claude-code", artifacts: { skills: 0, rules: 0, agents: 0, commands: 0, mcp: 0, instructions: true }, drift: "unknown" }],
+      unmanagedAnnotations: [],
+      overallDrift: "unknown",
+    };
+    const out = renderStackList({ cwd: "/u/projects/app-frontend", stacks: [ancestor], scopeLabel: "test" });
+    expect(out).not.toMatch(/current folder \(\/u\/projects\)/);
   });
 
   it("renders onboarding card when stacks is empty", () => {

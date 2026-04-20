@@ -13,7 +13,9 @@ const DIVIDER = "─".repeat(65);
 
 export function renderStackList(opts: RenderOptions): string {
   const { cwd, stacks, scopeLabel, version = "" } = opts;
-  const header = `pit ${version} · scope: ${scopeLabel}`.trimEnd();
+  const header = version
+    ? `pit ${version} · scope: ${scopeLabel}`
+    : `pit · scope: ${scopeLabel}`;
 
   if (stacks.length === 0) return renderEmpty(cwd, scopeLabel);
 
@@ -43,10 +45,12 @@ function renderEmpty(cwd: string, scope: string): string {
 
 function group(stacks: ScannedStack[], cwd: string): Array<[string, ScannedStack[]]> {
   const groups = new Map<string, ScannedStack[]>();
+  const cwdR = path.resolve(cwd);
   for (const s of stacks) {
+    const rootR = path.resolve(s.root);
     const label =
       s.kind === "global" ? "global" :
-      path.resolve(s.root) === path.resolve(cwd) || path.resolve(cwd).startsWith(path.resolve(s.root) + path.sep)
+      (rootR === cwdR || rootR.startsWith(cwdR + path.sep))
         ? `current folder (${s.root})` :
       path.dirname(s.root);
     const arr = groups.get(label) ?? [];
