@@ -14,6 +14,28 @@ MVP-1 of the new-UX plan. Core infrastructure for the forthcoming interactive TU
 - **`ScriptedPrompter` test harness** in `src/shared/interactive.ts` — queue-based mock for wizard-flow tests. Lets TUI action tests assert the exact sequence of prompts without a TTY.
 - Shared helpers in `src/shared/utils.ts`: `loadJsonFile` (read + Zod-validate + fall back to defaults) and `writeJsonAtomic` (tmp-then-rename). Unifies the pattern used by `config.ts` and `trust.ts`.
 - `DEFAULT_IGNORE` in `src/shared/constants.ts` — single source of truth for the scan ignore list, referenced by both `scan.ts` and `configSchema`.
+- `.windsurf` / `.gemini` / `.opencode` / `.ai-workspace` / `.trae` / `.zed` now surfaced under each stack as `+ unsupported: ...` so users know pit saw them even without a dedicated adapter.
+- Warning dedup: `log.warnOnce(key, msg)` emits identical warnings only once per process — skip warnings and agnix notices no longer repeat N times on `pit ls`/`pit status`.
+- `pit ls` now prints a one-line legend (`s=skills  a=agents  rules  cmd=commands  mcp  inst=instructions file`) so the compact count format is self-documenting.
+
+### Changed
+
+- Standards adapter now accepts `AGENT.md` (singular) in addition to `AGENTS.md`. Real-world repos (e.g., Snyk) ship the singular form.
+- `pit ls --scope global` now actually skips the current-tree scan — header and body now agree.
+- `pit ls --drifted` / `--managed` / `--unmanaged` empty states now say "No stacks match the active filters" instead of the onboarding "No AI config found" card. Reserves the onboarding card for the real empty scan.
+- `pit ls` drift is now per-adapter: editing one `.cursor/rules/foo.mdc` tags only the `cursor` adapter, not all of them.
+- Scan now prunes `docs`, `doc`, `examples`, `example`, `samples` by default. Fixes 17 spurious "unmanaged" entries on monorepos with translated documentation trees.
+- `log.warn` / `log.info` / `log.success` now write to stderr. Previously corrupted `pit ls --json` and `pit collect --json` output when any warning fired during a scan.
+- Spinner (`spinner()`) falls back to plain-text output when `stdout` isn't a TTY or `NO_COLOR` is set. Previously leaked `[32m✔[39m` escape sequences into piped output from `pit collect` / `pit install`.
+- `pit collect` summary hides zero counts. Stack name falls back to the directory basename when `package.json` has no name or name `"root"`.
+
+### Fixed
+
+- Bare `pit` (no args) now prints help and exits 0 (was exit 1).
+- `pit validate` exits 1 when errors are reported (was exit 0, breaking CI gating).
+- `pit check --json` exits 1 when `pass: false` (was exit 0, diverging from the non-JSON form).
+- `pit install --dry-run` exits 1 when `.promptpit/` is missing (was exit 0 with `✖` error prefix).
+- `.github/prompts/*.md` files that don't match the `*.prompt.md` convention now produce a one-time info note instead of being silently skipped.
 
 ### Notes
 
