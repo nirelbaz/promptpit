@@ -42,6 +42,35 @@ async function detectUnsupportedTools(dir: string): Promise<string[]> {
   return found;
 }
 
+/** Paths under .github/prompts/ that we've already warned about, to avoid
+ *  spamming users with one message per file per scan. A shared io-level
+ *  dedup helper is being designed (N14); until it lands, keep this local. */
+const promptsWarningEmitted = new Set<string>();
+
+/** Copilot's prompt-files convention is `.prompt.md` under `.github/prompts/`.
+ *  Repos in the wild (e.g. Azure SDK) stash `-guidelines.md` docs in the same
+ *  directory. Those get silently skipped; surface a one-time info line so
+ *  users can rename if they want them collected. */
+async function notePromptsDirectory(dir: string): Promise<void> {
+  let entries: Dirent[];
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    if (!entry.name.endsWith(".md")) continue;
+    if (entry.name.endsWith(".prompt.md")) continue;
+    const filePath = path.join(dir, entry.name);
+    if (promptsWarningEmitted.has(filePath)) continue;
+    promptsWarningEmitted.add(filePath);
+    log.info(
+      `Note: ${filePath} doesn't match *.prompt.md and is not collected. Rename to *.prompt.md to include.`,
+    );
+  }
+}
+
 export function detectProjectRoot(start: string, boundary?: string): string {
   const resolvedStart = path.resolve(start);
   const resolvedBoundary = boundary ? path.resolve(boundary) : undefined;
@@ -121,6 +150,12 @@ async function walk(
     entries = await readdir(dir, { withFileTypes: true });
   } catch {
     return; /* permission denied, pruned silently */
+  }
+
+  // Observability only: flag .github/prompts/*.md that don't follow the
+  // .prompt.md convention, so users aren't confused when they're dropped.
+  if (path.basename(dir) === "prompts" && path.basename(path.dirname(dir)) === ".github") {
+    await notePromptsDirectory(dir);
   }
 
   // Detect AI config at THIS dir
