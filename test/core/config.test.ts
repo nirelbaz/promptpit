@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import path from "node:path";
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { loadConfig, saveConfig, addRecentTarget } from "../../src/core/config.js";
+import { loadConfig, saveConfig, addRecentTarget, addRecentSource } from "../../src/core/config.js";
 
 let home: string;
 
@@ -46,5 +46,23 @@ describe("config", () => {
     expect(cfg.recents.targetPaths[0]).toBe("/p/24");
     cfg = addRecentTarget(cfg, "/p/24");
     expect(cfg.recents.targetPaths.filter((p) => p === "/p/24").length).toBe(1);
+  });
+
+  it("addRecentSource trims to 20 entries and dedupes", async () => {
+    let cfg = await loadConfig(home);
+    for (let i = 0; i < 25; i++) cfg = addRecentSource(cfg, `github:org/repo-${i}`);
+    expect(cfg.recents.sources.length).toBe(20);
+    expect(cfg.recents.sources[0]).toBe("github:org/repo-24");
+    cfg = addRecentSource(cfg, "github:org/repo-24");
+    expect(cfg.recents.sources.filter((s) => s === "github:org/repo-24").length).toBe(1);
+  });
+
+  it("falls back to defaults when JSON is valid but schema fails (no overwrite)", async () => {
+    mkdirSync(path.join(home, ".promptpit"), { recursive: true });
+    writeFileSync(path.join(home, ".promptpit/config.json"), '{"version": 999, "junk": true}', { flag: "w" });
+    const cfg = await loadConfig(home, { silent: true });
+    expect(cfg.version).toBe(1);
+    expect(cfg.ui.showGlobalRow).toBe(true);
+    expect(readFileSync(path.join(home, ".promptpit/config.json"), "utf-8")).toBe('{"version": 999, "junk": true}');
   });
 });
