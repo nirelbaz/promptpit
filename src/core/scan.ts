@@ -192,6 +192,10 @@ async function materializeOne(rec: HitRecord): Promise<ScannedStack> {
 
   let overallDrift: ScannedStack["overallDrift"] = "unknown";
   let manifestCorrupt = false;
+  /** Per-adapter drift map, keyed by adapter id. Only populated when we have
+   *  a reconcile result — otherwise adapters fall back to "synced" (managed)
+   *  or "unknown" (unmanaged/global) below. */
+  const adapterDrift = new Map<string, "synced" | "drifted">();
   const installedPath = promptpitDir ? path.join(promptpitDir, "installed.json") : null;
   const hasInstalledJson = installedPath ? await exists(installedPath) : false;
 
@@ -212,7 +216,14 @@ async function materializeOne(rec: HitRecord): Promise<ScannedStack> {
       if (!manifestCorrupt) {
         const states = new Set<string>();
         for (const s of reconciled.stacks) {
-          for (const a of s.adapters) states.add(a.state);
+          for (const a of s.adapters) {
+            states.add(a.state);
+            const drifted =
+              a.state === "drifted" || a.state === "deleted" || a.state === "removed-by-user";
+            // Escalate to drifted across stacks; never downgrade back to synced.
+            if (drifted) adapterDrift.set(a.adapterId, "drifted");
+            else if (!adapterDrift.has(a.adapterId)) adapterDrift.set(a.adapterId, "synced");
+          }
         }
         overallDrift =
           states.has("drifted") || states.has("deleted") || states.has("removed-by-user")
@@ -243,7 +254,10 @@ async function materializeOne(rec: HitRecord): Promise<ScannedStack> {
     adapters: [...adapterCounts.entries()].map(([id, artifacts]) => ({
       id: id as AdapterId,
       artifacts,
-      drift: managed ? (overallDrift === "drifted" ? "drifted" : "synced") : "unknown",
+      // Per-adapter state from reconcile wins. Adapters not in reconcile
+      // output (e.g. detected on disk but never installed) default to synced
+      // for managed stacks and unknown for everything else.
+      drift: managed ? (adapterDrift.get(id) ?? "synced") : "unknown",
     })),
     unmanagedAnnotations: await Promise.all(
       rec.subpathAnnotations.map(async (a) => ({

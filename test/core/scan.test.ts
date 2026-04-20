@@ -3,6 +3,7 @@ import path from "node:path";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { scan } from "../../src/core/scan.js";
+import { computeHash } from "../../src/core/manifest.js";
 
 const fixture = path.resolve(__dirname, "../__fixtures__/scan-basic");
 
@@ -78,5 +79,69 @@ describe("scan", () => {
   it("does not add a global stack when globalRoots has no AI config", async () => {
     const stacks = await scan({ cwd: fixture, globalRoots: [], depth: 5 });
     expect(stacks.find((s) => s.kind === "global")).toBeUndefined();
+  });
+
+  it("skipLocal=true scans only globalRoots, skipping the cwd walk", async () => {
+    const stacks = await scan({
+      cwd: fixture,
+      globalRoots: [path.resolve(__dirname, "../__fixtures__/scan-global")],
+      depth: 5,
+      skipLocal: true,
+    });
+    // No current-tree stacks should appear.
+    expect(stacks.find((s) => s.name === "app-frontend")).toBeUndefined();
+    expect(stacks.find((s) => s.name === "app-backend")).toBeUndefined();
+    expect(stacks.find((s) => s.name === "llm-demo")).toBeUndefined();
+    expect(stacks.find((s) => s.kind === "global")).toBeDefined();
+  });
+
+  it("reports per-adapter drift rather than broadcasting stack-level drift", async () => {
+    // Fixture: a managed stack with rules tracked for two adapters. On disk,
+    // the claude-code rule file matches the recorded hash (synced) while the
+    // cursor rule file does NOT (drifted). A bug previously tagged all
+    // adapters as drifted whenever any one was.
+    const root = mkdtempSync(path.join(tmpdir(), "pit-per-adapter-drift-"));
+
+    const claudeRuleContent = "# claude rule\nbody\n";
+    const cursorRuleOnDisk = "# drifted cursor rule\n";
+    const cursorRuleRecordedContent = "# original cursor rule\n"; // different → drifted
+
+    mkdirSync(path.join(root, ".promptpit"), { recursive: true });
+    mkdirSync(path.join(root, ".claude", "rules"), { recursive: true });
+    mkdirSync(path.join(root, ".cursor", "rules"), { recursive: true });
+
+    writeFileSync(
+      path.join(root, ".promptpit", "stack.json"),
+      JSON.stringify({ name: "per-adapter-drift", version: "0.1.0" }),
+    );
+    // CLAUDE.md triggers claude-code detection; .cursor/rules/ triggers cursor.
+    writeFileSync(path.join(root, "CLAUDE.md"), "# instructions\n");
+    writeFileSync(path.join(root, ".claude", "rules", "style.md"), claudeRuleContent);
+    writeFileSync(path.join(root, ".cursor", "rules", "style.mdc"), cursorRuleOnDisk);
+
+    const manifest = {
+      version: 1,
+      installs: [
+        {
+          stack: "per-adapter-drift",
+          stackVersion: "0.1.0",
+          installedAt: new Date().toISOString(),
+          adapters: {
+            "claude-code": { rules: { style: { hash: computeHash(claudeRuleContent) } } },
+            cursor: { rules: { style: { hash: computeHash(cursorRuleRecordedContent) } } },
+          },
+        },
+      ],
+    };
+    writeFileSync(path.join(root, ".promptpit", "installed.json"), JSON.stringify(manifest));
+
+    const stacks = await scan({ cwd: root, globalRoots: [], depth: 2 });
+    const managed = stacks.find((s) => s.kind === "managed");
+    expect(managed).toBeDefined();
+    const byId = Object.fromEntries(managed!.adapters.map((a) => [a.id, a]));
+    expect(byId["cursor"]?.drift).toBe("drifted");
+    expect(byId["claude-code"]?.drift).toBe("synced");
+    // Overall is still the OR across adapters.
+    expect(managed!.overallDrift).toBe("drifted");
   });
 });
