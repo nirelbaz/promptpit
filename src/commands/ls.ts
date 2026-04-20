@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { scan } from "../core/scan.js";
 import { loadConfig } from "../core/config.js";
-import { renderStackList } from "../tui/renderers/stack-list.js";
+import { renderStackList, glyphFor } from "../tui/renderers/stack-list.js";
 import type { ScannedStack } from "../shared/schema.js";
 
 export interface LsOptions {
@@ -49,25 +49,26 @@ export async function lsCommand(cwd: string, opts: LsOptions): Promise<number> {
   });
 
   const filtered = applyFilters(stacks, opts);
+  const exitCode = opts.strict && filtered.some((s) => s.overallDrift === "drifted") ? 1 : 0;
 
   if (opts.json) {
     console.log(JSON.stringify(filtered, null, 2));
-    return opts.strict && filtered.some((s) => s.overallDrift === "drifted") ? 1 : 0;
+    return exitCode;
   }
 
   if (opts.short) {
     for (const s of filtered) {
-      const glyph = s.kind === "managed" ? "●" : s.kind === "unmanaged" ? "○" : "◉";
+      const glyph = glyphFor(s.kind);
       const version = s.kind === "managed" ? ` · v${s.promptpit!.stackVersion}` : "";
       const drift = s.overallDrift === "drifted" ? " · drifted" : "";
       console.log(`${glyph}  ${s.name}  ${s.root}${version}${drift}`);
     }
-    return opts.strict && filtered.some((s) => s.overallDrift === "drifted") ? 1 : 0;
+    return exitCode;
   }
 
   const scopeLabel = describeScope(opts, defaultDepth);
   console.log(renderStackList({ cwd, stacks: filtered, scopeLabel }));
-  return opts.strict && filtered.some((s) => s.overallDrift === "drifted") ? 1 : 0;
+  return exitCode;
 }
 
 function applyFilters(stacks: ScannedStack[], opts: LsOptions): ScannedStack[] {

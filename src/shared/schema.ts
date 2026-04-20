@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_IGNORE } from "./constants.js";
 
 const semverRegex = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(\.(0|[1-9]\d*))?(-[\w.]+)?(\+[\w.]+)?$/;
 
@@ -357,11 +358,7 @@ export const configSchema = z.object({
   version: z.literal(1),
   scan: z.object({
     defaultDepth: z.number().int().positive().default(5),
-    ignore: z.array(z.string()).default([
-      "node_modules", ".git", "dist", "build", ".next", "out",
-      "target", "vendor", ".venv", "__pycache__", ".turbo",
-      ".cache", "coverage",
-    ]),
+    ignore: z.array(z.string()).default([...DEFAULT_IGNORE]),
   }).default({}),
   recents: z.object({
     targetPaths: z.array(z.string()).max(20).default([]),

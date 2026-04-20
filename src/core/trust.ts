@@ -1,9 +1,7 @@
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { rename, mkdir } from "node:fs/promises";
 import { trustSchema, type PitTrust } from "../shared/schema.js";
-import { readFileOrNull, writeFileEnsureDir } from "../shared/utils.js";
-import { log } from "../shared/io.js";
+import { loadJsonFile, writeJsonAtomic } from "../shared/utils.js";
 
 const TRUST_SUBPATH = ".promptpit/trust.json";
 const PREVIEW_CAP = 256 * 1024;
@@ -28,29 +26,14 @@ export async function loadTrust(
   home: string,
   opts: { silent?: boolean } = {},
 ): Promise<PitTrust> {
-  const raw = await readFileOrNull(trustPath(home));
-  if (!raw) return trustSchema.parse({ version: 1 });
-  let parsed: unknown;
-  try { parsed = JSON.parse(raw); }
-  catch {
-    if (!opts.silent) log.warn(`Trust store at ${trustPath(home)} is invalid JSON. Using empty trust in memory. Inspect the file manually — pit will not auto-overwrite it.`);
-    return trustSchema.parse({ version: 1 });
-  }
-  const result = trustSchema.safeParse(parsed);
-  if (!result.success) {
-    if (!opts.silent) log.warn(`Trust store at ${trustPath(home)} failed schema validation. Using empty trust.`);
-    return trustSchema.parse({ version: 1 });
-  }
-  return result.data;
+  return loadJsonFile(trustPath(home), trustSchema, { version: 1 }, {
+    silent: opts.silent,
+    label: `Trust store at ${trustPath(home)}`,
+  });
 }
 
 export async function saveTrust(home: string, trust: PitTrust): Promise<void> {
-  const validated = trustSchema.parse(trust);
-  const dest = trustPath(home);
-  const tmp = dest + ".tmp";
-  await mkdir(path.dirname(dest), { recursive: true });
-  await writeFileEnsureDir(tmp, JSON.stringify(validated, null, 2) + "\n");
-  await rename(tmp, dest);
+  await writeJsonAtomic(trustPath(home), trustSchema.parse(trust));
 }
 
 export function trustSource(

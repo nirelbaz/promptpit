@@ -1,8 +1,6 @@
 import path from "node:path";
-import { mkdir, rename } from "node:fs/promises";
 import { configSchema, type PitConfig } from "../shared/schema.js";
-import { readFileOrNull, writeFileEnsureDir } from "../shared/utils.js";
-import { log } from "../shared/io.js";
+import { loadJsonFile, writeJsonAtomic } from "../shared/utils.js";
 
 const CONFIG_SUBPATH = ".promptpit/config.json";
 
@@ -14,38 +12,14 @@ export async function loadConfig(
   home: string,
   opts: { silent?: boolean } = {},
 ): Promise<PitConfig> {
-  const raw = await readFileOrNull(configPath(home));
-  if (!raw) return configSchema.parse({ version: 1 });
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    if (!opts.silent) {
-      log.warn(
-        `Config at ${configPath(home)} is invalid JSON. Using in-memory defaults. Run \`pit config reset\` to overwrite.`,
-      );
-    }
-    return configSchema.parse({ version: 1 });
-  }
-
-  const result = configSchema.safeParse(parsed);
-  if (!result.success) {
-    if (!opts.silent) {
-      log.warn(`Config at ${configPath(home)} failed schema validation. Using defaults.`);
-    }
-    return configSchema.parse({ version: 1 });
-  }
-  return result.data;
+  return loadJsonFile(configPath(home), configSchema, { version: 1 }, {
+    silent: opts.silent,
+    label: `Config at ${configPath(home)}`,
+  });
 }
 
 export async function saveConfig(home: string, cfg: PitConfig): Promise<void> {
-  const validated = configSchema.parse(cfg);
-  const dest = configPath(home);
-  const tmp = dest + ".tmp";
-  await mkdir(path.dirname(dest), { recursive: true });
-  await writeFileEnsureDir(tmp, JSON.stringify(validated, null, 2) + "\n");
-  await rename(tmp, dest);
+  await writeJsonAtomic(configPath(home), configSchema.parse(cfg));
 }
 
 export function addRecentTarget(cfg: PitConfig, target: string): PitConfig {

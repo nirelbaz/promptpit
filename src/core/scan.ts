@@ -5,6 +5,7 @@ import { detectAdapters, getAdapter } from "../adapters/registry.js";
 import { reconcileAll } from "./reconcile.js";
 import { exists, readFileOrNull } from "../shared/utils.js";
 import { log } from "../shared/io.js";
+import { DEFAULT_IGNORE } from "../shared/constants.js";
 import type { ScannedStack } from "../shared/schema.js";
 import type { PlatformAdapter } from "../adapters/types.js";
 
@@ -18,12 +19,6 @@ export interface ScanOptions {
 
 type AdapterArtifacts = ScannedStack["adapters"][number]["artifacts"];
 type AdapterId = ScannedStack["adapters"][number]["id"];
-
-const DEFAULT_IGNORE = [
-  "node_modules", ".git", "dist", "build", ".next", "out",
-  "target", "vendor", ".venv", "__pycache__", ".turbo",
-  ".cache", "coverage",
-];
 
 const PROJECT_ROOT_MARKERS = [
   ".git", "package.json", "pyproject.toml", "Cargo.toml", "go.mod", ".promptpit",
@@ -163,13 +158,13 @@ async function materializeStacks(hits: Map<string, HitRecord>): Promise<ScannedS
 }
 
 async function materializeOne(rec: HitRecord): Promise<ScannedStack> {
-  const managed = !!rec.promptpitDir;
+  const promptpitDir = rec.promptpitDir;
+  const managed = !!promptpitDir;
   let name = path.basename(rec.projectRoot);
   let stackVersion: string | undefined;
-  const source: string | undefined = undefined;
 
-  if (managed) {
-    const raw = await readFileOrNull(path.join(rec.promptpitDir!, "stack.json"));
+  if (promptpitDir) {
+    const raw = await readFileOrNull(path.join(promptpitDir, "stack.json"));
     if (raw) {
       try {
         const parsed = JSON.parse(raw) as { name?: string; version?: string };
@@ -191,16 +186,16 @@ async function materializeOne(rec: HitRecord): Promise<ScannedStack> {
 
   let overallDrift: ScannedStack["overallDrift"] = "unknown";
   let manifestCorrupt = false;
-  const installedPath = managed ? path.join(rec.promptpitDir!, "installed.json") : null;
+  const installedPath = promptpitDir ? path.join(promptpitDir, "installed.json") : null;
   const hasInstalledJson = installedPath ? await exists(installedPath) : false;
 
-  if (managed && hasInstalledJson) {
+  if (installedPath && hasInstalledJson) {
     try {
       const reconciled = await reconcileAll(rec.projectRoot);
       // An empty `stacks` array from reconcileAll can mean either: manifest
       // failed to parse (corrupt), or it parsed but had zero installs. Peek at
       // the raw file to distinguish the two cases.
-      const rawManifest = await readFileOrNull(installedPath!);
+      const rawManifest = await readFileOrNull(installedPath);
       if (rawManifest) {
         try {
           JSON.parse(rawManifest);
@@ -236,7 +231,6 @@ async function materializeOne(rec: HitRecord): Promise<ScannedStack> {
     promptpit: managed
       ? {
           stackVersion: stackVersion ?? "0.0.0",
-          ...(source !== undefined && { source }),
           hasInstalledJson,
         }
       : undefined,

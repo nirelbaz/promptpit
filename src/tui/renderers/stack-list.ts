@@ -11,6 +11,14 @@ export interface RenderOptions {
 
 const DIVIDER = "─".repeat(65);
 
+export function glyphFor(kind: ScannedStack["kind"]): string {
+  switch (kind) {
+    case "managed":   return "●";
+    case "unmanaged": return "○";
+    case "global":    return "◉";
+  }
+}
+
 export function renderStackList(opts: RenderOptions): string {
   const { cwd, stacks, scopeLabel, version = "" } = opts;
   const header = version
@@ -70,7 +78,7 @@ function group(stacks: ScannedStack[], cwd: string): Array<[string, ScannedStack
 }
 
 function renderRow(s: ScannedStack): string[] {
-  const glyph = s.kind === "managed" ? "●" : s.kind === "unmanaged" ? "○" : "◉";
+  const glyph = glyphFor(s.kind);
   const status =
     s.kind === "managed" ? chalk.cyan(`pit-managed · v${s.promptpit!.stackVersion}`) :
     s.kind === "unmanaged" ? chalk.dim("unmanaged") :
