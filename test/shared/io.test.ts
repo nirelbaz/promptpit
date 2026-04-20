@@ -1,5 +1,7 @@
 import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
-import { printDryRunReport, log } from "../../src/shared/io.js";
+import { printDryRunReport, log, spinner } from "../../src/shared/io.js";
+
+const ANSI_RE = /\u001b\[[0-9;]*[A-Za-z]/;
 
 describe("printDryRunReport", () => {
   const originalLog = console.log;
@@ -130,5 +132,50 @@ describe("log.warnOnce", () => {
     log._resetWarnOnce();
     log.warnOnce("abc", "warn");
     expect(logSpy).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * N17: `ora` emits ANSI escapes via `log-symbols` even with `chalk.level = 0`,
+ * corrupting piped output. Non-TTY callers get a plain-text stub spinner.
+ * We assert no escape sequences slip through `start` → `succeed`/`fail`/`warn`.
+ */
+describe("spinner (non-TTY)", () => {
+  let logSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+  });
+
+  function collected(): string {
+    return logSpy.mock.calls.map((c) => c.map(String).join(" ")).join("\n");
+  }
+
+  it("emits no ANSI escapes on start + succeed", () => {
+    const s = spinner("working");
+    s.succeed("working done");
+    const out = collected();
+    expect(out).toContain("working done");
+    expect(ANSI_RE.test(out)).toBe(false);
+  });
+
+  it("emits no ANSI escapes on fail", () => {
+    const s = spinner("working");
+    s.fail("working failed");
+    const out = collected();
+    expect(out).toContain("working failed");
+    expect(ANSI_RE.test(out)).toBe(false);
+  });
+
+  it("emits no ANSI escapes on warn", () => {
+    const s = spinner("working");
+    s.warn("half-done");
+    const out = collected();
+    expect(out).toContain("half-done");
+    expect(ANSI_RE.test(out)).toBe(false);
   });
 });
