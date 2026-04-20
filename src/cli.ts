@@ -442,4 +442,8 @@ Examples:
     }
   });
 
+program.action(() => {
+  program.outputHelp();
+});
+
 program.parse();
