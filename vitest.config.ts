@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     testTimeout: 30000,
+    setupFiles: ["./test/setup.ts"],
     include: ["test/**/*.test.ts"],
     exclude: ["node_modules", ".claude", "dist", "test/e2e/real-world-repos.test.ts"],
     coverage: {
