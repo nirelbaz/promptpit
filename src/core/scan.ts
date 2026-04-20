@@ -28,6 +28,20 @@ const PROJECT_ROOT_MARKERS = [
   ".git", "package.json", "pyproject.toml", "Cargo.toml", "go.mod", ".promptpit",
 ];
 
+/** AI tools we recognize but don't (yet) translate. Surface them as an FYI
+ *  so users know their config exists but isn't part of a pit stack. */
+const UNSUPPORTED_TOOL_DIRS = [
+  ".windsurf", ".gemini", ".opencode", ".ai-workspace", ".trae", ".zed",
+];
+
+async function detectUnsupportedTools(dir: string): Promise<string[]> {
+  const found: string[] = [];
+  for (const name of UNSUPPORTED_TOOL_DIRS) {
+    if (await exists(path.join(dir, name))) found.push(name);
+  }
+  return found;
+}
+
 export function detectProjectRoot(start: string, boundary?: string): string {
   const resolvedStart = path.resolve(start);
   const resolvedBoundary = boundary ? path.resolve(boundary) : undefined;
@@ -55,6 +69,7 @@ interface HitRecord {
   promptpitDir?: string;
   looseConfigs: Array<{ adapterId: string; dir: string }>;
   subpathAnnotations: Array<{ subpath: string; adapterId: string; dir: string }>;
+  unsupportedTools: Set<string>;
 }
 
 export async function scan(opts: ScanOptions): Promise<ScannedStack[]> {
@@ -112,12 +127,18 @@ async function walk(
   const detected = await detectAdapters(dir);
   const promptpitPath = path.join(dir, ".promptpit", "stack.json");
   const hasPromptpit = await exists(promptpitPath);
+  const unsupported = await detectUnsupportedTools(dir);
 
-  if (hasPromptpit || detected.length > 0) {
+  if (hasPromptpit || detected.length > 0 || unsupported.length > 0) {
     const root = detectProjectRoot(dir, boundary);
     let rec = hits.get(root);
     if (!rec) {
-      rec = { projectRoot: root, looseConfigs: [], subpathAnnotations: [] };
+      rec = {
+        projectRoot: root,
+        looseConfigs: [],
+        subpathAnnotations: [],
+        unsupportedTools: new Set(),
+      };
       hits.set(root, rec);
     }
     if (hasPromptpit && !rec.promptpitDir) {
@@ -133,6 +154,12 @@ async function walk(
           dir,
         });
       }
+    }
+    // Only track unsupported tools at the project root — they aren't
+    // meaningful as nested annotations (e.g. docs copies) and the TUI
+    // renders them as a single FYI line per stack.
+    if (dir === root) {
+      for (const name of unsupported) rec.unsupportedTools.add(name);
     }
   }
 
@@ -266,6 +293,7 @@ async function materializeOne(rec: HitRecord): Promise<ScannedStack> {
         counts: await countAdapterArtifacts(getAdapter(a.adapterId), a.dir),
       })),
     ),
+    unsupportedTools: [...rec.unsupportedTools].sort(),
     overallDrift,
   };
 }
@@ -304,6 +332,7 @@ async function materializeGlobal(roots: string[]): Promise<ScannedStack | null> 
     manifestCorrupt: false,
     adapters,
     unmanagedAnnotations: [],
+    unsupportedTools: [],
     overallDrift: "unknown",
   };
 }

@@ -106,6 +106,12 @@ function renderRow(s: ScannedStack): string[] {
   for (const ann of s.unmanagedAnnotations) {
     lines.push(chalk.dim(`     + ${ann.subpath.padEnd(20)} unmanaged  ${ann.adapterId}`));
   }
+  // `unsupportedTools` is defaulted by the zod schema to [], but callers
+  // constructing ScannedStack directly (tests, early TUI code paths) may
+  // not provide it — guard against undefined.
+  if (s.unsupportedTools && s.unsupportedTools.length > 0) {
+    lines.push(chalk.dim(`     + unsupported: ${s.unsupportedTools.join(", ")}`));
+  }
   return lines;
 }
 

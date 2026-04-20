@@ -347,6 +347,11 @@ export const scannedStackSchema = z.object({
     adapterId: adapterIdSchema,
     counts: scannedAdapterArtifactsSchema,
   })),
+  /** Directory names of unsupported-but-recognized AI tools detected in
+   *  the stack root (e.g. `.windsurf`, `.gemini`). Surfaced in the TUI as
+   *  an FYI line so users aren't confused when their Windsurf config
+   *  doesn't appear as a proper stack. */
+  unsupportedTools: z.array(z.string()).default([]),
   overallDrift: z.enum(["synced", "drifted", "unknown"]).optional(),
 });
 

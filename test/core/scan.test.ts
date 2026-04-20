@@ -95,6 +95,28 @@ describe("scan", () => {
     expect(stacks.find((s) => s.kind === "global")).toBeDefined();
   });
 
+  it("surfaces unsupported AI tool dirs as unsupportedTools", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "pit-unsupported-"));
+    // A real stack root (so scan creates a hit for it) plus a .windsurf/ dir.
+    writeFileSync(path.join(root, "CLAUDE.md"), "# hi\n");
+    mkdirSync(path.join(root, ".windsurf", "rules"), { recursive: true });
+    writeFileSync(path.join(root, ".windsurf", "rules", "x.md"), "rule");
+
+    const stacks = await scan({ cwd: root, globalRoots: [], depth: 2 });
+    const hit = stacks.find((s) => s.root === root);
+    expect(hit).toBeDefined();
+    expect(hit!.unsupportedTools).toContain(".windsurf");
+  });
+
+  it("creates a stack entry for repos that ONLY have unsupported tool config", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "pit-only-windsurf-"));
+    mkdirSync(path.join(root, ".windsurf", "rules"), { recursive: true });
+    writeFileSync(path.join(root, ".windsurf", "rules", "x.md"), "rule");
+    const stacks = await scan({ cwd: root, globalRoots: [], depth: 2 });
+    expect(stacks).toHaveLength(1);
+    expect(stacks[0]!.unsupportedTools).toEqual([".windsurf"]);
+  });
+
   it("ignores translated docs/examples trees by default", async () => {
     // Mirrors repos like everything-claude-code where `docs/ja-JP/skills/...`
     // contains translated copies of AI config. Without ignore these
