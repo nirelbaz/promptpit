@@ -16,19 +16,29 @@ import type { DryRunSection } from "../shared/io.js";
 async function detectProjectInfo(
   root: string,
 ): Promise<{ name: string; description?: string }> {
+  const dirName = path.basename(root);
   const raw = await readFileOrNull(path.join(root, "package.json"));
   if (raw) {
     try {
       const pkg = JSON.parse(raw);
-      return {
-        name: pkg.name ?? path.basename(root),
-        description: pkg.description,
-      };
+      // Reject sentinel/empty names that produce unidentifiable stacks.
+      // Speckle and other monorepos set package.json name to "root" at the
+      // top level, which collected into stacks literally named "root".
+      const pkgName = typeof pkg.name === "string" ? pkg.name.trim() : "";
+      if (pkgName && pkgName !== "root") {
+        return { name: pkgName, description: pkg.description };
+      }
+      if (pkgName === "root") {
+        log.info(
+          `Using directory name '${dirName}' (package.json has name 'root').`,
+        );
+      }
+      return { name: dirName, description: pkg.description };
     } catch {
       // fall through
     }
   }
-  return { name: path.basename(root) };
+  return { name: dirName };
 }
 
 export interface CollectOptions {
@@ -257,15 +267,18 @@ export async function collectStack(
     const commandCount = bundle.commands.length;
     const mcpCount = Object.keys(bundle.mcpServers).length;
     const secretCount = Object.keys(bundle.envExample).length;
-    log.info(
-      `Summary: ${bundle.agentInstructions ? "1 instruction file" : "no instructions"}, ` +
-        `${skillCount} skill${skillCount !== 1 ? "s" : ""}, ` +
-        `${agentCount} agent${agentCount !== 1 ? "s" : ""}, ` +
-        `${ruleCount} rule${ruleCount !== 1 ? "s" : ""}, ` +
-        `${commandCount} command${commandCount !== 1 ? "s" : ""}, ` +
-        `${mcpCount} MCP server${mcpCount !== 1 ? "s" : ""}, ` +
-        `${secretCount} secret${secretCount !== 1 ? "s" : ""} stripped`,
-    );
+
+    // Hide zero counts — users shouldn't wonder whether 0 skills means
+    // "considered and empty" or "not scanned". Only surface what's there.
+    const parts: string[] = [];
+    if (bundle.agentInstructions) parts.push("1 instruction file");
+    if (skillCount > 0) parts.push(`${skillCount} skill${skillCount !== 1 ? "s" : ""}`);
+    if (agentCount > 0) parts.push(`${agentCount} agent${agentCount !== 1 ? "s" : ""}`);
+    if (ruleCount > 0) parts.push(`${ruleCount} rule${ruleCount !== 1 ? "s" : ""}`);
+    if (commandCount > 0) parts.push(`${commandCount} command${commandCount !== 1 ? "s" : ""}`);
+    if (mcpCount > 0) parts.push(`${mcpCount} MCP server${mcpCount !== 1 ? "s" : ""}`);
+    if (secretCount > 0) parts.push(`${secretCount} secret${secretCount !== 1 ? "s" : ""} stripped`);
+    log.info(parts.length > 0 ? `Summary: ${parts.join(", ")}` : "Summary: nothing to collect");
     return;
   }
 
@@ -273,8 +286,21 @@ export async function collectStack(
   await writeStack(outputDir, bundle);
   writeSpin.succeed(`Stack written to ${outputDir}`);
 
+  // Only surface non-zero counts so a collect result reads like a deliverable
+  // rather than a status board full of zeros.
+  const summary: string[] = [];
+  if (mergeResult.skills.length > 0) summary.push(`${mergeResult.skills.length} skills`);
+  if (mergeResult.agents.length > 0) summary.push(`${mergeResult.agents.length} agents`);
+  if (mergeResult.rules.length > 0) summary.push(`${mergeResult.rules.length} rules`);
+  if (mergeResult.commands.length > 0) summary.push(`${mergeResult.commands.length} commands`);
+  if (Object.keys(stripped).length > 0) {
+    summary.push(`${Object.keys(stripped).length} MCP servers`);
+  }
+  if (Object.keys(envExample).length > 0) {
+    summary.push(`${Object.keys(envExample).length} secrets stripped`);
+  }
   log.success(
-    `Collected: ${mergeResult.skills.length} skills, ${mergeResult.agents.length} agents, ${mergeResult.rules.length} rules, ${mergeResult.commands.length} commands, ${Object.keys(stripped).length} MCP servers, ${Object.keys(envExample).length} secrets stripped`,
+    summary.length > 0 ? `Collected: ${summary.join(", ")}` : "Collected: stack bundle (no artifacts found)",
   );
   log.info(
     "Next: Run 'pit validate' to check for issues, then 'git add .promptpit && git commit'.",
