@@ -308,3 +308,45 @@ export const installManifestSchema = z.object({
 });
 
 export type InstallManifest = z.infer<typeof installManifestSchema>;
+
+// --- Scanned stacks (for TUI + `pit ls`) ---
+
+export const adapterIdSchema = z.enum([
+  "claude-code", "cursor", "codex", "copilot", "standards",
+]);
+
+const scannedAdapterArtifactsSchema = z.object({
+  skills: z.number().int().nonnegative(),
+  rules: z.number().int().nonnegative(),
+  agents: z.number().int().nonnegative(),
+  commands: z.number().int().nonnegative(),
+  mcp: z.number().int().nonnegative(),
+  instructions: z.boolean(),
+});
+
+export const scannedStackSchema = z.object({
+  root: z.string(),
+  kind: z.enum(["managed", "unmanaged", "global"]),
+  name: z.string(),
+  /** Set when `installed.json` exists but can't be parsed or reconciled. The TUI uses this to
+   *  surface a "Delete installed.json and refresh" recovery action (see spec §12). */
+  manifestCorrupt: z.boolean().default(false),
+  promptpit: z.object({
+    stackVersion: z.string(),
+    source: z.string().optional(),
+    hasInstalledJson: z.boolean(),
+  }).optional(),
+  adapters: z.array(z.object({
+    id: adapterIdSchema,
+    artifacts: scannedAdapterArtifactsSchema,
+    drift: z.enum(["synced", "drifted", "unknown"]).optional(),
+  })),
+  unmanagedAnnotations: z.array(z.object({
+    subpath: z.string(),
+    adapterId: adapterIdSchema,
+    counts: scannedAdapterArtifactsSchema,
+  })),
+  overallDrift: z.enum(["synced", "drifted", "unknown"]).optional(),
+});
+
+export type ScannedStack = z.infer<typeof scannedStackSchema>;
