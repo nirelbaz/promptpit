@@ -3,6 +3,14 @@ import ora, { type Ora } from "ora";
 import { createTwoFilesPatch } from "diff";
 import type { DryRunEntry } from "../adapters/types.js";
 
+// Respect NO_COLOR (https://no-color.org/) and drop color when stdout isn't a
+// TTY. Chalk usually auto-detects via supports-color, but subagent harnesses
+// and piped invocations sometimes still emitted raw escape codes. Forcing
+// level 0 upfront makes the decision deterministic regardless of pipeline.
+if (process.env.NO_COLOR || !process.stdout.isTTY) {
+  chalk.level = 0;
+}
+
 // Dedup set for warnOnce. Lives for the lifetime of the process — resets
 // naturally on each CLI invocation. Intentionally not exposed; callers drive
 // it via `log.warnOnce(key, msg)`.
