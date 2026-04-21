@@ -262,3 +262,82 @@ describe("spinner (non-TTY)", () => {
     expect(ANSI_RE.test(out)).toBe(false);
   });
 });
+
+describe("log.withMutedWarnings", () => {
+  let stderrBuf: string;
+  let originalWrite: typeof process.stderr.write;
+
+  beforeEach(() => {
+    log._resetWarnOnce();
+    stderrBuf = "";
+    originalWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      stderrBuf += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
+      return true;
+    }) as typeof process.stderr.write;
+  });
+
+  afterEach(() => {
+    process.stderr.write = originalWrite;
+    log._resetWarnOnce();
+  });
+
+  it("suppresses log.warn inside the scope and returns the count", async () => {
+    const { result, suppressed } = await log.withMutedWarnings(async () => {
+      log.warn("one");
+      log.warn("two");
+      log.warn("three");
+      return "ok";
+    });
+    expect(result).toBe("ok");
+    expect(suppressed).toBe(3);
+    expect(stderrBuf).toBe("");
+  });
+
+  it("dedupes warnOnce keys within a muted scope (counts unique keys only)", async () => {
+    const { suppressed } = await log.withMutedWarnings(async () => {
+      for (let i = 0; i < 500; i++) log.warnOnce("dup", "same key");
+      log.warnOnce("unique", "different");
+      return null;
+    });
+    expect(suppressed).toBe(2);
+  });
+
+  it("does not pollute the process-wide warnOnce dedup set when muted", async () => {
+    await log.withMutedWarnings(async () => {
+      log.warnOnce("later", "muted first");
+      return null;
+    });
+    // The same key, now unmuted, should still emit once — mute should not
+    // count as "already emitted" for future unmuted calls.
+    log.warnOnce("later", "first unmuted emission");
+    expect(stderrBuf).toContain("first unmuted emission");
+  });
+
+  it("attributes warnings to the innermost scope only (no cross-count)", async () => {
+    let innerSuppressed = 0;
+    const outer = await log.withMutedWarnings(async () => {
+      const inner = await log.withMutedWarnings(async () => {
+        log.warn("inside inner");
+        return null;
+      });
+      innerSuppressed = inner.suppressed;
+      // A warn here fires while only outer is active.
+      log.warn("inside outer");
+      return null;
+    });
+    expect(innerSuppressed).toBe(1);
+    expect(outer.suppressed).toBe(1);
+  });
+
+  it("releases the scope even when fn throws", async () => {
+    await expect(
+      log.withMutedWarnings(async () => {
+        throw new Error("boom");
+      }),
+    ).rejects.toThrow("boom");
+    // After the throw, a post-scope warn must emit normally.
+    log.warn("after throw");
+    expect(stderrBuf).toContain("after throw");
+  });
+});

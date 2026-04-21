@@ -1,21 +1,21 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`renderStackList > renders managed + unmanaged + global into grouped sections 1`] = `
-"pit · scope: current tree (depth 5) + global
-─────────────────────────────────────────────────────────────────
+"pit · current tree (depth 5) + global
 
-  current folder (/u/projects/app-frontend)
-  ●  app-frontend                  pit-managed · v0.3.1
-     claude-code     3s · 1a · inst drifted
-     cursor          5 rules
+  ●  app-frontend          managed · v0.3.1
+       claude-code     3s · 1a · inst drifted
+       cursor          5 rules
 
-  /u/projects
-  ○  app-backend                   unmanaged
-     claude-code     1 mcp · inst
+  ○  app-backend           unmanaged
+       /u/projects/app-backend
+       claude-code     1 mcp · inst
 
-  global
-  ◉  user-level                    ~
-     claude-code     12s · 3a · 4 cmd
-─────────────────────────────────────────────────────────────────
-  legend:  s=skills  a=agents  rules  cmd=commands  mcp  inst=instructions file"
+─── global ───
+
+  ◉  user-level            ~
+       claude-code     12s · 3a · 4 cmd
+
+legend:  ● managed   ○ unmanaged   ◉ global   └─ nested config folded into parent
+         s=skills  a=agents  rules  cmd=commands  mcp  inst=instructions"
 `;
