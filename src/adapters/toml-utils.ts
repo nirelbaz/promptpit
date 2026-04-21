@@ -224,7 +224,7 @@ export async function readAgentsFromToml(
     try {
       parsed = parse(raw) as Record<string, unknown>;
     } catch {
-      log.warn(`Skipping ${file}: invalid TOML`);
+      log.warnOnce(`toml:${file}`, `Skipping ${file}: invalid TOML`);
       continue;
     }
 
@@ -241,7 +241,7 @@ export async function readAgentsFromToml(
     const validation = agentFrontmatterSchema.safeParse(withDefaults);
     if (!validation.success) {
       const reasons = validation.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ");
-      log.warn(`Skipping ${file}: invalid agent frontmatter (${reasons})`);
+      log.warnOnce(`toml-agent:${file}`, `Skipping ${file}: invalid agent frontmatter (${reasons})`);
       continue;
     }
 

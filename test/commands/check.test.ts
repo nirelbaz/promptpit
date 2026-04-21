@@ -450,6 +450,22 @@ describe("pit check", () => {
 
   // --- JSON output ---
 
+  it("--json returns result.pass=false when freshness fails (CLI exits 1 on this)", async () => {
+    const dir = await makeTmpDir();
+    await writeStackJson(dir);
+    // No manifest → freshness fails with "never been installed"
+
+    const output = await captureOutput(() =>
+      checkCommand(dir, { json: true }).then((r) => {
+        // Mirror cli.ts behavior: pass=false → exit 1
+        expect(r.pass).toBe(false);
+      }),
+    );
+    const parsed = JSON.parse(output);
+    expect(parsed.pass).toBe(false);
+    expect(parsed.freshness.pass).toBe(false);
+  });
+
   it("--json produces valid JSON with correct structure", async () => {
     const dir = await makeTmpDir();
     await writeStackJson(dir);

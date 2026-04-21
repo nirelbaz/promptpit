@@ -125,3 +125,109 @@ export async function text(
   });
   return ensureValue(result);
 }
+
+/**
+ * Object-shaped prompter used by wizard-flow code paths so they can swap in
+ * a scripted implementation under test without a TTY. Production code uses
+ * the top-level helpers (`chooseOne`, `confirm`, etc.) which call @clack
+ * directly; wizard flows that need to be testable accept a `Prompter`.
+ */
+export interface Prompter {
+  select<T>(opts: {
+    message: string;
+    options: Array<{ value: T; label: string; hint?: string }>;
+    initialValue?: T;
+  }): Promise<T>;
+  multiselect<T>(opts: {
+    message: string;
+    options: Array<{ value: T; label: string; hint?: string }>;
+    initialValues?: T[];
+    required?: boolean;
+  }): Promise<T[]>;
+  text(opts: {
+    message: string;
+    placeholder?: string;
+    initialValue?: string;
+    validate?: (v: string) => string | void;
+  }): Promise<string>;
+  confirm(opts: { message: string; initialValue?: boolean }): Promise<boolean>;
+}
+
+type ScriptedStep =
+  | { type: "select"; answer: unknown }
+  | { type: "multiselect"; answer: unknown[] }
+  | { type: "text"; answer: string }
+  | { type: "confirm"; answer: boolean };
+
+type TraceEntry = ScriptedStep & { message: string };
+
+/**
+ * Deterministic `Prompter` implementation for tests. Queue answers up front,
+ * run the flow, then assert against `trace()` to verify the questions that
+ * were actually asked.
+ */
+export class ScriptedPrompter implements Prompter {
+  private queue: ScriptedStep[];
+  private log: TraceEntry[] = [];
+
+  private constructor(queue: ScriptedStep[]) {
+    this.queue = [...queue];
+  }
+
+  static from(queue: ScriptedStep[]): ScriptedPrompter {
+    return new ScriptedPrompter(queue);
+  }
+
+  private pop(expected: ScriptedStep["type"], message: string): ScriptedStep {
+    const step = this.queue.shift();
+    if (!step) {
+      throw new Error(
+        `ScriptedPrompter: script exhausted at "${message}"`,
+      );
+    }
+    if (step.type !== expected) {
+      throw new Error(
+        `ScriptedPrompter: expected ${expected} for "${message}", got ${step.type}`,
+      );
+    }
+    this.log.push({ ...step, message });
+    return step;
+  }
+
+  async select<T>({
+    message,
+  }: {
+    message: string;
+    options: Array<{ value: T; label: string; hint?: string }>;
+    initialValue?: T;
+  }): Promise<T> {
+    const step = this.pop("select", message);
+    return step.answer as T;
+  }
+
+  async multiselect<T>({
+    message,
+  }: {
+    message: string;
+    options: Array<{ value: T; label: string; hint?: string }>;
+    initialValues?: T[];
+    required?: boolean;
+  }): Promise<T[]> {
+    const step = this.pop("multiselect", message);
+    return step.answer as T[];
+  }
+
+  async text({ message }: { message: string }): Promise<string> {
+    const step = this.pop("text", message);
+    return step.answer as string;
+  }
+
+  async confirm({ message }: { message: string }): Promise<boolean> {
+    const step = this.pop("confirm", message);
+    return step.answer as boolean;
+  }
+
+  trace(): TraceEntry[] {
+    return [...this.log];
+  }
+}

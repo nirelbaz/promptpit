@@ -125,10 +125,13 @@ describe("collectStack", () => {
     await writeFile(path.join(projectDir, "CLAUDE.md"), largeContent);
 
     const warnings: string[] = [];
-    const warnSpy = vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
-      const line = args.join(" ");
-      if (line.includes("unusually large")) warnings.push(line);
-    });
+    const warnSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk: unknown) => {
+        const line = String(chunk);
+        if (line.includes("unusually large")) warnings.push(line);
+        return true;
+      });
 
     try {
       await collectStack(projectDir, outDir);
@@ -141,6 +144,79 @@ describe("collectStack", () => {
     expect(warnings[0]).toMatch(/\d+\.\d+ KB/);
 
     await rm(projectDir, { recursive: true });
+  });
+
+  it("falls back to directory basename when package.json name is 'root'", async () => {
+    // Speckle-style monorepo: package.json at the root has name "root".
+    // Collect should identify the stack by directory basename instead.
+    const projectDir = await mkdtemp(path.join(tmpdir(), "pit-collect-speckle-"));
+    const outDir = path.join(projectDir, ".promptpit");
+
+    await writeFile(path.join(projectDir, "CLAUDE.md"), "# Instructions\n");
+    await writeFile(
+      path.join(projectDir, "package.json"),
+      JSON.stringify({ name: "root", version: "1.0.0" }),
+    );
+
+    await collectStack(projectDir, outDir);
+
+    const stackJson = JSON.parse(
+      await readFile(path.join(outDir, "stack.json"), "utf-8"),
+    );
+    expect(stackJson.name).not.toBe("root");
+    expect(stackJson.name).toBe(path.basename(projectDir));
+
+    await rm(projectDir, { recursive: true });
+  });
+
+  it("falls back to directory basename when package.json name is empty", async () => {
+    const projectDir = await mkdtemp(path.join(tmpdir(), "pit-collect-noname-"));
+    const outDir = path.join(projectDir, ".promptpit");
+
+    await writeFile(path.join(projectDir, "CLAUDE.md"), "# Instructions\n");
+    await writeFile(
+      path.join(projectDir, "package.json"),
+      JSON.stringify({ version: "1.0.0" }),
+    );
+
+    await collectStack(projectDir, outDir);
+
+    const stackJson = JSON.parse(
+      await readFile(path.join(outDir, "stack.json"), "utf-8"),
+    );
+    expect(stackJson.name).toBe(path.basename(projectDir));
+
+    await rm(projectDir, { recursive: true });
+  });
+
+  it("hides zero counts from the collect summary", async () => {
+    // Baseline claude-project has rules=0, agents=0, commands=0, mcp>0, skills>0.
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      logs.push(args.join(" "));
+    });
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk: unknown) => {
+        logs.push(String(chunk));
+        return true;
+      });
+
+    try {
+      const outDir = await mkdtemp(path.join(tmpdir(), "pit-collect-summary-"));
+      await collectStack(CLAUDE_PROJECT, path.join(outDir, ".promptpit"));
+      await rm(outDir, { recursive: true });
+    } finally {
+      spy.mockRestore();
+      stderrSpy.mockRestore();
+    }
+
+    const summaryLine = logs.find((l) => l.includes("Collected:"));
+    expect(summaryLine).toBeDefined();
+    // Zero-count phrases should not appear. The fixture has no agents/rules/commands.
+    expect(summaryLine).not.toContain("0 agents");
+    expect(summaryLine).not.toContain("0 rules");
+    expect(summaryLine).not.toContain("0 commands");
   });
 
   it("does not warn about normal-sized instruction files", async () => {

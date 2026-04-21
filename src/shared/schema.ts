@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_IGNORE } from "./constants.js";
 
 const semverRegex = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(\.(0|[1-9]\d*))?(-[\w.]+)?(\+[\w.]+)?$/;
 
@@ -308,3 +309,82 @@ export const installManifestSchema = z.object({
 });
 
 export type InstallManifest = z.infer<typeof installManifestSchema>;
+
+// --- Scanned stacks (for TUI + `pit ls`) ---
+
+export const adapterIdSchema = z.enum([
+  "claude-code", "cursor", "codex", "copilot", "standards",
+]);
+
+const scannedAdapterArtifactsSchema = z.object({
+  skills: z.number().int().nonnegative(),
+  rules: z.number().int().nonnegative(),
+  agents: z.number().int().nonnegative(),
+  commands: z.number().int().nonnegative(),
+  mcp: z.number().int().nonnegative(),
+  instructions: z.boolean(),
+});
+
+export const scannedStackSchema = z.object({
+  root: z.string(),
+  kind: z.enum(["managed", "unmanaged", "global"]),
+  name: z.string(),
+  /** Set when `installed.json` exists but can't be parsed or reconciled. The TUI uses this to
+   *  surface a "Delete installed.json and refresh" recovery action (see spec §12). */
+  manifestCorrupt: z.boolean().default(false),
+  promptpit: z.object({
+    stackVersion: z.string(),
+    source: z.string().optional(),
+    hasInstalledJson: z.boolean(),
+  }).optional(),
+  adapters: z.array(z.object({
+    id: adapterIdSchema,
+    artifacts: scannedAdapterArtifactsSchema,
+    drift: z.enum(["synced", "drifted", "unknown"]).optional(),
+  })),
+  unmanagedAnnotations: z.array(z.object({
+    subpath: z.string(),
+    adapterId: adapterIdSchema,
+    counts: scannedAdapterArtifactsSchema,
+  })),
+  /** Directory names of unsupported-but-recognized AI tools detected in
+   *  the stack root (e.g. `.windsurf`, `.gemini`). Surfaced in the TUI as
+   *  an FYI line so users aren't confused when their Windsurf config
+   *  doesn't appear as a proper stack. */
+  unsupportedTools: z.array(z.string()).default([]),
+  overallDrift: z.enum(["synced", "drifted", "unknown"]).optional(),
+});
+
+export type ScannedStack = z.infer<typeof scannedStackSchema>;
+
+// --- User Config (~/.promptpit/config.json) ---
+
+export const configSchema = z.object({
+  version: z.literal(1),
+  scan: z.object({
+    defaultDepth: z.number().int().positive().default(5),
+    ignore: z.array(z.string()).default([...DEFAULT_IGNORE]),
+  }).default({}),
+  recents: z.object({
+    targetPaths: z.array(z.string()).max(20).default([]),
+    sources: z.array(z.string()).max(20).default([]),
+  }).default({}),
+  ui: z.object({
+    showGlobalRow: z.boolean().default(true),
+    offline: z.boolean().default(false),
+  }).default({}),
+});
+
+export type PitConfig = z.infer<typeof configSchema>;
+
+// --- Trust Store (~/.promptpit/trust.json) ---
+
+export const trustSchema = z.object({
+  version: z.literal(1),
+  trusted: z.record(z.string(), z.object({
+    trustedAt: z.string().datetime(),
+    scripts: z.record(z.string(), z.string().regex(/^sha256:[a-f0-9]{64}$/)),
+  })).default({}),
+});
+
+export type PitTrust = z.infer<typeof trustSchema>;

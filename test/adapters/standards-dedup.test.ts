@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { standardsAdapter } from "../../src/adapters/standards.js";
 import { readStack } from "../../src/core/stack.js";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -67,5 +67,43 @@ describe("Standards adapter dedup", () => {
     });
     const agentsEntry = result.dryRunEntries?.find((e) => e.file.endsWith("AGENTS.md"));
     expect(agentsEntry).toBeUndefined();
+  });
+});
+
+describe("Standards adapter AGENT.md (singular) fallback", () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), "pit-agent-singular-"));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("detects a stack with only AGENT.md (no AGENTS.md)", async () => {
+    await writeFile(path.join(dir, "AGENT.md"), "# instructions\nhello\n");
+    const result = await standardsAdapter.detect(dir);
+    expect(result.detected).toBe(true);
+    expect(result.configPaths.some((p) => p.endsWith("AGENT.md"))).toBe(true);
+  });
+
+  it("read() returns AGENT.md content when only singular exists", async () => {
+    const body = "# singular instructions\ndetails\n";
+    await writeFile(path.join(dir, "AGENT.md"), body);
+    const cfg = await standardsAdapter.read(dir);
+    expect(cfg.agentInstructions).toBe(body);
+  });
+
+  it("prefers AGENTS.md when both exist and warns about the other", async () => {
+    const warn = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    await writeFile(path.join(dir, "AGENTS.md"), "plural\n");
+    await writeFile(path.join(dir, "AGENT.md"), "singular\n");
+    const cfg = await standardsAdapter.read(dir);
+    expect(cfg.agentInstructions).toBe("plural\n");
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

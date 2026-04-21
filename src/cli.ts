@@ -10,6 +10,7 @@ import { diffCommand } from "./commands/diff.js";
 import type { DiffOptions } from "./commands/diff.js";
 import { uninstallStack } from "./commands/uninstall.js";
 import { updateStacks } from "./commands/update.js";
+import { lsCommand } from "./commands/ls.js";
 import path from "node:path";
 import { log } from "./shared/io.js";
 
@@ -391,5 +392,58 @@ Examples:
       process.exit(1);
     }
   });
+
+program
+  .command("ls")
+  .description("List AI-config stacks in scope")
+  .argument("[dir]", "Directory to scan from", ".")
+  .option("--scope <scope>", "Scope: current | global")
+  .option("--path <dir>", "Scan a specific root")
+  .option("--deep", "Remove depth cap")
+  .option("--all", "Shorthand for --path ~ --deep")
+  .option("--managed", "Only pit-managed stacks")
+  .option("--unmanaged", "Only stacks without .promptpit/")
+  .option("--drifted", "Only drifted managed stacks")
+  .option("--kind <kind>", "global | project")
+  .option("--short", "One-line per stack")
+  .option("--json", "ScannedStack[] for scripting")
+  .option("--strict", "Exit 1 if any drift")
+  .addHelpText("after", `
+Examples:
+  pit ls                       # scan current tree + global
+  pit ls --scope current       # skip global scan
+  pit ls --managed             # only pit-managed stacks
+  pit ls --drifted --strict    # CI: fail if any drift
+  pit ls --json                # machine-readable output
+  pit ls --all                 # scan the whole machine
+`)
+  .action(async (dir: string, opts: {
+    scope?: "current" | "global";
+    path?: string;
+    deep?: boolean;
+    all?: boolean;
+    managed?: boolean;
+    unmanaged?: boolean;
+    drifted?: boolean;
+    kind?: "global" | "project";
+    short?: boolean;
+    json?: boolean;
+    strict?: boolean;
+  }) => {
+    try {
+      const root = path.resolve(dir);
+      const code = await lsCommand(root, opts);
+      if (code !== 0) process.exit(code);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        log.error(err.message);
+      }
+      process.exit(1);
+    }
+  });
+
+program.action(() => {
+  program.outputHelp();
+});
 
 program.parse();

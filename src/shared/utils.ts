@@ -1,6 +1,8 @@
-import { readFile, writeFile, mkdir, access, rm, lstat, unlink, symlink, copyFile } from "node:fs/promises";
-import { dirname, relative } from "node:path";
+import { readFile, writeFile, mkdir, access, rm, lstat, unlink, symlink, copyFile, rename } from "node:fs/promises";
+import path, { dirname, relative } from "node:path";
 import process from "node:process";
+import { z } from "zod";
+import { log } from "./io.js";
 
 export async function readFileOrNull(path: string): Promise<string | null> {
   try {
@@ -69,4 +71,53 @@ export async function symlinkOrCopy(src: string, dest: string): Promise<void> {
 
 export async function removeDir(path: string): Promise<void> {
   await rm(path, { recursive: true, force: true });
+}
+
+export interface LoadJsonOpts {
+  silent?: boolean;
+  label?: string;
+}
+
+/**
+ * Read a JSON file and validate it against a Zod schema. Falls back to the
+ * schema's parse of `defaultValue` when the file is missing, unparseable,
+ * or fails validation. Never overwrites a bad file on disk — recovery is
+ * the user's call via CLI.
+ */
+export async function loadJsonFile<S extends z.ZodTypeAny>(
+  filePath: string,
+  schema: S,
+  defaultValue: unknown,
+  opts: LoadJsonOpts = {},
+): Promise<z.output<S>> {
+  const raw = await readFileOrNull(filePath);
+  if (!raw) return schema.parse(defaultValue);
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    if (!opts.silent) {
+      const label = opts.label ?? filePath;
+      log.warn(`${label} is invalid JSON. Using defaults in memory. File will not be auto-overwritten.`);
+    }
+    return schema.parse(defaultValue);
+  }
+  const result = schema.safeParse(parsed);
+  if (!result.success) {
+    if (!opts.silent) {
+      const label = opts.label ?? filePath;
+      log.warn(`${label} failed schema validation. Using defaults.`);
+    }
+    return schema.parse(defaultValue);
+  }
+  return result.data;
+}
+
+/** Atomic write: tmp file, then rename into place. */
+export async function writeJsonAtomic(filePath: string, value: unknown): Promise<void> {
+  const tmp = filePath + ".tmp";
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFileEnsureDir(tmp, JSON.stringify(value, null, 2) + "\n");
+  await rename(tmp, filePath);
 }

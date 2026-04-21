@@ -89,6 +89,15 @@ describe("installStack", () => {
     ).rejects.toThrow("No .promptpit/ found");
   });
 
+  it("throws on dry-run when no .promptpit/ found (signals non-zero exit)", async () => {
+    const target = await mkdtemp(path.join(tmpdir(), "pit-install-dryrun-missing-"));
+    tmpDirs.push(target);
+
+    await expect(
+      installStack(".promptpit", target, { dryRun: true }),
+    ).rejects.toThrow("No .promptpit/ found");
+  });
+
   it("re-install replaces marker content", async () => {
     const target = await mkdtemp(path.join(tmpdir(), "pit-install-"));
     tmpDirs.push(target);

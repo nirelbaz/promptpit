@@ -1,5 +1,7 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { printDryRunReport } from "../../src/shared/io.js";
+import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
+import { printDryRunReport, log, spinner } from "../../src/shared/io.js";
+
+const ANSI_RE = /\u001b\[[0-9;]*[A-Za-z]/;
 
 describe("printDryRunReport", () => {
   const originalLog = console.log;
@@ -90,5 +92,173 @@ describe("printDryRunReport", () => {
     printDryRunReport("Dry run:", [], false);
     const joined = output.join("\n");
     expect(joined).toContain("Dry run");
+  });
+});
+
+describe("log.warnOnce", () => {
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    log._resetWarnOnce();
+    stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    stderrSpy.mockRestore();
+    log._resetWarnOnce();
+  });
+
+  it("emits the warning on the first call for a key", () => {
+    log.warnOnce("abc", "first warning");
+    expect(stderrSpy).toHaveBeenCalledTimes(1);
+    expect(String(stderrSpy.mock.calls[0]![0])).toContain("first warning");
+  });
+
+  it("deduplicates repeated calls with the same key", () => {
+    log.warnOnce("abc", "first warning");
+    log.warnOnce("abc", "first warning");
+    log.warnOnce("abc", "first warning");
+    expect(stderrSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats different keys as distinct", () => {
+    log.warnOnce("one", "msg a");
+    log.warnOnce("two", "msg b");
+    expect(stderrSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not dedup across _resetWarnOnce (test helper)", () => {
+    log.warnOnce("abc", "warn");
+    log._resetWarnOnce();
+    log.warnOnce("abc", "warn");
+    expect(stderrSpy).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * N18: every incidental notice (warnings, info banners, glyph-prefixed status)
+ * must go to stderr so `pit ls --json`, `pit check --json`, etc. keep a clean
+ * stdout. Regression test: if anyone re-routes these through `console.log`,
+ * these assertions fail.
+ */
+describe("log channel routing", () => {
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+  let stdoutSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    stdoutSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    stderrSpy.mockRestore();
+    stdoutSpy.mockRestore();
+  });
+
+  it("routes log.warn to stderr, not stdout", () => {
+    log.warn("boom");
+    expect(stderrSpy).toHaveBeenCalled();
+    expect(String(stderrSpy.mock.calls[0]![0])).toContain("boom");
+    expect(stdoutSpy).not.toHaveBeenCalled();
+  });
+
+  it("routes log.info to stderr, not stdout", () => {
+    log.info("heads up");
+    expect(stderrSpy).toHaveBeenCalled();
+    expect(String(stderrSpy.mock.calls[0]![0])).toContain("heads up");
+    expect(stdoutSpy).not.toHaveBeenCalled();
+  });
+
+  it("routes log.success to stderr, not stdout", () => {
+    log.success("done");
+    expect(stderrSpy).toHaveBeenCalled();
+    expect(stdoutSpy).not.toHaveBeenCalled();
+  });
+
+  it("routes log.error to stderr, not stdout", () => {
+    log.error("nope");
+    expect(stderrSpy).toHaveBeenCalled();
+    expect(stdoutSpy).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * N17: `ora` emits ANSI escapes via `log-symbols` even with `chalk.level = 0`,
+ * corrupting piped output. Non-TTY callers get a plain-text stub spinner.
+ * We assert no escape sequences slip through `start` → `succeed`/`fail`/`warn`.
+ */
+describe("spinner (non-TTY)", () => {
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    stderrSpy.mockRestore();
+  });
+
+  function collected(): string {
+    return stderrSpy.mock.calls.map((c) => String(c[0])).join("");
+  }
+
+  it("emits no ANSI escapes on start + succeed", () => {
+    const s = spinner("working");
+    s.succeed("working done");
+    const out = collected();
+    expect(out).toContain("working done");
+    expect(ANSI_RE.test(out)).toBe(false);
+  });
+
+  it("emits no ANSI escapes on fail", () => {
+    const s = spinner("working");
+    s.fail("working failed");
+    const out = collected();
+    expect(out).toContain("working failed");
+    expect(ANSI_RE.test(out)).toBe(false);
+  });
+
+  it("emits no ANSI escapes on warn", () => {
+    const s = spinner("working");
+    s.warn("half-done");
+    const out = collected();
+    expect(out).toContain("half-done");
+    expect(ANSI_RE.test(out)).toBe(false);
+  });
+
+  it("emits no ANSI escapes on info and routes to stderr", () => {
+    const s = spinner("working");
+    s.info("still going");
+    const out = collected();
+    expect(out).toContain("still going");
+    expect(ANSI_RE.test(out)).toBe(false);
+  });
+
+  it("supports chaining through start() → succeed() without ANSI", () => {
+    const s = spinner("phase one");
+    const result = s.start("phase two").succeed("phase two done");
+    // Chain should return the stub itself so further calls are valid.
+    expect(result).toBeDefined();
+    const out = collected();
+    expect(out).toContain("phase one");
+    expect(out).toContain("phase two done");
+    expect(ANSI_RE.test(out)).toBe(false);
+  });
+
+  it("honors mutated .text as the default message for succeed()", () => {
+    const s = spinner("initial");
+    s.text = "mutated message";
+    s.succeed(); // no arg → falls back to current text
+    const out = collected();
+    expect(out).toContain("mutated message");
+    expect(ANSI_RE.test(out)).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { validateCommand } from "../../src/commands/validate.js";
+import { validateCommand, ExitError } from "../../src/commands/validate.js";
 import { validateStack, LARGE_INSTRUCTION_THRESHOLD } from "../../src/core/validate.js";
 import path from "node:path";
 import { mkdtemp, rm, writeFile, mkdir, copyFile } from "node:fs/promises";
@@ -46,6 +46,18 @@ describe("pit validate", () => {
     await expect(
       captureConsole(() => validateCommand(INVALID_STACK, {})),
     ).rejects.toThrow();
+  });
+
+  it("throws ExitError when stack has errors (signals non-zero exit)", async () => {
+    await expect(
+      captureConsole(() => validateCommand(INVALID_STACK, {})),
+    ).rejects.toBeInstanceOf(ExitError);
+  });
+
+  it("throws ExitError with --json when stack has errors", async () => {
+    await expect(
+      captureConsole(() => validateCommand(INVALID_STACK, { json: true })),
+    ).rejects.toBeInstanceOf(ExitError);
   });
 
   it("outputs JSON when --json is passed", async () => {

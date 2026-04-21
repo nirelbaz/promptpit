@@ -24,12 +24,18 @@ describe("pit diff", () => {
   }
 
   async function captureOutput(fn: () => Promise<unknown>): Promise<string> {
-    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
     try {
       await fn();
-      return spy.mock.calls.map((c) => c.join(" ")).join("\n");
+      const stdoutLines = logSpy.mock.calls.map((c) => c.join(" "));
+      const stderrLines = stderrSpy.mock.calls.map((c) => String(c[0]));
+      return [...stdoutLines, ...stderrLines].join("\n");
     } finally {
-      spy.mockRestore();
+      logSpy.mockRestore();
+      stderrSpy.mockRestore();
     }
   }
 

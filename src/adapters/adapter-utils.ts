@@ -38,7 +38,7 @@ function safeParseMatter(raw: string, relPath: string, label = ""): matter.GrayM
   try {
     return matter(raw, SAFE_MATTER_OPTIONS as never);
   } catch (err: unknown) {
-    log.warn(`Skipping ${label}${relPath}: invalid frontmatter (${formatYamlError(err)})`);
+    log.warnOnce(`frontmatter:${relPath}`, `Skipping ${label}${relPath}: invalid frontmatter (${formatYamlError(err)})`);
     return null;
   }
 }
@@ -59,7 +59,7 @@ export async function collectSupportingFilesFromDir(skillDir: string): Promise<S
 
     const fileStat = await stat(file);
     if (fileStat.size > MAX_SUPPORTING_FILE_SIZE) {
-      log.warn(`Skipping ${relativePath} in ${path.basename(skillDir)}: file exceeds 50 MB`);
+      log.warnOnce(`size:${file}`, `Skipping ${relativePath} in ${path.basename(skillDir)}: file exceeds 50 MB`);
       continue;
     }
 
@@ -96,7 +96,7 @@ export async function readSkillsFromDir(
     if (!parsed) continue;
     const validation = skillFrontmatterSchema.safeParse(parsed.data);
     if (!validation.success) {
-      log.warn(`Skipping ${rel}: ${validation.error.errors.map((e) => e.path.length > 0 ? `${e.path.join(".")}: ${e.message}` : e.message).join(", ")}`);
+      log.warnOnce(`skill:${rel}`, `Skipping ${rel}: ${validation.error.errors.map((e) => e.path.length > 0 ? `${e.path.join(".")}: ${e.message}` : e.message).join(", ")}`);
       continue;
     }
     const skillName = path.basename(path.dirname(file));
@@ -121,7 +121,7 @@ export async function readSkillsFromDir(
     if (!parsed) continue;
     const validation = skillFrontmatterSchema.safeParse(parsed.data);
     if (!validation.success) {
-      log.warn(`Skipping ${rel}: ${validation.error.errors.map((e) => e.path.length > 0 ? `${e.path.join(".")}: ${e.message}` : e.message).join(", ")}`);
+      log.warnOnce(`skill:${rel}`, `Skipping ${rel}: ${validation.error.errors.map((e) => e.path.length > 0 ? `${e.path.join(".")}: ${e.message}` : e.message).join(", ")}`);
       continue;
     }
     const skillName = path.basename(file, ".md");
@@ -186,7 +186,7 @@ export async function readAgentsFromDir(
     const validation = agentFrontmatterSchema.safeParse(data);
     if (!validation.success) {
       const reasons = validation.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ");
-      log.warn(`Skipping ${rel}: invalid agent frontmatter (${reasons})`);
+      log.warnOnce(`agent:${rel}`, `Skipping ${rel}: invalid agent frontmatter (${reasons})`);
       continue;
     }
 
@@ -228,7 +228,7 @@ export async function readRulesFromDir(
     const validation = ruleFrontmatterSchema.safeParse(dataWithDefaults);
     if (!validation.success) {
       const reasons = validation.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ");
-      log.warn(`Skipping rule ${rel}: invalid frontmatter (${reasons})`);
+      log.warnOnce(`rule:${rel}`, `Skipping rule ${rel}: invalid frontmatter (${reasons})`);
       continue;
     }
 
