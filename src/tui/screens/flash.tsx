@@ -2,7 +2,7 @@
 // fire-and-forget action (e.g. "opened folder"), auto-dismisses after
 // `ms`, then pops back. Keeps the user visually acknowledged without
 // trapping them on a dead-end screen.
-import { Box, Text } from "ink";
+import { Box, Text, useInput } from "ink";
 import { useEffect } from "react";
 import { Frame } from "../chrome.js";
 import { useNav } from "../nav.js";
@@ -20,6 +20,10 @@ export function Flash({ message, tone = "success", ms = 1200, crumbs = ["Stacks"
     const id = setTimeout(() => nav.pop(), ms);
     return () => clearTimeout(id);
   }, [nav, ms]);
+  // Footer advertises "esc dismiss"; honor it by popping early on Esc/Enter.
+  useInput((_input, key) => {
+    if (key.escape || key.return) nav.pop();
+  });
 
   const glyph = tone === "success" ? "✓" : tone === "warn" ? "⚠" : "ℹ";
   const color = tone === "success" ? "green" : tone === "warn" ? "yellow" : "cyan";

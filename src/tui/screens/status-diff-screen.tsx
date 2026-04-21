@@ -71,8 +71,15 @@ export function StatusDiffScreen({ stack }: { stack: ScannedStack }) {
 }
 
 function ResultBody({ reconciled, diff }: { reconciled: ReconcileOutput; diff: DiffResult }) {
+  // DiffResult.stacks[].adapters[].artifacts is already filtered to drifted
+  // entries by computeDiff, but be defensive — count only state: "drifted"
+  // so future changes to computeDiff's filter don't silently inflate the
+  // number the user sees on the summary line.
   const totalDriftedArtifacts = diff.stacks.reduce(
-    (n, s) => n + s.adapters.reduce((m, a) => m + a.artifacts.length, 0),
+    (n, s) => n + s.adapters.reduce(
+      (m, a) => m + a.artifacts.filter((x) => x.state === "drifted").length,
+      0,
+    ),
     0,
   );
   return (

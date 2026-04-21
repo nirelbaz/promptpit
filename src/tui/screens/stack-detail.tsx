@@ -67,23 +67,23 @@ export function StackDetail({ stack }: { stack: ScannedStack }) {
       <Box flexDirection="column" paddingX={1} marginBottom={1} borderStyle="round" borderColor="gray">
         <Box>
           <Text color={glyphColor}>{glyph} </Text>
-          <Text bold>{stack.name}</Text>
+          <Text bold wrap="truncate-end">{stack.name}</Text>
           {stack.kind === "managed" && stack.promptpit?.stackVersion && (
-            <Text dimColor>  v{stack.promptpit.stackVersion}</Text>
+            <Text dimColor wrap="truncate-end">  v{stack.promptpit.stackVersion}</Text>
           )}
           {stack.overallDrift === "drifted" && <Text color="yellow">  · drifted</Text>}
         </Box>
-        <Text dimColor>{stack.root}</Text>
+        <Text dimColor wrap="truncate-end">{stack.root}</Text>
         {stack.kind === "managed" && stack.promptpit?.source && (
           <Box marginTop={1}>
             <Text dimColor>source: </Text>
-            <Text color="cyan">{stack.promptpit.source}</Text>
+            <Text color="cyan" wrap="truncate-end">{stack.promptpit.source}</Text>
           </Box>
         )}
         {stack.adapters.length > 0 && (
           <Box>
             <Text dimColor>tools:  </Text>
-            <Text>{stack.adapters.map((a) => a.id).join(", ")}</Text>
+            <Text wrap="truncate-end">{stack.adapters.map((a) => a.id).join(", ")}</Text>
           </Box>
         )}
       </Box>
@@ -104,7 +104,14 @@ function handleAction(
   if (key === "back") { nav.pop(); return; }
   if (key === "validate") { nav.push(() => <ValidateScreen stack={stack} />); return; }
   if (key === "status-diff") { nav.push(() => <StatusDiffScreen stack={stack} />); return; }
-  if (key === "open") { openFolder(stack.root); nav.push(() => <Flash message={`Opened ${stack.root}`} crumbs={["Stacks", stack.name, "…"]} />); return; }
+  if (key === "open") {
+    const ok = openFolder(stack.root);
+    const flash = ok
+      ? <Flash message={`Opened ${stack.root}`} crumbs={["Stacks", stack.name, "…"]} />
+      : <Flash message={`Couldn't launch your file manager. Try: open "${stack.root}"`} tone="warn" crumbs={["Stacks", stack.name, "…"]} />;
+    nav.push(() => flash);
+    return;
+  }
 
   const msg = COMING_SOON[key];
   if (msg) {
@@ -113,9 +120,22 @@ function handleAction(
 }
 
 /** Reveal the stack root in the platform's file manager. Args array — no
- *  shell — so a path containing metacharacters can't be misinterpreted. */
-function openFolder(root: string): void {
+ *  shell — so a path containing metacharacters can't be misinterpreted.
+ *  Returns true if spawn started (not whether the file manager opened —
+ *  detached/stdio:ignore means we can't tell). Returns false if Node
+ *  couldn't even launch the binary (ENOENT on minimal containers).
+ *
+ *  The 'error' listener is load-bearing: without it, a failed spawn emits
+ *  an uncaught ChildProcess error event that crashes Node out from under
+ *  the Ink alt-screen. */
+function openFolder(root: string): boolean {
   const cmd = platformOpenCommand(process.platform);
-  const child = spawn(cmd, [root], { detached: true, stdio: "ignore" });
-  child.unref?.();
+  try {
+    const child = spawn(cmd, [root], { detached: true, stdio: "ignore" });
+    child.on("error", () => { /* swallow — surfaced via Flash tone in caller */ });
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
 }

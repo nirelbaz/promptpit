@@ -213,9 +213,13 @@ function StackRow({ item, selected }: { item: RenderItem; selected: boolean }) {
     <Box>
       <Text color={selected ? "cyan" : undefined}>{selected ? "  ▸ " : "    "}</Text>
       <Text color={glyphColor}>{glyph} </Text>
-      <Box width={24}><Text bold={selected}>{s.name}</Text></Box>
-      <Box width={26}><Text dimColor>{displayPath ?? ""}</Text></Box>
-      <Text color={rightColor}>{right}</Text>
+      {/* Fixed-width columns with truncate-end so long names/paths clip to
+          ellipsis instead of wrapping and shoving the status chip off the
+          row. Name gets the most room because it's the primary field; path
+          is always optional context. */}
+      <Box width={30}><Text bold={selected} wrap="truncate-end">{s.name}</Text></Box>
+      <Box width={24}><Text dimColor wrap="truncate-end">{displayPath ?? ""}</Text></Box>
+      <Text color={rightColor} wrap="truncate-end">{right}</Text>
     </Box>
   );
 }
@@ -231,10 +235,11 @@ function ExpandedDetail({ stack: s }: { stack: ScannedStack }) {
         if (a.artifacts.commands) parts.push(`${a.artifacts.commands} cmd`);
         if (a.artifacts.mcp) parts.push(`${a.artifacts.mcp} mcp`);
         if (a.artifacts.instructions) parts.push("inst");
+        const counts = parts.length > 0 ? parts.join(" · ") : null;
         return (
           <Box key={a.id}>
             <Box width={14}><Text color="gray">{a.id}</Text></Box>
-            <Text>{parts.join(" · ") || <Text dimColor>—</Text>}</Text>
+            {counts ? <Text>{counts}</Text> : <Text dimColor>—</Text>}
             {a.drift === "drifted" && <Text color="yellow">  drifted</Text>}
           </Box>
         );

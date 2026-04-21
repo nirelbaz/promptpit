@@ -1,7 +1,7 @@
 // Landing when `scan()` returns no stacks. Offers concrete next actions
 // rather than just "nothing here" — most first-time users hit this screen
 // and need a nudge toward `init` or a wider scan.
-import { Box, Text } from "ink";
+import { Box, Text, useApp } from "ink";
 import { Frame } from "../chrome.js";
 import { ListPicker } from "../primitives.js";
 import { useNav } from "../nav.js";
@@ -16,6 +16,7 @@ type Choice = "init" | "scan-path" | "scan-all" | "install" | "quit";
 
 export function EmptyState({ cwd, scopeLabel }: EmptyStateProps) {
   const nav = useNav();
+  const { exit } = useApp();
   return (
     <Frame
       crumbs={["Stacks", "Empty"]}
@@ -32,18 +33,21 @@ export function EmptyState({ cwd, scopeLabel }: EmptyStateProps) {
       </Box>
       <ListPicker<Choice>
         options={[
-          { value: "init", label: "Create a new stack here", hint: "pit init" },
+          { value: "init", label: "Create a new stack here", hint: "coming in v0.6.0", disabled: true },
           { value: "scan-path", label: "Scan a different path…", hint: "coming in v0.6.0", disabled: true },
-          { value: "scan-all", label: "Scan everywhere", hint: "--all · slow" },
+          { value: "scan-all", label: "Scan everywhere", hint: "coming in v0.6.0", disabled: true },
           { value: "install", label: "Install a stack from GitHub…", hint: "coming in v0.6.0", disabled: true },
           { value: "quit", label: "Quit" },
         ]}
         onSelect={(v) => {
-          if (v === "quit") { nav.pop(); process.exit(0); }
-          // MVP: these just flash "coming soon"; Chunks 2/3 wire real flows.
+          // Chunk 1 ships nothing actionable from this screen — every non-
+          // quit option is disabled so ListPicker can't even land on them.
+          // `exit()` triggers Ink's proper unmount; bare process.exit(0)
+          // can leave stdin in raw mode on some terminals.
+          if (v === "quit") { exit(); return; }
           nav.push(() => <Flash message={`"${v}" is coming in a later release`} tone="info" />);
         }}
-        onCancel={() => nav.pop()}
+        onCancel={() => exit()}
       />
     </Frame>
   );

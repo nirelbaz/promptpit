@@ -6,7 +6,7 @@
 // scene registry or deep-linking. A plain factory-stack covers every
 // transition in the plan (push a wizard step, pop to go back, popTo(0)
 // to return to the main list after a completed action).
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
 type ScreenFactory = () => ReactNode;
 
@@ -25,18 +25,27 @@ const NavContext = createContext<NavApi | null>(null);
 export function NavProvider({ initial }: { initial: ScreenFactory }) {
   const [stack, setStack] = useState<ScreenFactory[]>(() => [initial]);
 
-  const api: NavApi = {
-    push: (factory) => setStack((s) => [...s, factory]),
-    replace: (factory) => setStack((s) => [...s.slice(0, -1), factory]),
-    pop: () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s)),
-    popTo: (depth) => setStack((s) => s.slice(0, Math.max(1, Math.min(depth + 1, s.length)))),
-    depth: stack.length - 1,
-  };
+  // Stable identities so consumers that put `nav` in a useEffect dep array
+  // (e.g. Flash's auto-dismiss timer) don't re-run on every parent rerender.
+  // Previously `api` was rebuilt each render, restarting the Flash timer
+  // whenever NavProvider updated.
+  const push = useCallback((factory: ScreenFactory) => setStack((s) => [...s, factory]), []);
+  const replace = useCallback((factory: ScreenFactory) => setStack((s) => [...s.slice(0, -1), factory]), []);
+  const pop = useCallback(() => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s)), []);
+  const popTo = useCallback((depth: number) => {
+    const safe = Number.isFinite(depth) ? Math.max(0, Math.floor(depth)) : 0;
+    setStack((s) => s.slice(0, Math.min(safe + 1, s.length)));
+  }, []);
 
-  const top = stack[stack.length - 1]!;
+  const api = useMemo<NavApi>(
+    () => ({ push, replace, pop, popTo, depth: stack.length - 1 }),
+    [push, replace, pop, popTo, stack.length],
+  );
+
+  const top = stack[stack.length - 1];
   return (
     <NavContext.Provider value={api}>
-      {top()}
+      {top ? top() : null}
     </NavContext.Provider>
   );
 }
