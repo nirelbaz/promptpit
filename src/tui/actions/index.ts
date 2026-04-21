@@ -1,6 +1,7 @@
 import type { StackMenuActions } from "../stack-menu.js";
 import { openFolderAction } from "./open-folder.js";
 import { validateAction } from "./validate.js";
+import { statusDiffAction } from "./status-diff.js";
 
 // Barrel for action handlers. Real implementations are wired in by later
 // tasks (validate in 14, status-diff in 15, …). Anything still pointing at
@@ -16,7 +17,7 @@ export function all(): StackMenuActions {
     installTo:        notImplemented,
     adapt:            notImplemented,
     update:           notImplemented,
-    statusDiff:       notImplemented,
+    statusDiff:       statusDiffAction,
     collect:          notImplemented,
     collectDrift:     notImplemented,
     artifacts:        notImplemented,
