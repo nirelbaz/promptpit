@@ -4,6 +4,8 @@ import { livePrompter } from "../shared/interactive.js";
 import type { ScannedStack, PitConfig } from "../shared/schema.js";
 import { renderStackList } from "./renderers/stack-list.js";
 import { askScope } from "./scope.js";
+import { stackMenu } from "./stack-menu.js";
+import * as actions from "./actions/index.js";
 
 interface MainMenuOpts {
   cwd: string;
@@ -71,9 +73,10 @@ export async function mainMenu(opts: MainMenuOpts): Promise<boolean> {
   const chosen = opts.stacks.find((s) => s.root === action);
   if (!chosen) return true;
 
-  const handler = opts.openStackMenu ?? (async () => {
-    // Wired to stackMenu in Task 12.
-  });
+  const handler =
+    opts.openStackMenu ??
+    (async ({ stack, cwd, config }) =>
+      stackMenu({ stack, cwd, config, actions: actions.all() }));
   await handler({ stack: chosen, cwd: opts.cwd, config: opts.config });
   return true;
 }
