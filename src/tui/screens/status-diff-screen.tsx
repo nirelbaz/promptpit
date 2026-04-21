@@ -8,6 +8,7 @@ import { ListPicker, Spinner } from "../primitives.js";
 import { useNav } from "../nav.js";
 import { reconcileAll, type ReconcileOutput } from "../../core/reconcile.js";
 import { computeDiff, type DiffResult } from "../../commands/diff.js";
+import { log } from "../../shared/io.js";
 import type { ScannedStack } from "../../shared/schema.js";
 
 type State =
@@ -25,8 +26,14 @@ export function StatusDiffScreen({ stack }: { stack: ScannedStack }) {
   useEffect(() => {
     if (state.kind !== "loading") return;
     let cancelled = false;
-    Promise.all([reconcileAll(stack.root), computeDiff(stack.root, {})])
-      .then(([reconciled, diff]) => {
+    // Mute warnings during the Ink render: reconcile + computeDiff emit
+    // log.warnOnce lines to stderr on malformed manifests, which races with
+    // Ink's cursor-clearing ANSI and leaves ghost Header frames on screen.
+    // Same pattern as main-list's scan wrap.
+    log.withMutedWarnings(() =>
+      Promise.all([reconcileAll(stack.root), computeDiff(stack.root, {})]),
+    )
+      .then(({ result: [reconciled, diff] }) => {
         if (!cancelled) setState({ kind: "done", reconciled, diff });
       })
       .catch((err: unknown) => {

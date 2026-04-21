@@ -9,6 +9,7 @@ import { Frame, SectionTitle } from "../chrome.js";
 import { ListPicker, Spinner } from "../primitives.js";
 import { useNav } from "../nav.js";
 import { validateStack, type ValidateResult } from "../../core/validate.js";
+import { log } from "../../shared/io.js";
 import type { ScannedStack } from "../../shared/schema.js";
 
 type State =
@@ -27,8 +28,12 @@ export function ValidateScreen({ stack }: { stack: ScannedStack }) {
     if (state.kind !== "loading") return;
     let cancelled = false;
     const stackDir = path.join(stack.root, ".promptpit");
-    validateStack(stackDir)
-      .then((result) => {
+    // Mute warnings: validate walks the bundle and emits log.warn for schema
+    // diagnostics. Those writes to stderr collide with Ink's cursor tracking
+    // and leave ghost Header frames stacked on screen. Diagnostics already
+    // surface in the result card — the warn stream is redundant here.
+    log.withMutedWarnings(() => validateStack(stackDir))
+      .then(({ result }) => {
         if (!cancelled) setState({ kind: "done", result });
       })
       .catch((err: unknown) => {
