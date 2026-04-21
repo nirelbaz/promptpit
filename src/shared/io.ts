@@ -12,10 +12,19 @@ if (colorDisabled) {
   chalk.level = 0;
 }
 
-// Dedup set for warnOnce. Lives for the lifetime of the process — resets
-// naturally on each CLI invocation. Intentionally not exposed; callers drive
-// it via `log.warnOnce(key, msg)`.
+// Dedup set for warnOnce. Resets on each CLI invocation.
 const emittedWarnKeys = new Set<string>();
+
+// Active warning-mute scopes. Only the innermost (top-of-stack) scope counts
+// a given warning — this avoids concurrent scopes (e.g. `Promise.all`) each
+// inflating each other's totals. Nested scopes read as "inner handles it."
+// Each scope also dedupes by warnOnce key, so a loop producing the same key
+// 500 times is reported as "1 thing," not 500.
+interface MuteHandle {
+  count: number;
+  countedKeys: Set<string>;
+}
+const activeMutes: MuteHandle[] = [];
 
 // N18: status/notice output must never mix with the command's data output
 // (JSON, diffs, tables). Anything routed through `log.*` is incidental —
@@ -25,10 +34,21 @@ function writeNotice(line: string): void {
   process.stderr.write(line + "\n");
 }
 
+function topMute(): MuteHandle | undefined {
+  return activeMutes[activeMutes.length - 1];
+}
+
 export const log = {
   info: (msg: string) => writeNotice(`${chalk.blue("ℹ")} ${msg}`),
   success: (msg: string) => writeNotice(`${chalk.green("✔")} ${msg}`),
-  warn: (msg: string) => writeNotice(`${chalk.yellow("⚠")} ${msg}`),
+  warn: (msg: string) => {
+    const top = topMute();
+    if (top) {
+      top.count++;
+      return;
+    }
+    writeNotice(`${chalk.yellow("⚠")} ${msg}`);
+  },
   error: (msg: string) => writeNotice(`${chalk.red("✖")} ${msg}`),
   /**
    * Emit a warning only once per key within this process. Use for warnings
@@ -38,13 +58,44 @@ export const log = {
    * Keep counts-matter warnings (e.g. validate summaries) on `log.warn`.
    */
   warnOnce: (key: string, msg: string) => {
+    // Already emitted somewhere unmuted — ignore.
     if (emittedWarnKeys.has(key)) return;
+    const top = topMute();
+    if (top) {
+      // Count unique keys only; don't pollute the dedup set so a later
+      // unmuted call with the same key can still emit its first occurrence.
+      if (!top.countedKeys.has(key)) {
+        top.countedKeys.add(key);
+        top.count++;
+      }
+      return;
+    }
     emittedWarnKeys.add(key);
     writeNotice(`${chalk.yellow("⚠")} ${msg}`);
+  },
+  /**
+   * Suppress `warn` / `warnOnce` output for the duration of `fn`. Returns
+   * how many distinct warnings the scope swallowed so the caller can
+   * summarize. Concurrent scopes (e.g. `Promise.all`) don't cross-count —
+   * each warning is attributed to the innermost active scope only.
+   */
+  withMutedWarnings: async <T>(
+    fn: () => Promise<T>,
+  ): Promise<{ result: T; suppressed: number }> => {
+    const handle: MuteHandle = { count: 0, countedKeys: new Set() };
+    activeMutes.push(handle);
+    try {
+      const result = await fn();
+      return { result, suppressed: handle.count };
+    } finally {
+      const i = activeMutes.indexOf(handle);
+      if (i >= 0) activeMutes.splice(i, 1);
+    }
   },
   /** Test helper — clears the dedup set. Do not use in production code. */
   _resetWarnOnce: () => {
     emittedWarnKeys.clear();
+    activeMutes.length = 0;
   },
 };
 

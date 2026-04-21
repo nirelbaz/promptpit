@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { scan } from "../core/scan.js";
 import { loadConfig } from "../core/config.js";
+import { log } from "../shared/io.js";
 import { renderStackList, glyphFor } from "../tui/renderers/stack-list.js";
 import type { ScannedStack } from "../shared/schema.js";
 
@@ -41,14 +42,22 @@ export async function lsCommand(cwd: string, opts: LsOptions): Promise<number> {
   const includeGlobal =
     opts.scope === "global" || (opts.scope !== "current" && opts.global !== false);
 
-  const scopeGlobalOnly = opts.scope === "global";
-  const stacks = await scan({
-    cwd: opts.all ? homedir() : scanRoot,
-    globalRoots: includeGlobal ? GLOBAL_ROOTS : [],
-    depth,
-    ignoreGlobs: cfg.scan.ignore,
-    skipLocal: scopeGlobalOnly,
-  });
+  if ((opts.all || opts.deep) && !opts.json && !opts.short) {
+    const what = opts.all ? "your whole home directory" : "this tree with no depth limit";
+    log.info(`Scanning ${what} — this can take a minute on large trees.`);
+  }
+
+  // Silence per-file parse warnings during the read-only artifact count —
+  // they belong to `pit validate`, not `pit ls`. Summarize the count below.
+  const { result: stacks, suppressed } = await log.withMutedWarnings(() =>
+    scan({
+      cwd: opts.all ? homedir() : scanRoot,
+      globalRoots: includeGlobal ? GLOBAL_ROOTS : [],
+      depth,
+      ignoreGlobs: cfg.scan.ignore,
+      skipLocal: opts.scope === "global",
+    }),
+  );
 
   const filtered = applyFilters(stacks, opts);
   const filterActive = !!(opts.managed || opts.unmanaged || opts.drifted || opts.kind);
@@ -75,6 +84,11 @@ export async function lsCommand(cwd: string, opts: LsOptions): Promise<number> {
 
   const scopeLabel = describeScope(opts, defaultDepth);
   console.log(renderStackList({ cwd, stacks: filtered, scopeLabel, filterActive }));
+  if (suppressed > 0) {
+    log.info(
+      `${suppressed} config file${suppressed === 1 ? "" : "s"} had parse issues — run \`pit validate\` for details.`,
+    );
+  }
   return exitCode;
 }
 
