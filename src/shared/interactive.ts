@@ -153,6 +153,66 @@ export interface Prompter {
   confirm(opts: { message: string; initialValue?: boolean }): Promise<boolean>;
 }
 
+/**
+ * Production `Prompter` — thin wrapper over @clack that throws
+ * `PromptCancelledError` on Ctrl+C so TUI flows bubble up cleanly.
+ */
+export const livePrompter: Prompter = {
+  async select<T>(opts: {
+    message: string;
+    options: Array<{ value: T; label: string; hint?: string }>;
+    initialValue?: T;
+  }): Promise<T> {
+    const result = await clack.select<T>({
+      message: opts.message,
+      options: opts.options as never,
+      initialValue: opts.initialValue,
+    });
+    return ensureValue(result);
+  },
+  async multiselect<T>(opts: {
+    message: string;
+    options: Array<{ value: T; label: string; hint?: string }>;
+    initialValues?: T[];
+    required?: boolean;
+  }): Promise<T[]> {
+    const result = await clack.multiselect<T>({
+      message: opts.message,
+      options: opts.options as never,
+      initialValues: opts.initialValues,
+      required: opts.required ?? false,
+    });
+    return ensureValue(result);
+  },
+  async text(opts: {
+    message: string;
+    placeholder?: string;
+    initialValue?: string;
+    validate?: (v: string) => string | void;
+  }): Promise<string> {
+    const userValidate = opts.validate;
+    const result = await clack.text({
+      message: opts.message,
+      placeholder: opts.placeholder,
+      defaultValue: opts.initialValue,
+      validate: userValidate
+        ? (value: string | undefined): string | Error | undefined => {
+            const v = userValidate(value ?? "");
+            return typeof v === "string" ? v : undefined;
+          }
+        : undefined,
+    });
+    return ensureValue(result);
+  },
+  async confirm(opts: { message: string; initialValue?: boolean }): Promise<boolean> {
+    const result = await clack.confirm({
+      message: opts.message,
+      initialValue: opts.initialValue ?? false,
+    });
+    return ensureValue(result);
+  },
+};
+
 type ScriptedStep =
   | { type: "select"; answer: unknown }
   | { type: "multiselect"; answer: unknown[] }
