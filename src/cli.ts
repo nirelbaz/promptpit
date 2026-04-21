@@ -442,8 +442,13 @@ Examples:
     }
   });
 
-program.action(() => {
-  program.outputHelp();
+// Bare `pit` (no subcommand) opens the interactive TUI. Under a pipe or
+// redirect the TUI itself prints an error and exits 1 — Commander's built-in
+// `--help` still handles the help flag.
+program.action(async () => {
+  const { menuCommand } = await import("./commands/menu.js");
+  const code = await menuCommand(process.cwd());
+  if (code !== 0) process.exit(code);
 });
 
 program.parse();
