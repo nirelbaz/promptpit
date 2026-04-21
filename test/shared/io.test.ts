@@ -233,4 +233,32 @@ describe("spinner (non-TTY)", () => {
     expect(out).toContain("half-done");
     expect(ANSI_RE.test(out)).toBe(false);
   });
+
+  it("emits no ANSI escapes on info and routes to stderr", () => {
+    const s = spinner("working");
+    s.info("still going");
+    const out = collected();
+    expect(out).toContain("still going");
+    expect(ANSI_RE.test(out)).toBe(false);
+  });
+
+  it("supports chaining through start() → succeed() without ANSI", () => {
+    const s = spinner("phase one");
+    const result = s.start("phase two").succeed("phase two done");
+    // Chain should return the stub itself so further calls are valid.
+    expect(result).toBeDefined();
+    const out = collected();
+    expect(out).toContain("phase one");
+    expect(out).toContain("phase two done");
+    expect(ANSI_RE.test(out)).toBe(false);
+  });
+
+  it("honors mutated .text as the default message for succeed()", () => {
+    const s = spinner("initial");
+    s.text = "mutated message";
+    s.succeed(); // no arg → falls back to current text
+    const out = collected();
+    expect(out).toContain("mutated message");
+    expect(ANSI_RE.test(out)).toBe(false);
+  });
 });

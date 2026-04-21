@@ -34,7 +34,7 @@ const UNSUPPORTED_TOOL_DIRS = [
   ".windsurf", ".gemini", ".opencode", ".ai-workspace", ".trae", ".zed",
 ];
 
-async function detectUnsupportedTools(dir: string): Promise<string[]> {
+export async function detectUnsupportedTools(dir: string): Promise<string[]> {
   const found: string[] = [];
   for (const name of UNSUPPORTED_TOOL_DIRS) {
     if (await exists(path.join(dir, name))) found.push(name);

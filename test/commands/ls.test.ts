@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import path from "node:path";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { lsCommand } from "../../src/commands/ls.js";
+import { computeHash } from "../../src/core/manifest.js";
 
 const fixture = path.resolve(__dirname, "../__fixtures__/scan-basic");
 
@@ -84,5 +87,68 @@ describe("pit ls", () => {
     expect(code).toBe(0);
     expect(log).not.toHaveBeenCalled();
     expect(err).toHaveBeenCalledWith("No stacks match the active filters.");
+  });
+
+  it("--short prints one line per stack containing name and root", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const code = await lsCommand(fixture, { short: true, scope: "current", global: false });
+    expect(code).toBe(0);
+    const lines = log.mock.calls.map((c) => String(c[0]));
+    // One line per discovered stack (3 in scan-basic).
+    expect(lines.length).toBe(3);
+    for (const name of ["app-frontend", "app-backend", "llm-demo"]) {
+      const hit = lines.find((l) => l.includes(name));
+      expect(hit, `expected line for ${name}`).toBeDefined();
+      expect(hit!).toContain(path.join(fixture, name));
+    }
+  });
+
+  it("--short --managed prints only the managed stack's one-liner", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const code = await lsCommand(fixture, {
+      short: true,
+      managed: true,
+      scope: "current",
+      global: false,
+    });
+    expect(code).toBe(0);
+    const lines = log.mock.calls.map((c) => String(c[0]));
+    expect(lines.length).toBe(1);
+    expect(lines[0]).toContain("app-frontend");
+    // The managed-only one-liner encodes version per ls.ts:69.
+    expect(lines[0]).toMatch(/· v\d/);
+  });
+
+  it("--strict returns exit code 1 when a stack is drifted", async () => {
+    // Build a managed stack with a cursor rule whose on-disk content does NOT
+    // match the hash recorded in installed.json, forcing reconcile to report
+    // drift. Mirrors the per-adapter-drift fixture in scan.test.ts.
+    const root = mkdtempSync(path.join(tmpdir(), "pit-ls-strict-drift-"));
+    mkdirSync(path.join(root, ".promptpit"), { recursive: true });
+    mkdirSync(path.join(root, ".cursor", "rules"), { recursive: true });
+
+    writeFileSync(
+      path.join(root, ".promptpit", "stack.json"),
+      JSON.stringify({ name: "drift-stack", version: "0.1.0" }),
+    );
+    writeFileSync(path.join(root, ".cursor", "rules", "style.mdc"), "# on-disk content\n");
+    const manifest = {
+      version: 1,
+      installs: [
+        {
+          stack: "drift-stack",
+          stackVersion: "0.1.0",
+          installedAt: new Date().toISOString(),
+          adapters: {
+            cursor: { rules: { style: { hash: computeHash("# original content\n") } } },
+          },
+        },
+      ],
+    };
+    writeFileSync(path.join(root, ".promptpit", "installed.json"), JSON.stringify(manifest));
+
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const code = await lsCommand(root, { strict: true, scope: "current", global: false });
+    expect(code).toBe(1);
   });
 });
