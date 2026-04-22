@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.5.2 (2026-04-22)
+
+MVP-2 preview of the new interactive TUI. Bare `pit` now opens a full-screen Ink app with a grouped stack list, per-stack action menu, and three live actions (Validate, Status & diff, Open folder). Install / update / collect wizards arrive in v0.6; destructive flows in v0.7.
+
+### Added
+
+- **Interactive TUI for bare `pit`** — typing `pit` with no subcommand opens a full-screen Ink app with alt-screen buffer restore on exit, so quitting feels like `vim`/`less`. Non-TTY stdin (CI, pipes) gets a one-line error pointing at `pit ls` instead of hanging.
+- **Grouped main stack list** — stacks partition into `● Managed`, `○ Unmanaged`, `◉ Global` sections with tone-colored counts. Each row shows version + drift chip + compact per-adapter summary (`claude-code: 3s/1a/2c/i`). Legend line decodes the summary code. Cursor lands on the selected stack; Enter opens the action menu.
+- **Scope picker** (`s` key) — widen the scan between current tree + global, global only, or everywhere (depth 8 under home). Scope choice persists across rescans; state survives nav push/pop so returning to the main list doesn't re-scan unnecessarily.
+- **Per-stack action menu** (`Enter`) — kind-aware options (managed / unmanaged / global) with an always-visible "coming in v0.6 / v0.7" flash for unshipped wizards, so the menu is fully navigable without dead clicks.
+- **Validate action** — runs `validateStack` against `.promptpit/` and renders both pit and agnix diagnostics inline (source tag, rule code, file, message).
+- **Status & diff action** — runs `reconcileAll` + `computeDiff` in parallel (`Promise.allSettled`), renders per-adapter drift and a list of drifted artifacts with paths relativized to the stack root. Surfaces a soft-error banner if the diff half fails but reconcile succeeds.
+- **Open-folder action** — spawns `open` (macOS) / `explorer` (Windows) / `xdg-open` (Linux) to reveal the stack root in the platform file manager.
+- **Empty-state screen** — when no stacks are found, shows CLI guidance (`pit init`, `pit install`, `pit collect`) instead of a dead-end menu. Widen-scope option is wired.
+- **Rotating TUI error log** — uncaught renders write a timestamped log under `~/.promptpit/logs/tui-<ts>.log`. Alt-screen is restored and buffered stderr is flushed on hard crash so the user actually sees the error.
+- **New shared modules** — `src/shared/text.ts` (`safe()` control-char sanitization, `clip()` hard-clipper), `errorMessage()` in `src/shared/utils.ts` (Error → message extractor), `src/tui/path-display.ts` (`homeify`, `toForwardSlash`, `describeStackPath` — shared by the `pit ls` string renderer and the TUI screens).
+
+### Changed
+
+- **`pit ls` renderer dedupes against the TUI** — path helpers, glyphs, and `safe()` sanitization now live in shared modules, so `pit ls` and the TUI stay visually aligned.
+- **Esc-to-quit** from the main list and empty state, matching Esc-to-back on every other screen. `q` and Ctrl-C continue to work.
+- **Frame footer grammar** — labeled `keys:` prefix + `·` separators, matching the main-list legend line grammar. Bottom status block reads as one cohesive chrome block.
+
+### Fixed
+
+- **Ghost-header bug on Status & diff + Validate** — every stderr write while Ink owns the terminal is now buffered and replayed after unmount (1 MB cap, drop counter for overflow). Per-screen `log.withMutedWarnings` wraps the core calls as belt-and-suspenders.
+- **SIGINT no longer drops buffered stderr** — the SIGINT handler now flushes the stderr buffer before `process.exit(130)` so adapter warnings survive Ctrl-C.
+- **TUI entry point positions cursor at top** — `\x1b[?1049h\x1b[H\x1b[2J` on enter, so Ink renders from (0,0) instead of wherever the CLI prompt left the cursor.
+
 ## 0.5.1 (2026-04-20)
 
 MVP-1 of the new-UX plan. Core infrastructure for the forthcoming interactive TUI plus a scope-aware, scriptable `pit ls` — no TUI yet. See `docs/superpowers/plans/2026-04-20-new-ux.md`.
