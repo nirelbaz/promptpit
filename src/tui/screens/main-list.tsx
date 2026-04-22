@@ -39,7 +39,12 @@ export function MainList({ cwd }: { cwd: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    setState({ kind: "loading" });
+    // In-flight guard: repeated `r` presses bump `tick`, which re-fires this
+    // effect. The cancelled flag blocks stale setState, but the scan itself
+    // still runs — N concurrent fs walkers on a chatty key is wasteful.
+    // A new tick cancels the old effect's cleanup first, which flips the
+    // prior cancelled flag; the prior scan becomes a no-op on completion.
+    setState((prev) => (prev.kind === "loading" ? prev : { kind: "loading" }));
     (async () => {
       const config = await loadConfig(homedir(), { silent: true });
       const { result: stacks, suppressed } = await log.withMutedWarnings(() =>
@@ -67,11 +72,18 @@ export function MainList({ cwd }: { cwd: string }) {
     if (key.upArrow || input === "k") setCursor((c) => Math.max(0, c - 1));
     else if (key.downArrow || input === "j") setCursor((c) => Math.min(flat.length - 1, c + 1));
     else if (key.return) {
-      const chosen = flat[cursor];
+      // Clamp against the current flat length — a rescan may have shrunk
+      // the list since the cursor was last moved, and flat[staleCursor]
+      // could be undefined. Enter silently no-ops in that case.
+      const idx = Math.min(cursor, flat.length - 1);
+      const chosen = flat[idx];
       if (chosen) nav.push(() => <StackDetail stack={chosen.stack} />);
     }
+    // Rescan spam guard: ignore `r` while already loading. A rapid repeat
+    // otherwise spawns parallel scans (previous effect's scan keeps walking
+    // the fs even though its setState is cancelled).
     else if (input === "s") nav.push(() => <ScopePicker onPick={() => setTick((t) => t + 1)} />);
-    else if (input === "r") setTick((t) => t + 1);
+    else if (input === "r" && state.kind === "ready") setTick((t) => t + 1);
     else if (input === "q") exit();
   });
 

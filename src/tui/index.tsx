@@ -28,23 +28,55 @@ export async function runTui(cwd: string): Promise<number> {
   process.on("exit", restore);
   process.on("SIGINT", () => { restore(); process.exit(130); });
 
-  // Intercept every stderr write and every direct stdout write that isn't
-  // Ink's own frame output. Any stray byte between Ink renders scrambles
-  // Ink's cursor-position math and leaves ghost frames on screen (the "3
-  // stacked Status & diff headers" bug). Ink writes via its own Output
-  // abstraction that goes through stdout.write — we can't distinguish those
-  // from user writes at the method level, so we buffer everything that
-  // isn't Ink and flush on exit. In practice the buffer is tiny because
-  // we've already routed most log.* calls through withMutedWarnings; this
-  // is belt-and-suspenders for anything we missed.
+  // Intercept every stderr write while Ink owns the terminal. Any stray byte
+  // between Ink renders scrambles its cursor-position math and leaves ghost
+  // frames on screen (the "3 stacked Status & diff headers" bug). We buffer
+  // everything and replay after Ink unmounts — belt-and-suspenders beyond
+  // the per-screen withMutedWarnings calls.
+  //
+  // Bounded buffer + uncaughtException flush so a crashing process still
+  // surfaces its own stack trace instead of being swallowed by the intercept.
+  const MAX_STDERR_BUFFER_BYTES = 1 << 20; // 1 MB
   const stderrBuffer: string[] = [];
+  let stderrBufferBytes = 0;
+  let stderrBufferDropped = 0;
   const originalStderrWrite = process.stderr.write.bind(process.stderr);
   process.stderr.write = ((chunk: unknown, ...rest: unknown[]): boolean => {
-    stderrBuffer.push(typeof chunk === "string" ? chunk : String(chunk));
+    const s = typeof chunk === "string" ? chunk : String(chunk);
+    if (stderrBufferBytes + s.length <= MAX_STDERR_BUFFER_BYTES) {
+      stderrBuffer.push(s);
+      stderrBufferBytes += s.length;
+    } else {
+      stderrBufferDropped += s.length;
+    }
     const cb = rest.find((a) => typeof a === "function") as ((err?: Error | null) => void) | undefined;
     cb?.();
     return true;
   }) as typeof process.stderr.write;
+
+  const flushStderr = (): void => {
+    process.stderr.write = originalStderrWrite as typeof process.stderr.write;
+    if (stderrBuffer.length > 0) {
+      originalStderrWrite(stderrBuffer.join(""));
+      stderrBuffer.length = 0;
+      stderrBufferBytes = 0;
+    }
+    if (stderrBufferDropped > 0) {
+      originalStderrWrite(`[pit] dropped ${stderrBufferDropped} bytes of stderr to protect the alt-screen buffer\n`);
+      stderrBufferDropped = 0;
+    }
+  };
+
+  // Hard-crash handlers: restore the terminal and flush buffered stderr so
+  // the user actually sees the error instead of a blank prompt.
+  const onFatal = (err: unknown) => {
+    restore();
+    flushStderr();
+    originalStderrWrite(err instanceof Error ? (err.stack ?? err.message) + "\n" : String(err) + "\n");
+    process.exit(1);
+  };
+  process.on("uncaughtException", onFatal);
+  process.on("unhandledRejection", onFatal);
 
   try {
     const app = render(<NavProvider initial={() => <MainList cwd={cwd} />} />, {
@@ -55,16 +87,13 @@ export async function runTui(cwd: string): Promise<number> {
     return 0;
   } catch (err) {
     restore();
-    process.stderr.write = originalStderrWrite as typeof process.stderr.write;
+    flushStderr();
     const file = await writeErrorLog("runTui", err);
     log.error(`Something went wrong in the TUI. Log written to ${file}.`);
     return 1;
   } finally {
-    // Replay anything buffered to stderr after Ink exits, so warnings and
-    // errors that fired during the session aren't silently lost.
-    process.stderr.write = originalStderrWrite as typeof process.stderr.write;
-    if (stderrBuffer.length > 0) {
-      originalStderrWrite(stderrBuffer.join(""));
-    }
+    flushStderr();
+    process.off("uncaughtException", onFatal);
+    process.off("unhandledRejection", onFatal);
   }
 }

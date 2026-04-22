@@ -105,11 +105,18 @@ function handleAction(
   if (key === "validate") { nav.push(() => <ValidateScreen stack={stack} />); return; }
   if (key === "status-diff") { nav.push(() => <StatusDiffScreen stack={stack} />); return; }
   if (key === "open") {
-    const ok = openFolder(stack.root);
-    const flash = ok
-      ? <Flash message={`Opened ${stack.root}`} crumbs={["Stacks", stack.name, "…"]} />
-      : <Flash message={`Couldn't launch your file manager. Try: open "${stack.root}"`} tone="warn" crumbs={["Stacks", stack.name, "…"]} />;
-    nav.push(() => flash);
+    // openFolder's 'error' event fires asynchronously — we can't know here
+    // whether the launch actually succeeded without awaiting the spawn.
+    // Honest phrasing: "Requested" means "asked the OS to open this";
+    // errors (missing open/xdg-open/explorer) surface on the real stderr
+    // after the TUI exits via the buffered stderr flush in runTui.
+    openFolder(stack.root);
+    nav.push(() => (
+      <Flash
+        message={`Requested open for ${stack.root}`}
+        crumbs={["Stacks", stack.name, "…"]}
+      />
+    ));
     return;
   }
 
