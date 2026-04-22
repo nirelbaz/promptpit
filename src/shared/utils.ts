@@ -121,3 +121,10 @@ export async function writeJsonAtomic(filePath: string, value: unknown): Promise
   await writeFileEnsureDir(tmp, JSON.stringify(value, null, 2) + "\n");
   await rename(tmp, filePath);
 }
+
+/** Extract a human-readable message from any thrown value. The `instanceof
+ *  Error` check + `String(err)` fallback appears in a dozen async callbacks;
+ *  having it in one place keeps error surfaces consistent. */
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
