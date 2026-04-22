@@ -13,9 +13,9 @@ export interface ActionOption {
 }
 
 // Single source of truth for every menu row the TUI can render. Keep the hint
-// strings short and action-oriented — they show as the greyed-out suffix under
-// the cursor in @clack/prompts select menus. Changing wording here updates every
-// menu at once (managed / unmanaged / global share this map).
+// strings short and action-oriented — ListPicker renders the hint as a dim
+// suffix on the active row only. Changing wording here updates every menu at
+// once (managed / unmanaged / global share this map).
 export const ACTION_HINTS: Record<ActionKey, { label: string; hint: string }> = {
   "install-from":     { label: "Install from…",                  hint: "pull a stack into this location" },
   "install-to":       { label: "Install to…",                    hint: "install this stack into another project" },
@@ -41,10 +41,14 @@ export function hintFor(key: ActionKey): string {
   return ACTION_HINTS[key].hint;
 }
 
+// Wired actions first so newcomers land on something that works. The
+// disabled install/adapt/update/collect rows live below as "coming soon"
+// stubs until the Chunk 2 wizards ship; once they do, restore the spec §8
+// ordering (install verbs up top, status/validate/open below).
 const MANAGED_ORDER: ActionKey[] = [
-  "install-from", "install-to", "adapt", "update", "status-diff",
-  "collect-drift", "artifacts", "validate", "uninstall", "open",
-  "delete-bundle", "back",
+  "status-diff", "validate", "open",
+  "install-from", "install-to", "adapt", "update",
+  "collect-drift", "artifacts", "uninstall", "delete-bundle", "back",
 ];
 
 // `artifacts` is intentionally absent for unmanaged stacks in MVP: the per-artifact
@@ -52,11 +56,10 @@ const MANAGED_ORDER: ActionKey[] = [
 // Re-enabling for unmanaged requires a separate "loose-config drilldown" path —
 // tracked as v2 in docs/superpowers/specs/2026-04-20-new-ux-design.md §15.
 const UNMANAGED_ORDER: ActionKey[] = [
-  "install-from", "collect", "copy-to", "adapt",
-  "open", "delete-files", "back",
+  "open", "install-from", "collect", "copy-to", "adapt", "delete-files", "back",
 ];
 
-const GLOBAL_ORDER: ActionKey[] = ["install-from", "artifacts", "open", "back"];
+const GLOBAL_ORDER: ActionKey[] = ["open", "install-from", "artifacts", "back"];
 
 export function optionsForMenu(kind: "managed" | "unmanaged" | "global"): ActionOption[] {
   const order = kind === "managed" ? MANAGED_ORDER : kind === "unmanaged" ? UNMANAGED_ORDER : GLOBAL_ORDER;

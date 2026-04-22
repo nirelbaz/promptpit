@@ -1,14 +1,7 @@
-// TUI entry. Replaces the clack-era loop with an Ink render that owns
-// the full screen for the duration of the session. Alt-screen buffer is
-// entered on start and restored on exit so quitting feels like quitting
-// vim/less — the user's prompt comes back exactly where they left it.
-//
-// TTY guard matches the clack behaviour: non-TTY stdin (CI, pipes) gets
-// a one-line error pointing at `pit ls`, not a hang and a reconciler
-// crash.
 import { render } from "ink";
 import { log } from "../shared/io.js";
 import { NavProvider } from "./nav.js";
+import { ScanProvider } from "./scan-context.js";
 import { MainList } from "./screens/main-list.js";
 import { writeErrorLog } from "./error-boundary.js";
 
@@ -23,10 +16,15 @@ export async function runTui(cwd: string): Promise<number> {
   // Alt-screen buffer: restore terminal state on any exit path, including
   // uncaught errors. The manual \x1b escapes bypass the Ink reconciler,
   // which can leave the buffer entered if it throws during render.
-  process.stdout.write("\x1b[?1049h");
+  //   \x1b[?1049h  enter alt-screen buffer
+  //   \x1b[H       cursor to top-left — some terminals (iTerm, Terminal.app)
+  //                don't reset cursor on alt-buffer switch, so Ink ends up
+  //                rendering from wherever the CLI prompt left off instead
+  //                of the top of the screen
+  //   \x1b[2J      clear any residual alt-buffer content
+  process.stdout.write("\x1b[?1049h\x1b[H\x1b[2J");
   const restore = () => process.stdout.write.call(process.stdout, "\x1b[?1049l");
   process.on("exit", restore);
-  process.on("SIGINT", () => { restore(); process.exit(130); });
 
   // Intercept every stderr write while Ink owns the terminal. Any stray byte
   // between Ink renders scrambles its cursor-position math and leaves ghost
@@ -67,6 +65,11 @@ export async function runTui(cwd: string): Promise<number> {
     }
   };
 
+  // SIGINT handler registered after flushStderr is defined so Ctrl-C doesn't
+  // drop adapter warnings buffered before the interrupt.
+  const onSigint = () => { restore(); flushStderr(); process.exit(130); };
+  process.on("SIGINT", onSigint);
+
   // Hard-crash handlers: restore the terminal and flush buffered stderr so
   // the user actually sees the error instead of a blank prompt.
   const onFatal = (err: unknown) => {
@@ -79,10 +82,15 @@ export async function runTui(cwd: string): Promise<number> {
   process.on("unhandledRejection", onFatal);
 
   try {
-    const app = render(<NavProvider initial={() => <MainList cwd={cwd} />} />, {
-      exitOnCtrlC: true,
-      patchConsole: true,
-    });
+    // ScanProvider wraps NavProvider so scan state survives push/pop —
+    // StackDetail → StatusDiff → back → MainList doesn't trigger a fresh
+    // scan, just re-renders against the cached result.
+    const app = render(
+      <ScanProvider cwd={cwd}>
+        <NavProvider initial={() => <MainList />} />
+      </ScanProvider>,
+      { exitOnCtrlC: true, patchConsole: true },
+    );
     await app.waitUntilExit();
     return 0;
   } catch (err) {
@@ -95,5 +103,6 @@ export async function runTui(cwd: string): Promise<number> {
     flushStderr();
     process.off("uncaughtException", onFatal);
     process.off("unhandledRejection", onFatal);
+    process.off("SIGINT", onSigint);
   }
 }

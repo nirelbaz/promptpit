@@ -1,29 +1,17 @@
-// Persistent layout chrome for every TUI screen. `Frame` composes a header
-// (breadcrumb + optional right-side status) with the screen body and a
-// keymap footer. `SectionTitle` is a subtle inline heading used inside wizard
-// steps. Keeping these stateless keeps tests deterministic.
 import { Box, Text } from "ink";
 import { Fragment, type ReactNode } from "react";
+import { clip, safe } from "../shared/text.js";
 
 // Injected by tsup from package.json.version. Kept local to avoid a cross-
 // file dependency just to render a version tag.
 declare const __APP_VERSION__: string;
-
-// Clip a string to `max` visible chars, appending "…" on overflow. Ink's
-// `wrap="truncate"` does this at render time, but we also want to guarantee
-// a single-line crumb bar regardless of what path/name the caller passes —
-// the only way to do that reliably across Ink layout passes is to clip in
-// userland before handing the text to Ink.
-function clip(s: string, max: number): string {
-  return s.length > max ? s.slice(0, max - 1) + "…" : s;
-}
 
 interface HeaderProps {
   crumbs: string[];
   right?: string;
 }
 
-export function Header({ crumbs, right }: HeaderProps) {
+function Header({ crumbs, right }: HeaderProps) {
   // Single Text with wrap="truncate-start" on the left side so overflow
   // eats from the middle of the crumb trail (usually a long stack name)
   // rather than from the "pit 0.5.1 · " prefix. The right-side chip sits
@@ -31,8 +19,8 @@ export function Header({ crumbs, right }: HeaderProps) {
   // JS-level clipping on `right` caps it at 32 chars before Ink sees it;
   // that keeps the left with enough room to fit "pit 0.5.1 · …name" on
   // common 80-col terminals.
-  const trail = crumbs.join(" › ");
-  const clippedRight = right ? clip(right, 32) : "";
+  const trail = crumbs.map(safe).join(" › ");
+  const clippedRight = right ? clip(safe(right), 32) : "";
   return (
     <Box paddingX={1} borderStyle="round" borderColor="gray" justifyContent="space-between">
       <Box flexGrow={1} flexShrink={1}>
@@ -53,9 +41,14 @@ export function Header({ crumbs, right }: HeaderProps) {
 
 export type KeyHint = [string, string];
 
-export function Footer({ keys }: { keys: KeyHint[] }) {
+function Footer({ keys }: { keys: KeyHint[] }) {
+  // No marginTop: the footer sits directly below whatever the screen
+  // renders last. MainList pairs it with Legend (which has its own top
+  // border as the visual break); other screens end with ListPicker rows
+  // or a Text block and benefit from the tight rhythm too.
   return (
-    <Box paddingX={1} marginTop={1}>
+    <Box paddingX={1}>
+      <Text dimColor>keys: </Text>
       {keys.map(([k, v], i) => (
         <Fragment key={k}>
           {i > 0 && <Text dimColor>  ·  </Text>}

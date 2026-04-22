@@ -9,7 +9,7 @@ async function tick(): Promise<void> {
 }
 
 describe("EmptyState", () => {
-  it("names the cwd + scope and offers five next-step options", async () => {
+  it("names the cwd + scope and shows CLI next steps + a widen-scope option", async () => {
     const { lastFrame } = render(
       <NavProvider
         initial={() => <EmptyState cwd="~/work/new-project" scopeLabel="current tree (depth 5) + global" />}
@@ -20,10 +20,12 @@ describe("EmptyState", () => {
     expect(frame).toContain("No AI config found");
     expect(frame).toContain("~/work/new-project");
     expect(frame).toContain("current tree (depth 5) + global");
-    expect(frame).toContain("Create a new stack here");
-    expect(frame).toContain("Scan a different path");
-    expect(frame).toContain("Scan everywhere");
-    expect(frame).toContain("Install a stack from GitHub");
+    // CLI guidance replaces the disabled "Create / Scan / Install" menu.
+    // Until the wizards ship, the user gets concrete commands to run.
+    expect(frame).toContain("pit init");
+    expect(frame).toContain("pit install");
+    expect(frame).toContain("pit collect");
+    expect(frame).toContain("Widen scope");
     expect(frame).toContain("Quit");
   });
 });

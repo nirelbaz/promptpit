@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { render } from "ink-testing-library";
 import { NavProvider } from "../../../src/tui/nav.js";
+import { ScanProvider } from "../../../src/tui/scan-context.js";
 import { MainList } from "../../../src/tui/screens/main-list.js";
 
 // ink-testing-library's first frame is blank until React's passive effects
@@ -18,7 +19,9 @@ describe("MainList", () => {
     const empty = await mkdtemp(path.join(tmpdir(), "pit-mainlist-empty-"));
     try {
       const { lastFrame } = render(
-        <NavProvider initial={() => <MainList cwd={empty} />} />,
+        <ScanProvider cwd={empty}>
+          <NavProvider initial={() => <MainList />} />
+        </ScanProvider>,
       );
       // A real scan on an empty directory returns no stacks. MainList
       // routes to EmptyState, which renders "No AI config found".

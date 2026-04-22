@@ -18,7 +18,10 @@ describe("ScopePicker", () => {
     expect(frame).toContain("Current tree + global");
     expect(frame).toContain("Global only");
     expect(frame).toContain("A specific path");
-    expect(frame).toContain("coming soon");
     expect(frame).toContain("Everywhere (deep)");
+    // ListPicker now renders the hint only on the active row, so hints
+    // on other rows (including the disabled 'coming soon' hint on path)
+    // aren't visible in the initial frame. The disabled state is still
+    // enforced by ListPicker's cursor-skip logic.
   });
 });

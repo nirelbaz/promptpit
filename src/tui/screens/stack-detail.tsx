@@ -1,40 +1,33 @@
-// Detail card + per-kind action menu for a single scanned stack.
-// Routes action keys to the corresponding screen. Chunk 1 wires Validate,
-// Status & diff, Open, and Back — every other action pushes a "coming
-// in a later release" flash so the menu itself is fully navigable.
-//
-// This replaces the clack `stackMenu` function: actions are now screens
-// (pushed onto the nav stack), not injected handlers. Simpler composition,
-// and every action's render lives with its logic.
 import { spawn } from "node:child_process";
 import { Box, Text } from "ink";
 import { Frame } from "../chrome.js";
 import { ListPicker, type ListOption } from "../primitives.js";
 import { useNav } from "../nav.js";
 import { optionsForMenu, type ActionKey } from "../action-hints.js";
+import { glyphFor, glyphColorFor, rightChipFor } from "../stack-presentation.js";
+import { safe } from "../../shared/text.js";
 import type { ScannedStack } from "../../shared/schema.js";
 import { ValidateScreen } from "./validate-screen.js";
 import { StatusDiffScreen } from "./status-diff-screen.js";
 import { Flash } from "./flash.js";
 
-// Actions wired in Chunks 2/3. Until then, picking one pushes a Flash
-// that tells the user which release will include it — clearer than
-// silently doing nothing, less spammy than throwing an error.
+// Actions not yet wired push a Flash that tells the user which release will
+// include them — clearer than silently no-op'ing, less spammy than throwing.
 const COMING_SOON: Partial<Record<ActionKey, string>> = {
-  "install-from":     "Install wizard ships in the next release",
-  "install-to":       "Install-to wizard ships in the next release",
-  "adapt":            "Adapt wizard ships in the next release",
-  "update":           "Update wizard ships in the next release",
-  "collect":          "Collect wizard ships in the next release",
-  "collect-drift":    "Collect-drift ships in the next release",
-  "artifacts":        "Per-artifact drilldown ships in the final release",
-  "uninstall":        "Uninstall wizard ships in the next release",
-  "delete-bundle":    "Delete-bundle ships in the final release",
-  "delete-files":     "Delete-files ships in the final release",
-  "copy-to":          "Copy-to ships in the final release",
-  "resolve-conflicts":"Conflict resolution ships in the next release",
-  "review-overrides": "Overrides review ships in the final release",
-  "show-extends":     "Extends chain viewer ships in the final release",
+  "install-from":     "Install wizard coming in v0.6",
+  "install-to":       "Install-to wizard coming in v0.6",
+  "adapt":            "Adapt wizard coming in v0.6",
+  "update":           "Update wizard coming in v0.6",
+  "collect":          "Collect wizard coming in v0.6",
+  "collect-drift":    "Collect-drift coming in v0.6",
+  "artifacts":        "Per-artifact drilldown coming in v0.7",
+  "uninstall":        "Uninstall wizard coming in v0.6",
+  "delete-bundle":    "Delete-bundle coming in v0.7",
+  "delete-files":     "Delete-files coming in v0.7",
+  "copy-to":          "Copy-to coming in v0.7",
+  "resolve-conflicts":"Conflict resolution coming in v0.6",
+  "review-overrides": "Overrides review coming in v0.7",
+  "show-extends":     "Extends chain viewer coming in v0.7",
 };
 
 function platformOpenCommand(p: NodeJS.Platform): string {
@@ -52,38 +45,34 @@ export function StackDetail({ stack }: { stack: ScannedStack }) {
     disabled: Boolean(COMING_SOON[o.value]),
   }));
 
-  const glyph = stack.kind === "managed" ? "●" : stack.kind === "unmanaged" ? "○" : "◉";
-  const glyphColor = stack.kind === "managed" ? "green" : stack.kind === "unmanaged" ? "gray" : "cyan";
-  const rightChip = stack.kind === "managed"
-    ? `managed · v${stack.promptpit?.stackVersion ?? "?"}`
-    : stack.kind;
+  const chip = rightChipFor(stack);
 
   return (
     <Frame
       crumbs={["Stacks", stack.name]}
-      right={rightChip}
+      right={chip.text}
       keys={[["↑↓", "nav"], ["↵", "select"], ["esc", "back"]]}
     >
       <Box flexDirection="column" paddingX={1} marginBottom={1} borderStyle="round" borderColor="gray">
         <Box>
-          <Text color={glyphColor}>{glyph} </Text>
-          <Text bold wrap="truncate-end">{stack.name}</Text>
+          <Text color={glyphColorFor(stack.kind)}>{glyphFor(stack.kind)} </Text>
+          <Text bold wrap="truncate-end">{safe(stack.name)}</Text>
           {stack.kind === "managed" && stack.promptpit?.stackVersion && (
-            <Text dimColor wrap="truncate-end">  v{stack.promptpit.stackVersion}</Text>
+            <Text dimColor wrap="truncate-end">  v{safe(stack.promptpit.stackVersion)}</Text>
           )}
           {stack.overallDrift === "drifted" && <Text color="yellow">  · drifted</Text>}
         </Box>
-        <Text dimColor wrap="truncate-end">{stack.root}</Text>
+        <Text dimColor wrap="truncate-end">{safe(stack.root)}</Text>
         {stack.kind === "managed" && stack.promptpit?.source && (
           <Box marginTop={1}>
             <Text dimColor>source: </Text>
-            <Text color="cyan" wrap="truncate-end">{stack.promptpit.source}</Text>
+            <Text color="cyan" wrap="truncate-end">{safe(stack.promptpit.source)}</Text>
           </Box>
         )}
         {stack.adapters.length > 0 && (
           <Box>
             <Text dimColor>tools:  </Text>
-            <Text wrap="truncate-end">{stack.adapters.map((a) => a.id).join(", ")}</Text>
+            <Text wrap="truncate-end">{stack.adapters.map((a) => safe(a.id)).join(", ")}</Text>
           </Box>
         )}
       </Box>
@@ -106,14 +95,13 @@ function handleAction(
   if (key === "status-diff") { nav.push(() => <StatusDiffScreen stack={stack} />); return; }
   if (key === "open") {
     // openFolder's 'error' event fires asynchronously — we can't know here
-    // whether the launch actually succeeded without awaiting the spawn.
-    // Honest phrasing: "Requested" means "asked the OS to open this";
-    // errors (missing open/xdg-open/explorer) surface on the real stderr
-    // after the TUI exits via the buffered stderr flush in runTui.
+    // whether the launch actually succeeded. "Requested" means "asked the OS
+    // to open this"; errors (missing open/xdg-open/explorer) surface on the
+    // real stderr after the TUI exits via runTui's buffered flush.
     openFolder(stack.root);
     nav.push(() => (
       <Flash
-        message={`Requested open for ${stack.root}`}
+        message={`Requested open for ${safe(stack.root)}`}
         crumbs={["Stacks", stack.name, "…"]}
       />
     ));
@@ -126,23 +114,12 @@ function handleAction(
   }
 }
 
-/** Reveal the stack root in the platform's file manager. Args array — no
- *  shell — so a path containing metacharacters can't be misinterpreted.
- *  Returns true if spawn started (not whether the file manager opened —
- *  detached/stdio:ignore means we can't tell). Returns false if Node
- *  couldn't even launch the binary (ENOENT on minimal containers).
- *
- *  The 'error' listener is load-bearing: without it, a failed spawn emits
- *  an uncaught ChildProcess error event that crashes Node out from under
- *  the Ink alt-screen. */
-function openFolder(root: string): boolean {
+/** Reveal the stack root in the platform's file manager. The 'error' listener
+ *  is load-bearing: without it, a failed spawn emits an uncaught ChildProcess
+ *  error event that crashes Node out from under the Ink alt-screen. */
+function openFolder(root: string): void {
   const cmd = platformOpenCommand(process.platform);
-  try {
-    const child = spawn(cmd, [root], { detached: true, stdio: "ignore" });
-    child.on("error", () => { /* swallow — surfaced via Flash tone in caller */ });
-    child.unref();
-    return true;
-  } catch {
-    return false;
-  }
+  const child = spawn(cmd, [root], { detached: true, stdio: "ignore" });
+  child.on("error", () => { /* async surface; caller already showed Flash */ });
+  child.unref();
 }

@@ -22,9 +22,13 @@ describe("action-hints", () => {
     expect(hintFor("install-from")).toMatch(/pull a stack into this location/);
   });
 
-  it("optionsForMenu('managed') puts install-from first", () => {
-    const opts = optionsForMenu("managed");
-    expect(opts[0]!.value).toBe("install-from");
+  it("optionsForMenu('managed') leads with wired actions (status-diff, validate, open)", () => {
+    // Until the install/update wizards ship, the menu leads with actions
+    // that actually work so first-time users don't land on a disabled row.
+    // Restore spec §8 ordering once Chunk 2 wires install verbs.
+    const values = optionsForMenu("managed").map((o) => o.value);
+    expect(values.slice(0, 3)).toEqual(["status-diff", "validate", "open"]);
+    expect(values[values.length - 1]).toBe("back");
   });
 
   it("optionsForMenu('unmanaged') omits delete-bundle, update, and artifacts", () => {
@@ -37,6 +41,6 @@ describe("action-hints", () => {
 
   it("optionsForMenu('global') keeps the list small and back-terminated", () => {
     const opts = optionsForMenu("global");
-    expect(opts.map((o) => o.value)).toEqual(["install-from", "artifacts", "open", "back"]);
+    expect(opts.map((o) => o.value)).toEqual(["open", "install-from", "artifacts", "back"]);
   });
 });

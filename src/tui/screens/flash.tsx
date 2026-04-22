@@ -1,18 +1,23 @@
-// Short-lived confirmation card. Pushed onto the nav stack after a
-// fire-and-forget action (e.g. "opened folder"), auto-dismisses after
-// `ms`, then pops back. Keeps the user visually acknowledged without
-// trapping them on a dead-end screen.
 import { Box, Text, useInput } from "ink";
 import { useEffect } from "react";
 import { Frame } from "../chrome.js";
 import { useNav } from "../nav.js";
+import { clip, safe } from "../../shared/text.js";
+
+type Tone = "success" | "info" | "warn";
 
 interface FlashProps {
   message: string;
-  tone?: "success" | "info" | "warn";
+  tone?: Tone;
   ms?: number;
   crumbs?: string[];
 }
+
+const TONE_PRESETS: Record<Tone, { glyph: string; color: string }> = {
+  success: { glyph: "✓", color: "green" },
+  info:    { glyph: "ℹ", color: "cyan" },
+  warn:    { glyph: "⚠", color: "yellow" },
+};
 
 export function Flash({ message, tone = "success", ms = 1200, crumbs = ["Stacks", "…"] }: FlashProps) {
   const nav = useNav();
@@ -25,14 +30,16 @@ export function Flash({ message, tone = "success", ms = 1200, crumbs = ["Stacks"
     if (key.escape || key.return) nav.pop();
   });
 
-  const glyph = tone === "success" ? "✓" : tone === "warn" ? "⚠" : "ℹ";
-  const color = tone === "success" ? "green" : tone === "warn" ? "yellow" : "cyan";
+  const { glyph, color } = TONE_PRESETS[tone];
 
   return (
     <Frame crumbs={crumbs} keys={[["esc", "dismiss"]]}>
       <Box paddingX={1}>
         <Text color={color}>{glyph} </Text>
-        <Text>{message}</Text>
+        {/* Hard-clip + truncate-end: callers pass user-controlled strings
+            (stack.root, stack.name) that can overflow narrow terminals and
+            break the Frame layout otherwise. */}
+        <Text wrap="truncate-end">{clip(safe(message), 120)}</Text>
       </Box>
     </Frame>
   );

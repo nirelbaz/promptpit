@@ -1,7 +1,3 @@
-// Ink replacement for the clack validate action. Runs validateStack()
-// against the selected stack's .promptpit/ and renders a pass/fail card
-// with per-file diagnostics. Scanning happens on mount so the user sees
-// a spinner while the IO completes.
 import path from "node:path";
 import { Box, Text } from "ink";
 import { useEffect, useState } from "react";
@@ -10,6 +6,8 @@ import { ListPicker, Spinner } from "../primitives.js";
 import { useNav } from "../nav.js";
 import { validateStack, type ValidateResult } from "../../core/validate.js";
 import { log } from "../../shared/io.js";
+import { safe } from "../../shared/text.js";
+import { errorMessage } from "../../shared/utils.js";
 import type { ScannedStack } from "../../shared/schema.js";
 
 type State =
@@ -37,7 +35,7 @@ export function ValidateScreen({ stack }: { stack: ScannedStack }) {
         if (!cancelled) setState({ kind: "done", result });
       })
       .catch((err: unknown) => {
-        if (!cancelled) setState({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+        if (!cancelled) setState({ kind: "error", message: errorMessage(err) });
       });
     return () => { cancelled = true; };
   }, [state.kind, stack.root]);
@@ -77,6 +75,10 @@ function ResultCard({ result }: { result: ValidateResult }) {
   const summary = result.valid
     ? "Valid"
     : `${result.errors} error${result.errors === 1 ? "" : "s"}, ${result.warnings} warning${result.warnings === 1 ? "" : "s"}`;
+  // Both pit's own diagnostics and agnix's (Claude Code specialized rules)
+  // feed into the error/warning counts. Previously we only rendered pit's —
+  // so agnix-only failures showed up as "3 errors" with an empty body.
+  const allDiagnostics = [...result.diagnostics, ...result.agnix.diagnostics];
   return (
     <>
       <Box paddingX={1} marginBottom={1} flexDirection="column" borderStyle="round" borderColor={result.valid ? "green" : "yellow"}>
@@ -85,17 +87,24 @@ function ResultCard({ result }: { result: ValidateResult }) {
             ? <><Text color="green">✓ </Text><Text bold>{summary}</Text></>
             : <><Text color="yellow">⚠ </Text><Text bold>{summary}</Text></>}
         </Box>
+        {!result.agnix.available && (
+          <Text dimColor>agnix not available — some checks skipped</Text>
+        )}
       </Box>
-      {result.diagnostics.length > 0 && (
+      {allDiagnostics.length > 0 && (
         <Box paddingX={1} marginBottom={1} flexDirection="column">
           <Text bold>Diagnostics</Text>
-          {result.diagnostics.map((d, i) => (
+          {allDiagnostics.map((d, i) => (
             <Box key={i}>
               <Box width={9}>
                 <Text color={d.level === "error" ? "red" : "yellow"}>{d.level.toUpperCase()}</Text>
               </Box>
-              <Text>{d.file}</Text>
-              <Text dimColor>  {d.message}</Text>
+              <Box width={4}>
+                <Text dimColor>{d.source === "agnix" ? "ag" : "pit"}</Text>
+              </Box>
+              <Text>{safe(d.file)}</Text>
+              {d.rule && <Text dimColor> [{safe(d.rule)}]</Text>}
+              <Text dimColor>  {safe(d.message)}</Text>
             </Box>
           ))}
         </Box>

@@ -1,7 +1,3 @@
-// Scope widen picker. MVP behaviour: the chosen value just returns to the
-// caller, which triggers a rescan with the default scope. Wiring the
-// path/all choices through to scan() with different cwd/depth is tracked
-// separately (see docs/superpowers/specs/2026-04-20-new-ux-design.md §6).
 import { Frame } from "../chrome.js";
 import { ListPicker } from "../primitives.js";
 import { useNav } from "../nav.js";

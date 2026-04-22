@@ -1,74 +1,38 @@
-// Main stack list. Fires scan() on mount, shows a spinner while it runs,
-// routes to the empty-state screen when nothing's found, otherwise renders
-// the partitioned list (locals first, globals below a divider) with an
-// inline detail strip under the cursor.
 import path from "node:path";
-import { homedir } from "node:os";
 import { Box, Text, useApp, useInput } from "ink";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useMemo } from "react";
 import { Frame, type KeyHint } from "../chrome.js";
 import { Spinner } from "../primitives.js";
 import { useNav } from "../nav.js";
-import { scan } from "../../core/scan.js";
-import { loadConfig } from "../../core/config.js";
-import { log } from "../../shared/io.js";
-import type { ScannedStack, PitConfig } from "../../shared/schema.js";
+import { useScan, scopeLabel } from "../scan-context.js";
+import type { ScannedStack } from "../../shared/schema.js";
+import { glyphFor, glyphColorFor, driftToneFor, compactAdapterSummary } from "../stack-presentation.js";
+import { safe } from "../../shared/text.js";
+import { homeify, describeStackPath } from "../path-display.js";
 import { StackDetail } from "./stack-detail.js";
 import { ScopePicker } from "./scope-picker.js";
 import { EmptyState } from "./empty-state.js";
 
-const GLOBAL_ROOTS = [
-  path.join(homedir(), ".claude"),
-  path.join(homedir(), ".cursor"),
-  path.join(homedir(), ".codex"),
-  path.join(homedir(), ".github"),
-  path.join(homedir(), ".agents", "skills"),
-];
-
-type State =
-  | { kind: "loading" }
-  | { kind: "ready"; stacks: ScannedStack[]; suppressed: number; config: PitConfig }
-  | { kind: "error"; message: string };
-
-export function MainList({ cwd }: { cwd: string }) {
+export function MainList() {
   const nav = useNav();
   const { exit } = useApp();
-  const [state, setState] = useState<State>({ kind: "loading" });
-  const [cursor, setCursor] = useState(0);
-  const [tick, setTick] = useState(0); // bump to force rescan
+  const { cwd, state, scope, cursor, setCursor, setScope, rescan } = useScan();
 
-  useEffect(() => {
-    let cancelled = false;
-    // In-flight guard: repeated `r` presses bump `tick`, which re-fires this
-    // effect. The cancelled flag blocks stale setState, but the scan itself
-    // still runs — N concurrent fs walkers on a chatty key is wasteful.
-    // A new tick cancels the old effect's cleanup first, which flips the
-    // prior cancelled flag; the prior scan becomes a no-op on completion.
-    setState((prev) => (prev.kind === "loading" ? prev : { kind: "loading" }));
-    (async () => {
-      const config = await loadConfig(homedir(), { silent: true });
-      const { result: stacks, suppressed } = await log.withMutedWarnings(() =>
-        scan({
-          cwd,
-          globalRoots: config.ui.showGlobalRow ? GLOBAL_ROOTS : [],
-          depth: config.scan.defaultDepth,
-          ignoreGlobs: config.scan.ignore,
-        }),
-      );
-      if (!cancelled) setState({ kind: "ready", stacks, suppressed, config });
-    })().catch((err: unknown) => {
-      if (!cancelled) setState({ kind: "error", message: err instanceof Error ? err.message : String(err) });
-    });
-    return () => { cancelled = true; };
-  }, [cwd, tick]);
+  const partitioned = useMemo(() => {
+    if (state.kind !== "ready") {
+      return { managed: [] as RenderItem[], unmanaged: [] as RenderItem[], global: [] as RenderItem[], flat: [] as RenderItem[] };
+    }
+    return partition(state.stacks, cwd);
+  }, [state, cwd]);
 
   useInput((input, key) => {
     if (state.kind !== "ready" || state.stacks.length === 0) {
-      if (input === "q") exit();
+      // Esc and q both quit from the root list — EmptyState does the same,
+      // keeping the "Esc = back out of pit" model consistent everywhere.
+      if (input === "q" || key.escape) exit();
       return;
     }
-    const { locals, globals } = partition(state.stacks, cwd);
-    const flat = [...locals, ...globals];
+    const { flat } = partitioned;
     if (key.upArrow || input === "k") setCursor((c) => Math.max(0, c - 1));
     else if (key.downArrow || input === "j") setCursor((c) => Math.min(flat.length - 1, c + 1));
     else if (key.return) {
@@ -79,12 +43,9 @@ export function MainList({ cwd }: { cwd: string }) {
       const chosen = flat[idx];
       if (chosen) nav.push(() => <StackDetail stack={chosen.stack} />);
     }
-    // Rescan spam guard: ignore `r` while already loading. A rapid repeat
-    // otherwise spawns parallel scans (previous effect's scan keeps walking
-    // the fs even though its setState is cancelled).
-    else if (input === "s") nav.push(() => <ScopePicker onPick={() => setTick((t) => t + 1)} />);
-    else if (input === "r" && state.kind === "ready") setTick((t) => t + 1);
-    else if (input === "q") exit();
+    else if (input === "s") nav.push(() => <ScopePicker onPick={setScope} />);
+    else if (input === "r") rescan();
+    else if (input === "q" || key.escape) exit();
   });
 
   if (state.kind === "loading") {
@@ -107,11 +68,16 @@ export function MainList({ cwd }: { cwd: string }) {
   }
 
   if (state.stacks.length === 0) {
-    return <EmptyState cwd={homeify(cwd)} scopeLabel="current tree (depth 5) + global" />;
+    return (
+      <EmptyState
+        cwd={homeify(cwd)}
+        scopeLabel={scopeLabel(scope, state.config.scan.defaultDepth)}
+        onScope={setScope}
+      />
+    );
   }
 
-  const { locals, globals } = partition(state.stacks, cwd);
-  const flat = [...locals, ...globals];
+  const { managed, unmanaged, global, flat } = partitioned;
   const cursorClamped = Math.min(cursor, flat.length - 1);
 
   const footerKeys: KeyHint[] = [
@@ -119,7 +85,15 @@ export function MainList({ cwd }: { cwd: string }) {
     ["↵", "open"],
     ["r", "rescan"],
     ["s", "scope"],
-    ["q", "quit"],
+    ["q/esc", "quit"],
+  ];
+
+  // Sections with tone-colored counts. Empty sections are skipped so the
+  // user doesn't see "Unmanaged (0)" as dead whitespace.
+  const sections: Array<{ label: string; color: string; items: RenderItem[] }> = [
+    { label: `${glyphFor("managed")} Managed`,     color: glyphColorFor("managed"),   items: managed },
+    { label: `${glyphFor("unmanaged")} Unmanaged`, color: glyphColorFor("unmanaged"), items: unmanaged },
+    { label: `${glyphFor("global")} Global`,       color: glyphColorFor("global"),    items: global },
   ];
 
   return (
@@ -128,34 +102,46 @@ export function MainList({ cwd }: { cwd: string }) {
       right={`${homeify(cwd)} · ${state.stacks.length} stack${state.stacks.length === 1 ? "" : "s"}`}
       keys={footerKeys}
     >
-      {locals.map((item, i) => (
-        <Fragment key={item.stack.root}>
-          <StackRow item={item} selected={i === cursorClamped} />
-          {i === cursorClamped && <ExpandedDetail stack={item.stack} />}
-        </Fragment>
-      ))}
-      {globals.length > 0 && (
-        <Box paddingX={1} marginTop={1} marginBottom={0}>
-          <Text dimColor>─── global ───</Text>
-        </Box>
-      )}
-      {globals.map((item, i) => {
-        const idx = locals.length + i;
-        return (
-          <Fragment key={item.stack.root}>
-            <StackRow item={item} selected={idx === cursorClamped} />
-            {idx === cursorClamped && <ExpandedDetail stack={item.stack} />}
-          </Fragment>
-        );
-      })}
+      {/* Section's `first` flag suppresses its marginTop so the first
+          non-empty section sits one line under the header (Frame already
+          provides that gap), not two. */}
+      {sections
+        .filter((sec) => sec.items.length > 0)
+        .map((sec, sectionIdx, visible) => {
+          // Flat indices are section-adjacent ranges. Compute each section's
+          // starting offset once rather than linear-scanning `flat` per row.
+          const sectionStart = visible
+            .slice(0, sectionIdx)
+            .reduce((acc, s) => acc + s.items.length, 0);
+          return (
+            <Fragment key={sec.label}>
+              <SectionHeader label={sec.label} count={sec.items.length} color={sec.color} first={sectionIdx === 0} />
+              {sec.items.map((item, localIdx) => {
+                const selected = sectionStart + localIdx === cursorClamped;
+                return (
+                  <Fragment key={item.stack.root}>
+                    <StackRow item={item} selected={selected} />
+                    {selected && <CursorPath item={item} />}
+                  </Fragment>
+                );
+              })}
+            </Fragment>
+          );
+        })}
       {state.suppressed > 0 && (
-        <Box paddingX={1} marginTop={1}>
+        <Box paddingX={1} marginTop={2}>
+          <Text color="yellow">⚠ </Text>
+          <Text color="yellow">{state.suppressed}</Text>
           <Text dimColor>
-            {state.suppressed} config file{state.suppressed === 1 ? "" : "s"} had parse issues — run{" "}
-            <Text color="cyan">pit validate</Text>{" "}for details.
+            {" "}config file{state.suppressed === 1 ? "" : "s"} had parse issues  ·  run{" "}
           </Text>
+          <Text color="cyan">pit validate</Text>
+          <Text dimColor>{" "}for details</Text>
         </Box>
       )}
+      {/* Legend tight against whatever's above — the separator line already
+          does the visual work of splitting content from chrome, no gap needed. */}
+      <Legend tight={state.suppressed > 0} />
     </Frame>
   );
 }
@@ -166,99 +152,126 @@ interface RenderItem {
   depth: number;
 }
 
-function partition(stacks: ScannedStack[], cwd: string): { locals: RenderItem[]; globals: RenderItem[] } {
-  const home = homedir();
+function partition(stacks: ScannedStack[], cwd: string): {
+  managed: RenderItem[];
+  unmanaged: RenderItem[];
+  global: RenderItem[];
+  flat: RenderItem[];
+} {
   const cwdR = path.resolve(cwd);
-  const localsWithDepth: RenderItem[] = [];
-  const globals: RenderItem[] = [];
+  const managed: RenderItem[] = [];
+  const unmanaged: RenderItem[] = [];
+  const global: RenderItem[] = [];
 
   for (const s of stacks) {
     if (s.kind === "global") {
-      globals.push({ stack: s, displayPath: homeify(s.root), depth: 0 });
+      global.push({ stack: s, displayPath: homeify(s.root), depth: 0 });
       continue;
     }
-    const { display, depth } = describePath(cwdR, s.root, home, s.name);
-    localsWithDepth.push({ stack: s, displayPath: display, depth });
+    const { display, depth } = describeStackPath(cwdR, s.root, s.name);
+    const item: RenderItem = { stack: s, displayPath: display, depth };
+    if (s.kind === "managed") managed.push(item);
+    else unmanaged.push(item);
   }
-  localsWithDepth.sort((a, b) => a.depth - b.depth || a.stack.root.localeCompare(b.stack.root));
-  return { locals: localsWithDepth, globals };
+
+  const byDepthThenRoot = (a: RenderItem, b: RenderItem) =>
+    a.depth - b.depth || a.stack.root.localeCompare(b.stack.root);
+  managed.sort(byDepthThenRoot);
+  unmanaged.sort(byDepthThenRoot);
+
+  return { managed, unmanaged, global, flat: [...managed, ...unmanaged, ...global] };
 }
 
-function describePath(cwdR: string, root: string, _home: string, name: string): { display: string | null; depth: number } {
-  const rootR = path.resolve(root);
-  if (rootR === cwdR) return { display: null, depth: 0 };
-  const rel = path.relative(cwdR, rootR);
-  if (rel && !rel.startsWith("..") && !path.isAbsolute(rel)) {
-    const segs = rel.split(path.sep);
-    const depth = segs.length;
-    if (segs[segs.length - 1] === name) {
-      if (segs.length === 1) return { display: null, depth };
-      return { display: toForwardSlash(`./${segs.slice(0, -1).join(path.sep)}/`), depth };
-    }
-    return { display: toForwardSlash(`./${rel}`), depth };
-  }
-  return { display: homeify(rootR), depth: Number.POSITIVE_INFINITY };
-}
-
-function homeify(p: string): string {
-  const home = homedir();
-  if (p === home) return "~";
-  if (p.startsWith(home + path.sep)) return "~" + p.slice(home.length);
-  return p;
-}
-
-function toForwardSlash(p: string): string {
-  return path.sep === "\\" ? p.replace(/\\/g, "/") : p;
-}
-
-function StackRow({ item, selected }: { item: RenderItem; selected: boolean }) {
-  const { stack: s, displayPath } = item;
-  const glyph = s.kind === "managed" ? "●" : s.kind === "unmanaged" ? "○" : "◉";
-  const glyphColor = s.kind === "managed" ? "green" : s.kind === "unmanaged" ? "gray" : "cyan";
-  const right = s.kind === "managed"
-    ? `managed · v${s.promptpit?.stackVersion ?? "?"}${s.overallDrift === "drifted" ? " · drifted" : ""}`
-    : s.kind;
-  const rightColor = s.kind === "managed"
-    ? (s.overallDrift === "drifted" ? "yellow" : "cyan")
-    : s.kind === "global" ? "cyan" : "gray";
+function SectionHeader({ label, count, color, first }: { label: string; count: number; color: string; first?: boolean }) {
   return (
-    <Box>
-      <Text color={selected ? "cyan" : undefined}>{selected ? "  ▸ " : "    "}</Text>
-      <Text color={glyphColor}>{glyph} </Text>
-      {/* Fixed-width columns with truncate-end so long names/paths clip to
-          ellipsis instead of wrapping and shoving the status chip off the
-          row. Name gets the most room because it's the primary field; path
-          is always optional context. */}
-      <Box width={30}><Text bold={selected} wrap="truncate-end">{s.name}</Text></Box>
-      <Box width={24}><Text dimColor wrap="truncate-end">{displayPath ?? ""}</Text></Box>
-      <Text color={rightColor} wrap="truncate-end">{right}</Text>
+    <Box paddingX={1} marginTop={first ? 0 : 1}>
+      <Text color={color} bold>{label}</Text>
+      <Text dimColor>  ({count})</Text>
     </Box>
   );
 }
 
-function ExpandedDetail({ stack: s }: { stack: ScannedStack }) {
+function StackRow({ item, selected }: { item: RenderItem; selected: boolean }) {
+  const { stack: s } = item;
+  const tone = driftToneFor(s);
+  // "0.0.0" is the scanner's fallback for missing/unreadable stack.json —
+  // treat it as "no version to show" rather than rendering `v0.0.0`.
+  const version = s.promptpit?.stackVersion;
+  const middle = version && version !== "0.0.0" ? `v${version}` : "";
   return (
-    <Box flexDirection="column" marginLeft={6} marginTop={1} marginBottom={1}>
-      {s.adapters.map((a) => {
-        const parts: string[] = [];
-        if (a.artifacts.skills) parts.push(`${a.artifacts.skills}s`);
-        if (a.artifacts.agents) parts.push(`${a.artifacts.agents}a`);
-        if (a.artifacts.rules) parts.push(`${a.artifacts.rules} rules`);
-        if (a.artifacts.commands) parts.push(`${a.artifacts.commands} cmd`);
-        if (a.artifacts.mcp) parts.push(`${a.artifacts.mcp} mcp`);
-        if (a.artifacts.instructions) parts.push("inst");
-        const counts = parts.length > 0 ? parts.join(" · ") : null;
-        return (
-          <Box key={a.id}>
-            <Box width={14}><Text color="gray">{a.id}</Text></Box>
-            {counts ? <Text>{counts}</Text> : <Text dimColor>—</Text>}
-            {a.drift === "drifted" && <Text color="yellow">  drifted</Text>}
-          </Box>
-        );
-      })}
-      {s.unsupportedTools.length > 0 && (
-        <Box><Text dimColor>└─ unsupported: {s.unsupportedTools.join(", ")}</Text></Box>
+    <Box flexDirection="column" paddingLeft={2}>
+      <Box>
+        <Text color={selected ? "cyan" : undefined}>{selected ? "▸ " : "  "}</Text>
+        <Box width={30}><Text bold={selected} wrap="truncate-end">{safe(s.name)}</Text></Box>
+        <Box width={14}><Text dimColor>{middle}</Text></Box>
+        <Text color={tone.color}>{tone.label}</Text>
+      </Box>
+      {s.adapters.length > 0 && (
+        <Box paddingLeft={4}>
+          <Text dimColor wrap="truncate-end">{safe(compactAdapterSummary(s))}</Text>
+        </Box>
       )}
+    </Box>
+  );
+}
+
+function CursorPath({ item }: { item: RenderItem }) {
+  // Minimal expand on the selected row — just the path, so the user can
+  // confirm "this is the stack I mean" before pressing Enter. Everything
+  // else (origins, extends, installs, nested subpaths, unsupported tools,
+  // per-artifact drift) lives on StackDetail where it has room.
+  //
+  // Suppressed when the path would be redundant:
+  //   - `displayPath === null` — stack sits at cwd, already in the Frame
+  //     header's right chip.
+  //   - `kind === "global"` — the ◉ Global section header and the stack
+  //     name already say "this lives under your home dir"; the actual
+  //     directory (usually ~/.claude) is noise here and lands on
+  //     StackDetail instead.
+  if (item.displayPath === null) return null;
+  if (item.stack.kind === "global") return null;
+  return (
+    <Box paddingLeft={6} marginBottom={1}>
+      <Text dimColor wrap="truncate-end">{safe(item.displayPath)}</Text>
+    </Box>
+  );
+}
+
+// Separator width sized to roughly match the legend line below it — not
+// full-width, which feels heavy on wide terminals. `─` repeated; Ink clips
+// via truncate-end if the terminal is narrower than this.
+const SEPARATOR = "─".repeat(85);
+
+function Legend({ tight }: { tight?: boolean }) {
+  // Dim legend so newcomers can decode the compact adapter summary
+  // (`3s/1a/2c/i`). Same visual grammar as the Frame footer (white key +
+  // dim label, `·` separators) so the bottom lines read as one cohesive
+  // status block. A short ─ line separates chrome from list. `tight`
+  // removes the gap above when a parse-issues alert sits directly above —
+  // they visually belong together as "list footer".
+  const entries: Array<[string, string]> = [
+    ["s", "skills"],
+    ["a", "agents"],
+    ["r", "rules"],
+    ["c", "commands"],
+    ["m", "mcp"],
+    ["i", "instructions"],
+  ];
+  return (
+    <Box flexDirection="column" marginTop={tight ? 0 : 2}>
+      <Box paddingX={1}>
+        <Text dimColor wrap="truncate-end">{SEPARATOR}</Text>
+      </Box>
+      <Box paddingX={1}>
+        <Text dimColor>legend: </Text>
+        {entries.map(([k, v], i) => (
+          <Fragment key={k}>
+            {i > 0 && <Text dimColor>  ·  </Text>}
+            <Text color="white">{k}</Text>
+            <Text dimColor> {v}</Text>
+          </Fragment>
+        ))}
+      </Box>
     </Box>
   );
 }

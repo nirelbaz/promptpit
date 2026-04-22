@@ -1,11 +1,3 @@
-// Stack-based navigation for the TUI. Screens are React components; pushing
-// adds one on top, popping returns to the previous. The `useNav` hook lets
-// any screen navigate without threading props through every ancestor.
-//
-// This is deliberately minimal — Ink TUIs don't need React Navigation's
-// scene registry or deep-linking. A plain factory-stack covers every
-// transition in the plan (push a wizard step, pop to go back, popTo(0)
-// to return to the main list after a completed action).
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
 type ScreenFactory = () => ReactNode;
@@ -17,7 +9,6 @@ interface NavApi {
   /** Pop the stack back to the given depth (0 = root). Handy for
    *  "return to main list" after a wizard finishes. */
   popTo: (depth: number) => void;
-  depth: number;
 }
 
 const NavContext = createContext<NavApi | null>(null);
@@ -27,8 +18,6 @@ export function NavProvider({ initial }: { initial: ScreenFactory }) {
 
   // Stable identities so consumers that put `nav` in a useEffect dep array
   // (e.g. Flash's auto-dismiss timer) don't re-run on every parent rerender.
-  // Previously `api` was rebuilt each render, restarting the Flash timer
-  // whenever NavProvider updated.
   const push = useCallback((factory: ScreenFactory) => setStack((s) => [...s, factory]), []);
   const replace = useCallback((factory: ScreenFactory) => setStack((s) => [...s.slice(0, -1), factory]), []);
   const pop = useCallback(() => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s)), []);
@@ -38,8 +27,8 @@ export function NavProvider({ initial }: { initial: ScreenFactory }) {
   }, []);
 
   const api = useMemo<NavApi>(
-    () => ({ push, replace, pop, popTo, depth: stack.length - 1 }),
-    [push, replace, pop, popTo, stack.length],
+    () => ({ push, replace, pop, popTo }),
+    [push, replace, pop, popTo],
   );
 
   const top = stack[stack.length - 1];

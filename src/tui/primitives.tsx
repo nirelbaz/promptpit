@@ -56,7 +56,9 @@ export function ListPicker<T>({
             <Text color={color}>{selected ? "▸ " : "  "}</Text>
             {o.icon && <Box marginRight={1}>{o.icon}</Box>}
             <Text bold={selected} color={color} dimColor={o.disabled}>{o.label}</Text>
-            {o.hint && <Text dimColor>  {o.hint}</Text>}
+            {/* Spec §7: only the active row renders its hint — avoids the
+                "wall of dim text" effect that made every row look disabled. */}
+            {selected && o.hint && <Text dimColor>  {o.hint}</Text>}
           </Box>
         );
       })}
