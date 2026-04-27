@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.3 (2026-04-27)
+
+Maintenance release — dependency bumps and CI cleanup. No runtime behavior changes.
+
+### Dependencies
+
+- Bump `ora` from 9.3.0 to 9.4.0 (#85).
+- Bump `diff` from 8.0.4 to 9.0.0 (#80) — major bump verified end-to-end against `pit diff` (unified patch, colorized output, `--json` mode, marker-block scoping).
+- Bump `softprops/action-gh-release` from 2 to 3 (#74) in the release workflow.
+- Bump `postcss` dev-dep from 8.5.8 to 8.5.12 (#86).
+- Bump dev-dependencies group: 5 updates (#79).
+
+### CI
+
+- Skip AI Code Review on Dependabot PRs — GitHub strips secrets from `pull_request` runs triggered by Dependabot, so `claude-code-action` was failing for lack of `ANTHROPIC_API_KEY`. Existing CI (test, codeql, version-check, dogfood) covers correctness for lockfile bumps.
+
 ## 0.5.2 (2026-04-22)
 
 MVP-2 preview of the new interactive TUI. Bare `pit` now opens a full-screen Ink app with a grouped stack list, per-stack action menu, and three live actions (Validate, Status & diff, Open folder). Install / update / collect wizards arrive in v0.6; destructive flows in v0.7.
