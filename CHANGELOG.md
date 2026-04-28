@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.4 (2026-04-28)
+
+First Chunk 2 wizard — `Collect` is now wired into the TUI. Selecting **Collect…** on an unmanaged stack opens an Ink wizard that walks intro → configure (with a dry-run toggle) → run → summary, instead of flashing the v0.6 placeholder. Headless `pit collect` is unchanged; this is a new entry point built on top of it.
+
+### Added
+
+- **Collect wizard** (`src/tui/screens/collect-screen.tsx`) — state machine: `intro → configuring → running → done | error`. Done renders a summary card with skill / agent / rule / command / MCP / secrets-stripped counts plus the bundle path; dry-run additionally lists the planned files (truncated past 12 with a "…N more" hint). Error path bubbles `collect()`'s message into a red card with Retry / Back. Enter on the unmanaged-stack `Collect…` row navigates here; the row is no longer "coming in v0.6".
+- **Dry-run toggle inside the wizard** — `[ ] Dry run` toggleable with `space`. Default is off (happy path is "just collect"). When on, the primary action relabels from `Collect` to `Preview`, and Done's primary action becomes `Collect for real`.
+- **`log.withMutedNotices`** (`src/shared/io.ts`) — broader counterpart to `withMutedWarnings`. Suppresses every `log.*` line, the animated `spinner()` frames, and `printDryRunReport` output for the duration of a callback. The Collect wizard wraps `collectStack` in this scope so the legacy CLI chrome (info banners, ora frames, dry-run reports) doesn't fight Ink's alt-screen.
+
+### Changed
+
+- **`collectStack` returns `CollectResult`** instead of `void` — exposes `outputDir`, detected adapter ids, structured `counts`, a `dryRun` flag, and `plannedFiles` (dry-run only). Existing callers (`cli.ts`, `sources/github.ts`, e2e tests) ignore the return value, so behavior is unchanged for the headless `pit collect` command. The new wizard reads counts directly from the result rather than re-parsing `.promptpit/stack.json` from disk.
+- **`Collect for real` after a dry-run runs the real collect** — previously the post-dry-run primary action returned the user to the configuring screen with `[x] Dry run` still checked, leaving the wizard one space-bar away from collecting for real. It now jumps straight to a real collect; `Run again` on a real-collect result still opens configuring so options can be tweaked.
+- **StackDetail and the stack list refresh after collect** — the wizard now invalidates the cached scan when a real collect succeeds, and StackDetail re-resolves its stack from the active scan instead of holding the captured snapshot from when it was opened. Popping back from the wizard to the same stack now shows the chip, version, and managed-only menu items (Update, Validate, Status & diff) without backing out to the main list. New helpers: `useScanOptional`, `useFreshStack` (`src/tui/scan-context.tsx`).
+
 ## 0.5.3 (2026-04-27)
 
 Maintenance release — dependency bumps and CI cleanup. No runtime behavior changes.
