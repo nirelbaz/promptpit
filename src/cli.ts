@@ -9,6 +9,7 @@ import { checkCommand } from "./commands/check.js";
 import { diffCommand } from "./commands/diff.js";
 import type { DiffOptions } from "./commands/diff.js";
 import { uninstallStack } from "./commands/uninstall.js";
+import { deleteBundle } from "./commands/delete.js";
 import { updateStacks } from "./commands/update.js";
 import { lsCommand } from "./commands/ls.js";
 import path from "node:path";
@@ -196,6 +197,37 @@ Examples:
     try {
       const targetDir = path.resolve(dir);
       await uninstallStack(stack, targetDir, opts);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        log.error(err.message);
+      }
+      process.exit(1);
+    }
+  });
+
+program
+  .command("delete")
+  .alias("rm")
+  .description("Delete a stack's .promptpit/ bundle from a project")
+  .argument("<stack>", "Name of the stack whose bundle to delete")
+  .argument("[dir]", "Project directory", ".")
+  .option("--also-uninstall", "Run uninstall first so installed artifacts come down with the bundle")
+  .option("--force", "When --also-uninstall is set, also remove modified artifacts")
+  .option("--dry-run", "Preview the change without deleting anything")
+  .addHelpText("after", `
+Examples:
+  pit delete my-stack                    # delete .promptpit/, leave installed files orphaned
+  pit delete my-stack --also-uninstall   # uninstall first, then delete bundle
+  pit delete my-stack --dry-run          # preview only
+`)
+  .action(async (
+    stack: string,
+    dir: string,
+    opts: { alsoUninstall?: boolean; force?: boolean; dryRun?: boolean },
+  ) => {
+    try {
+      const targetDir = path.resolve(dir);
+      await deleteBundle(stack, targetDir, opts);
     } catch (err: unknown) {
       if (err instanceof Error) {
         log.error(err.message);

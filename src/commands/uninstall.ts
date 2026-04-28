@@ -9,7 +9,6 @@ import { removeMcpSectionsFromToml } from "../adapters/toml-utils.js";
 import { canonicalSkillBase } from "../core/skill-store.js";
 import { isSkillShared, isArtifactShared, agentFileName, ruleFileNames, removeCheckedFile, removeEmptyDir } from "../core/artifact-ops.js";
 import { log, printDryRunReport } from "../shared/io.js";
-import type { InstallManifest } from "../shared/schema.js";
 import type { DryRunEntry } from "../adapters/types.js";
 import type { DryRunSection } from "../shared/io.js";
 
@@ -19,11 +18,53 @@ export interface UninstallOptions {
   verbose?: boolean;
 }
 
+export type UninstallRemovedKind =
+  | "instructions"
+  | "skill"
+  | "agent"
+  | "rule"
+  | "command"
+  | "mcp"
+  | "canonical-skill"
+  | "manifest";
+
+export interface UninstallRemovedEntry {
+  adapter: string;
+  path: string;
+  kind: UninstallRemovedKind;
+}
+
+export interface UninstallSkippedEntry {
+  path: string;
+  reason: "modified" | "shared";
+  /** Adapter id when the skip is per-adapter; omitted for canonical skills. */
+  adapter?: string;
+}
+
+export interface UninstallResult {
+  stack: string;
+  version: string;
+  /** Files actually removed/modified (or that would be on dry-run). */
+  removed: UninstallRemovedEntry[];
+  /** Files left intact — modified-since-install (without --force) or shared
+   *  with another installed stack. */
+  skipped: UninstallSkippedEntry[];
+  /** Whether `installed.json` was rewritten with this stack's entry removed. */
+  manifestUpdated: boolean;
+  /** Whether `installed.json` was deleted entirely (last entry removed). */
+  manifestRemoved: boolean;
+  dryRun: boolean;
+  /** Per-adapter count of removed artifacts. Used by the TUI done card. */
+  perAdapterRemoved: Record<string, number>;
+  /** Files that would be touched. Populated only on dry-run. */
+  plannedFiles?: DryRunEntry[];
+}
+
 export async function uninstallStack(
   stackName: string,
   target: string,
   opts: UninstallOptions,
-): Promise<void> {
+): Promise<UninstallResult> {
   // Read manifest and find entry
   const manifest = await readManifest(target);
   const entry = manifest.installs.find((e) => e.stack === stackName);
@@ -44,9 +85,10 @@ export async function uninstallStack(
 
   const dryRunSections: DryRunSection[] = [];
   const dirsToClean = new Set<string>();
-  let removedCount = 0;
-  let sharedCount = 0;
-  let modifiedCount = 0;
+  // Populated regardless of dryRun so both real-run "did" and dry-run "would"
+  // cases produce the same shape. Aggregate counts are derived at the end.
+  const removed: UninstallRemovedEntry[] = [];
+  const skipped: UninstallSkippedEntry[] = [];
 
   // Track which canonical skills have been processed (avoid double-removal across adapters)
   const processedCanonicalSkills = new Set<string>();
@@ -74,8 +116,8 @@ export async function uninstallStack(
               dryRunEntries.push({ file: p.config, action: "remove", detail: "empty after marker removal" });
             } else {
               await removeFileOrSymlink(p.config);
-              removedCount++;
             }
+            removed.push({ adapter: adapterId, path: p.config, kind: "instructions" });
           } else {
             if (opts.dryRun) {
               dryRunEntries.push({
@@ -86,8 +128,8 @@ export async function uninstallStack(
               });
             } else {
               await writeFileEnsureDir(p.config, stripped);
-              removedCount++;
             }
+            removed.push({ adapter: adapterId, path: p.config, kind: "instructions" });
           }
         }
       }
@@ -98,10 +140,11 @@ export async function uninstallStack(
       for (const [skillName, skillRecord] of Object.entries(record.skills)) {
         if (isSkillShared(manifest, stackName, skillName)) {
           log.info(`Keeping skill "${skillName}" — also used by another stack`);
-          sharedCount++;
+          const sharedSkillPath = path.join(p.skills, skillName, "SKILL.md");
+          skipped.push({ adapter: adapterId, path: sharedSkillPath, reason: "shared" });
           if (opts.dryRun) {
             dryRunEntries.push({
-              file: path.join(p.skills, skillName, "SKILL.md"),
+              file: sharedSkillPath,
               action: "skip",
               detail: "shared with another stack",
             });
@@ -116,10 +159,11 @@ export async function uninstallStack(
           if (opts.dryRun) {
             if (await exists(adapterSkillDir)) {
               dryRunEntries.push({ file: path.join(adapterSkillDir, "SKILL.md"), action: "remove" });
+              removed.push({ adapter: adapterId, path: adapterSkillDir, kind: "skill" });
             }
           } else {
             await removeFileOrSymlink(adapterSkillDir);
-            removedCount++;
+            removed.push({ adapter: adapterId, path: adapterSkillDir, kind: "skill" });
           }
           dirsToClean.add(p.skills);
         } else if (adapter.capabilities.skillLinkStrategy === "translate-copy") {
@@ -129,10 +173,11 @@ export async function uninstallStack(
           if (opts.dryRun) {
             if (await exists(translatedFile)) {
               dryRunEntries.push({ file: translatedFile, action: "remove" });
+              removed.push({ adapter: adapterId, path: translatedFile, kind: "skill" });
             }
           } else {
             await removeFileOrSymlink(translatedFile);
-            removedCount++;
+            removed.push({ adapter: adapterId, path: translatedFile, kind: "skill" });
           }
           dirsToClean.add(p.skills);
         }
@@ -161,13 +206,14 @@ export async function uninstallStack(
               const currentHash = computeSkillHash(canonicalContent, supportingFiles.length > 0 ? supportingFiles : undefined);
               if (currentHash !== skillRecord.hash) {
                 log.warn(`Skipping modified canonical skill: ${canonicalSkillPath}`);
-                modifiedCount++;
+                skipped.push({ path: canonicalSkillPath, reason: "modified" });
                 continue;
               }
             }
             if (!opts.dryRun) {
               await removeFileOrSymlink(canonicalDir);
             }
+            removed.push({ adapter: "canonical", path: canonicalDir, kind: "canonical-skill" });
           }
         }
       }
@@ -178,7 +224,8 @@ export async function uninstallStack(
       for (const [agentName, agentRecord] of Object.entries(record.agents)) {
         if (isArtifactShared(manifest, stackName, adapterId, "agents", agentName)) {
           log.info(`Keeping agent "${agentName}" — also used by another stack`);
-          sharedCount++;
+          const sharedAgentPath = path.join(p.agents, agentFileName(adapterId, agentName));
+          skipped.push({ adapter: adapterId, path: sharedAgentPath, reason: "shared" });
           continue;
         }
 
@@ -188,11 +235,11 @@ export async function uninstallStack(
           if (opts.dryRun) {
             dryRunEntries.push({ file: agentPath, action: "remove" });
           } else {
-            removedCount++;
           }
+          removed.push({ adapter: adapterId, path: agentPath, kind: "agent" });
         } else if (status === "skipped-modified") {
           log.warn(`Skipping modified agent: ${agentPath}`);
-          modifiedCount++;
+          skipped.push({ adapter: adapterId, path: agentPath, reason: "modified" });
           if (opts.dryRun) {
             dryRunEntries.push({ file: agentPath, action: "skip", detail: "modified since install" });
           }
@@ -206,7 +253,9 @@ export async function uninstallStack(
       for (const [ruleName, ruleRecord] of Object.entries(record.rules)) {
         if (isArtifactShared(manifest, stackName, adapterId, "rules", ruleName)) {
           log.info(`Keeping rule "${ruleName}" — also used by another stack`);
-          sharedCount++;
+          // Use first candidate as representative path for the report.
+          const sharedRulePath = path.join(p.rules, ruleFileNames(adapterId, ruleName)[0] ?? `${ruleName}.md`);
+          skipped.push({ adapter: adapterId, path: sharedRulePath, reason: "shared" });
           continue;
         }
 
@@ -219,12 +268,12 @@ export async function uninstallStack(
             if (opts.dryRun) {
               dryRunEntries.push({ file: rulePath, action: "remove" });
             } else {
-              removedCount++;
             }
+            removed.push({ adapter: adapterId, path: rulePath, kind: "rule" });
             break;
           } else if (status === "skipped-modified") {
             log.warn(`Skipping modified rule: ${rulePath}`);
-            modifiedCount++;
+            skipped.push({ adapter: adapterId, path: rulePath, reason: "modified" });
             if (opts.dryRun) {
               dryRunEntries.push({ file: rulePath, action: "skip", detail: "modified since install" });
             }
@@ -240,7 +289,8 @@ export async function uninstallStack(
       for (const [commandName, commandRecord] of Object.entries(record.commands)) {
         if (isArtifactShared(manifest, stackName, adapterId, "commands", commandName)) {
           log.info(`Keeping command "${commandName}" — also used by another stack`);
-          sharedCount++;
+          const sharedCmdPath = path.join(p.commands, `${commandName}.md`);
+          skipped.push({ adapter: adapterId, path: sharedCmdPath, reason: "shared" });
           continue;
         }
 
@@ -250,11 +300,11 @@ export async function uninstallStack(
           if (opts.dryRun) {
             dryRunEntries.push({ file: commandPath, action: "remove" });
           } else {
-            removedCount++;
           }
+          removed.push({ adapter: adapterId, path: commandPath, kind: "command" });
         } else if (status === "skipped-modified") {
           log.warn(`Skipping modified command: ${commandPath}`);
-          modifiedCount++;
+          skipped.push({ adapter: adapterId, path: commandPath, reason: "modified" });
           if (opts.dryRun) {
             dryRunEntries.push({ file: commandPath, action: "skip", detail: "modified since install" });
           }
@@ -269,7 +319,7 @@ export async function uninstallStack(
       for (const name of Object.keys(record.mcp)) {
         if (isArtifactShared(manifest, stackName, adapterId, "mcp", name)) {
           log.info(`Keeping MCP server "${name}" — also used by another stack`);
-          sharedCount++;
+          skipped.push({ adapter: adapterId, path: `${p.mcp}#${name}`, reason: "shared" });
         } else {
           serverNames.push(name);
         }
@@ -289,7 +339,9 @@ export async function uninstallStack(
             } else {
               const updated = removeMcpSectionsFromToml(raw, serverNames);
               await writeFileEnsureDir(p.mcp, updated);
-              removedCount++;
+            }
+            for (const name of serverNames) {
+              removed.push({ adapter: adapterId, path: `${p.mcp}#${name}`, kind: "mcp" });
             }
           }
         } else {
@@ -301,10 +353,17 @@ export async function uninstallStack(
                 action: "modify",
                 detail: `remove ${serverNames.length} MCP server${serverNames.length !== 1 ? "s" : ""}`,
               });
+              for (const name of serverNames) {
+                removed.push({ adapter: adapterId, path: `${p.mcp}#${name}`, kind: "mcp" });
+              }
             }
           } else {
             const result = await removeMcpFromJson(p.mcp, serverNames, adapter.capabilities.mcpRootKey);
-            if (result.modified || result.deleted) removedCount++;
+            if (result.modified || result.deleted) {
+              for (const name of serverNames) {
+                removed.push({ adapter: adapterId, path: `${p.mcp}#${name}`, kind: "mcp" });
+              }
+            }
           }
         }
       }
@@ -347,7 +406,18 @@ export async function uninstallStack(
       dryRunSections,
       !!opts.verbose,
     );
-    return;
+    removed.push({ adapter: "manifest", path: manifestPath, kind: "manifest" });
+    return {
+      stack: stackName,
+      version: entry.stackVersion,
+      removed,
+      skipped,
+      manifestUpdated: remaining.length > 0,
+      manifestRemoved: remaining.length === 0,
+      dryRun: true,
+      perAdapterRemoved: rollupPerAdapter(removed),
+      plannedFiles: dryRunSections.flatMap((s) => s.entries),
+    };
   }
 
   if (remaining.length === 0) {
@@ -355,12 +425,18 @@ export async function uninstallStack(
   } else {
     await writeManifest(target, { ...manifest, installs: remaining });
   }
+  // Push after the write succeeds — if writeManifest throws, the result
+  // shouldn't claim the manifest was removed.
+  removed.push({ adapter: "manifest", path: manifestPath, kind: "manifest" });
 
   // --- Empty directory cleanup ---
   for (const dir of dirsToClean) {
     await removeEmptyDir(dir);
   }
 
+  const removedCount = removed.filter((r) => r.kind !== "manifest").length;
+  const sharedCount = skipped.filter((s) => s.reason === "shared").length;
+  const modifiedCount = skipped.filter((s) => s.reason === "modified").length;
   log.success(`Uninstalled ${stackName}@${entry.stackVersion} (${removedCount} artifact${removedCount !== 1 ? "s" : ""} removed)`);
   if (sharedCount > 0) {
     log.info(`${sharedCount} artifact(s) kept (shared with other stacks).`);
@@ -368,4 +444,24 @@ export async function uninstallStack(
   if (modifiedCount > 0) {
     log.info(`${modifiedCount} artifact(s) skipped (modified since install). Use --force to override.`);
   }
+
+  return {
+    stack: stackName,
+    version: entry.stackVersion,
+    removed,
+    skipped,
+    manifestUpdated: remaining.length > 0,
+    manifestRemoved: remaining.length === 0,
+    dryRun: false,
+    perAdapterRemoved: rollupPerAdapter(removed),
+  };
+}
+
+function rollupPerAdapter(entries: UninstallRemovedEntry[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const e of entries) {
+    if (e.adapter === "manifest") continue;
+    out[e.adapter] = (out[e.adapter] ?? 0) + 1;
+  }
+  return out;
 }
