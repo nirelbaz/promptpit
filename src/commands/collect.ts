@@ -6,6 +6,7 @@ import { LARGE_INSTRUCTION_THRESHOLD } from "../core/validate.js";
 import { writeStack } from "../core/stack.js";
 import { pickExclusions } from "../core/select.js";
 import { stripAllMarkerBlocks } from "../shared/markers.js";
+import { pluralize } from "../shared/text.js";
 import { readFileOrNull, exists } from "../shared/utils.js";
 import type { StackBundle } from "../shared/schema.js";
 import { log, spinner, printDryRunReport } from "../shared/io.js";
@@ -48,11 +49,33 @@ export interface CollectOptions {
   select?: boolean;
 }
 
+export interface CollectCounts {
+  /** Whether a merged agent.promptpit.md instruction file was produced. */
+  instructionFile: boolean;
+  skills: number;
+  agents: number;
+  rules: number;
+  commands: number;
+  mcpServers: number;
+  /** Number of secret values stripped from MCP server configs into .env.example. */
+  secretsStripped: number;
+}
+
+export interface CollectResult {
+  outputDir: string;
+  /** Adapter ids detected in the project (e.g. "claude-code", "cursor"). */
+  detected: string[];
+  counts: CollectCounts;
+  dryRun: boolean;
+  /** Files that would be written. Populated only on dry-run. */
+  plannedFiles?: DryRunEntry[];
+}
+
 export async function collectStack(
   root: string,
   outputDir: string,
   opts: CollectOptions = {},
-): Promise<void> {
+): Promise<CollectResult> {
   const spin = spinner("Detecting AI tools...");
 
   const detected = await detectAdapters(root);
@@ -272,14 +295,28 @@ export async function collectStack(
     // "considered and empty" or "not scanned". Only surface what's there.
     const parts: string[] = [];
     if (bundle.agentInstructions) parts.push("1 instruction file");
-    if (skillCount > 0) parts.push(`${skillCount} skill${skillCount !== 1 ? "s" : ""}`);
-    if (agentCount > 0) parts.push(`${agentCount} agent${agentCount !== 1 ? "s" : ""}`);
-    if (ruleCount > 0) parts.push(`${ruleCount} rule${ruleCount !== 1 ? "s" : ""}`);
-    if (commandCount > 0) parts.push(`${commandCount} command${commandCount !== 1 ? "s" : ""}`);
-    if (mcpCount > 0) parts.push(`${mcpCount} MCP server${mcpCount !== 1 ? "s" : ""}`);
-    if (secretCount > 0) parts.push(`${secretCount} secret${secretCount !== 1 ? "s" : ""} stripped`);
+    if (skillCount > 0) parts.push(pluralize(skillCount, "skill"));
+    if (agentCount > 0) parts.push(pluralize(agentCount, "agent"));
+    if (ruleCount > 0) parts.push(pluralize(ruleCount, "rule"));
+    if (commandCount > 0) parts.push(pluralize(commandCount, "command"));
+    if (mcpCount > 0) parts.push(pluralize(mcpCount, "MCP server"));
+    if (secretCount > 0) parts.push(`${pluralize(secretCount, "secret")} stripped`);
     log.info(parts.length > 0 ? `Summary: ${parts.join(", ")}` : "Summary: nothing to collect");
-    return;
+    return {
+      outputDir,
+      detected: detected.map((d) => d.adapter.id),
+      counts: {
+        instructionFile: !!bundle.agentInstructions,
+        skills: skillCount,
+        agents: agentCount,
+        rules: ruleCount,
+        commands: commandCount,
+        mcpServers: mcpCount,
+        secretsStripped: secretCount,
+      },
+      dryRun: true,
+      plannedFiles: entries,
+    };
   }
 
   const writeSpin = spinner("Writing stack bundle...");
@@ -289,15 +326,15 @@ export async function collectStack(
   // Only surface non-zero counts so a collect result reads like a deliverable
   // rather than a status board full of zeros.
   const summary: string[] = [];
-  if (mergeResult.skills.length > 0) summary.push(`${mergeResult.skills.length} skills`);
-  if (mergeResult.agents.length > 0) summary.push(`${mergeResult.agents.length} agents`);
-  if (mergeResult.rules.length > 0) summary.push(`${mergeResult.rules.length} rules`);
-  if (mergeResult.commands.length > 0) summary.push(`${mergeResult.commands.length} commands`);
+  if (mergeResult.skills.length > 0) summary.push(pluralize(mergeResult.skills.length, "skill"));
+  if (mergeResult.agents.length > 0) summary.push(pluralize(mergeResult.agents.length, "agent"));
+  if (mergeResult.rules.length > 0) summary.push(pluralize(mergeResult.rules.length, "rule"));
+  if (mergeResult.commands.length > 0) summary.push(pluralize(mergeResult.commands.length, "command"));
   if (Object.keys(stripped).length > 0) {
-    summary.push(`${Object.keys(stripped).length} MCP servers`);
+    summary.push(pluralize(Object.keys(stripped).length, "MCP server"));
   }
   if (Object.keys(envExample).length > 0) {
-    summary.push(`${Object.keys(envExample).length} secrets stripped`);
+    summary.push(`${pluralize(Object.keys(envExample).length, "secret")} stripped`);
   }
   log.success(
     summary.length > 0 ? `Collected: ${summary.join(", ")}` : "Collected: stack bundle (no artifacts found)",
@@ -305,4 +342,19 @@ export async function collectStack(
   log.info(
     "Next: Run 'pit validate' to check for issues, then 'git add .promptpit && git commit'.",
   );
+
+  return {
+    outputDir,
+    detected: detected.map((d) => d.adapter.id),
+    counts: {
+      instructionFile: !!bundle.agentInstructions,
+      skills: bundle.skills.length,
+      agents: bundle.agents.length,
+      rules: bundle.rules.length,
+      commands: bundle.commands.length,
+      mcpServers: Object.keys(stripped).length,
+      secretsStripped: Object.keys(envExample).length,
+    },
+    dryRun: false,
+  };
 }
