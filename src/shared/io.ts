@@ -26,11 +26,22 @@ interface MuteHandle {
 }
 const activeMutes: MuteHandle[] = [];
 
+// Counter (not stack — we only need on/off semantics) for "silence everything"
+// scopes used by the TUI. When > 0: writeNotice, spinner(), and
+// printDryRunReport all become no-ops. The wizards consume structured returns
+// instead of stderr/stdout text, so silencing the legacy CLI chrome prevents
+// it from corrupting Ink's alt-screen.
+let noticeMuteDepth = 0;
+function noticesMuted(): boolean {
+  return noticeMuteDepth > 0;
+}
+
 // N18: status/notice output must never mix with the command's data output
 // (JSON, diffs, tables). Anything routed through `log.*` is incidental —
 // warnings, info banners, success glyphs — so send it all to stderr. Commands
 // that want their output on stdout already use `console.log` directly.
 function writeNotice(line: string): void {
+  if (noticesMuted()) return;
   process.stderr.write(line + "\n");
 }
 
@@ -92,10 +103,32 @@ export const log = {
       if (i >= 0) activeMutes.splice(i, 1);
     }
   },
+  /**
+   * Suppress every `log.*` line (including `error`), spinner frame, and
+   * `printDryRunReport` output for the duration of `fn`. The TUI wizards use
+   * this around legacy command functions whose stderr/stdout chrome would
+   * otherwise collide with Ink's alt-screen rendering. Subsumes
+   * `withMutedWarnings`.
+   *
+   * Note: this is intentionally heavy-handed — `log.error` is silenced too,
+   * because the wizard's catch-and-render path is the only intended error
+   * surface inside this scope. If a callee adds an `log.error(...)` for a
+   * condition that doesn't throw, the user will not see it; route such
+   * conditions through a thrown error instead so the wizard can render them.
+   */
+  withMutedNotices: async <T>(fn: () => Promise<T>): Promise<T> => {
+    noticeMuteDepth++;
+    try {
+      return await fn();
+    } finally {
+      noticeMuteDepth--;
+    }
+  },
   /** Test helper — clears the dedup set. Do not use in production code. */
   _resetWarnOnce: () => {
     emittedWarnKeys.clear();
     activeMutes.length = 0;
+    noticeMuteDepth = 0;
   },
 };
 
@@ -112,7 +145,10 @@ export const log = {
  * chainability. If a new method is added, add it here too.
  */
 export function spinner(text: string): Ora {
-  if (colorDisabled) {
+  // Under withMutedNotices (Ink wizards) ora frames would race Ink's cursor
+  // and leave ghost glyphs; the quiet stub routes through the muted
+  // writeNotice and effectively becomes a no-op.
+  if (colorDisabled || noticesMuted()) {
     return createQuietSpinner(text);
   }
   return ora({ text, color: "cyan" }).start();
@@ -183,6 +219,9 @@ export function printDryRunReport(
   sections: DryRunSection[],
   verbose: boolean,
 ): void {
+  // Wizards calling commands in a withMutedNotices scope want only the
+  // structured return value — the human-readable report would corrupt Ink.
+  if (noticesMuted()) return;
   console.log();
   console.log(chalk.cyan(header));
 

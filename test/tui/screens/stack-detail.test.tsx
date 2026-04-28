@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { render } from "ink-testing-library";
 import { NavProvider } from "../../../src/tui/nav.js";
+import { ScanContext, type ScanApi } from "../../../src/tui/scan-context.js";
 import { StackDetail } from "../../../src/tui/screens/stack-detail.js";
-import type { ScannedStack } from "../../../src/shared/schema.js";
+import type { ScannedStack, PitConfig } from "../../../src/shared/schema.js";
 
 function managed(): ScannedStack {
   return {
@@ -97,5 +98,38 @@ describe("StackDetail", () => {
     );
     await tick();
     expect(lastFrame()).toContain("github:acme/stack@v0.4.2");
+  });
+
+  it("re-resolves from the active scan when the stack flips unmanaged → managed", async () => {
+    // Reproduces the post-collect flow: StackDetail is pushed with an
+    // unmanaged snapshot; CollectScreen runs and triggers rescan; the scan's
+    // stacks array now reports the same root as managed. The chip and menu
+    // should reflect that without the user backing out to the main list.
+    const initial = unmanaged();
+    const promoted: ScannedStack = { ...initial, kind: "managed", promptpit: { stackVersion: "0.1.0", hasInstalledJson: true } };
+
+    const config = { ui: { showGlobalRow: true }, scan: { defaultDepth: 2, ignore: [] } } as unknown as PitConfig;
+    const api: ScanApi = {
+      cwd: "/",
+      state: { kind: "ready", stacks: [promoted], suppressed: 0, config },
+      scope: "current",
+      cursor: 0,
+      setCursor: () => {},
+      setScope: () => {},
+      rescan: () => {},
+    };
+
+    const { lastFrame } = render(
+      <ScanContext.Provider value={api}>
+        <NavProvider initial={() => <StackDetail stack={initial} />} />
+      </ScanContext.Provider>,
+    );
+    await tick();
+    const frame = lastFrame() ?? "";
+    // Managed-kind menu replaces the unmanaged one (Update + Validate appear,
+    // Collect drops out of the visible options).
+    expect(frame).toContain("managed · v0.1.0");
+    expect(frame).toContain("Update");
+    expect(frame).toContain("Validate");
   });
 });

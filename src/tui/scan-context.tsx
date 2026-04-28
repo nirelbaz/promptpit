@@ -39,7 +39,9 @@ export interface ScanApi {
   rescan: () => void;
 }
 
-const ScanContext = createContext<ScanApi | null>(null);
+/** Exported so tests can mount a stub provider without spinning up a real
+ *  scan against the filesystem. Production code should use ScanProvider. */
+export const ScanContext = createContext<ScanApi | null>(null);
 
 export function scopeLabel(scope: ScopeChoice, defaultDepth: number): string {
   switch (scope) {
@@ -97,4 +99,23 @@ export function useScan(): ScanApi {
   const ctx = useContext(ScanContext);
   if (!ctx) throw new Error("useScan must be called inside ScanProvider");
   return ctx;
+}
+
+/** Like useScan, but returns null when no provider is mounted. Lets screens
+ *  that are normally rendered inside ScanProvider stay testable in isolation
+ *  (CollectScreen specs render the screen against a bare NavProvider). */
+export function useScanOptional(): ScanApi | null {
+  return useContext(ScanContext);
+}
+
+/** Resolve the freshest ScannedStack for a given root from the active scan,
+ *  falling back to the captured prop. Screens are pushed onto the nav stack
+ *  with a snapshot in their factory closure; after a rescan (e.g. CollectScreen
+ *  flipping a stack from unmanaged → managed) the closure goes stale. Looking
+ *  up by root keeps the rendered chip and action menu in sync without forcing
+ *  parents to re-push the screen. */
+export function useFreshStack(initial: ScannedStack): ScannedStack {
+  const scan = useScanOptional();
+  if (!scan || scan.state.kind !== "ready") return initial;
+  return scan.state.stacks.find((s) => s.root === initial.root) ?? initial;
 }

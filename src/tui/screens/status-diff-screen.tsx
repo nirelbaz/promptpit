@@ -1,4 +1,3 @@
-import path from "node:path";
 import { Box, Text } from "ink";
 import { useEffect, useState } from "react";
 import { Frame, SectionTitle } from "../chrome.js";
@@ -7,7 +6,7 @@ import { useNav } from "../nav.js";
 import { reconcileAll, type ReconcileOutput } from "../../core/reconcile.js";
 import { computeDiff, type DiffResult } from "../../commands/diff.js";
 import { log } from "../../shared/io.js";
-import { safe } from "../../shared/text.js";
+import { safe, relativizeFromStackRoot } from "../../shared/text.js";
 import { errorMessage } from "../../shared/utils.js";
 import type { ScannedStack } from "../../shared/schema.js";
 
@@ -166,20 +165,9 @@ function DriftedArtifactList({ diff, stackRoot }: { diff: DiffResult; stackRoot:
           <Box width={14}><Text color="gray">{safe(r.adapterId)}</Text></Box>
           <Box width={10}><Text dimColor>{safe(r.type)}</Text></Box>
           <Text bold wrap="truncate-end">{safe(r.name)}</Text>
-          <Text dimColor wrap="truncate-end">  {safe(relativizePath(r.path, stackRoot))}</Text>
+          <Text dimColor wrap="truncate-end">  {safe(relativizeFromStackRoot(r.path, stackRoot))}</Text>
         </Box>
       ))}
     </Box>
   );
-}
-
-/** Show artifact paths relative to the stack root ("./…/") instead of absolute —
- *  eats the `/Users/nirelbaz/Documents/app/` prefix that dominates every row
- *  and shoves the interesting bit off the right edge on narrow terminals.
- *  Falls back to the original path if it isn't under the stack root (rare;
- *  could happen with symlink-resolved roots on some setups). */
-function relativizePath(abs: string, stackRoot: string): string {
-  const rel = path.relative(stackRoot, abs);
-  if (rel.startsWith("..") || path.isAbsolute(rel)) return abs;
-  return `./${rel}`;
 }
