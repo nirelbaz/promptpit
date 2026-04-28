@@ -1,3 +1,5 @@
+import path from "node:path";
+
 // Display-safety helpers for strings that reach a terminal. Bundle manifests,
 // adapter ids, stack names, and subpaths come from untrusted sources on disk
 // (GitHub clones, user-edited stack.json) — without sanitization, a malicious
@@ -19,4 +21,19 @@ export function safe(s: string): string {
  *  regardless of layout (e.g. single-line crumb bars, Flash messages). */
 export function clip(s: string, max: number): string {
   return s.length > max ? s.slice(0, max - 1) + "…" : s;
+}
+
+/** Render `abs` relative to `stackRoot` as `./<rel>` for compact display in
+ *  per-stack TUI screens. Falls back to the original path when the path lies
+ *  outside the root (rare; can happen with symlink-resolved roots). */
+export function relativizeFromStackRoot(abs: string, stackRoot: string): string {
+  const rel = path.relative(stackRoot, abs);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) return abs;
+  return `./${rel}`;
+}
+
+/** Format `${count} ${noun}` with English pluralization (`s` suffix when not 1).
+ *  Used to keep counts-with-units consistent across CLI and TUI surfaces. */
+export function pluralize(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
