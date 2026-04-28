@@ -3,12 +3,14 @@ import { Box, Text } from "ink";
 import { Frame } from "../chrome.js";
 import { ListPicker, type ListOption } from "../primitives.js";
 import { useNav } from "../nav.js";
+import { useFreshStack } from "../scan-context.js";
 import { optionsForMenu, type ActionKey } from "../action-hints.js";
 import { glyphFor, glyphColorFor, rightChipFor } from "../stack-presentation.js";
 import { safe } from "../../shared/text.js";
 import type { ScannedStack } from "../../shared/schema.js";
 import { ValidateScreen } from "./validate-screen.js";
 import { StatusDiffScreen } from "./status-diff-screen.js";
+import { CollectScreen } from "./collect-screen.js";
 import { Flash } from "./flash.js";
 
 // Actions not yet wired push a Flash that tells the user which release will
@@ -18,7 +20,6 @@ const COMING_SOON: Partial<Record<ActionKey, string>> = {
   "install-to":       "Install-to wizard coming in v0.6",
   "adapt":            "Adapt wizard coming in v0.6",
   "update":           "Update wizard coming in v0.6",
-  "collect":          "Collect wizard coming in v0.6",
   "collect-drift":    "Collect-drift coming in v0.6",
   "artifacts":        "Per-artifact drilldown coming in v0.7",
   "uninstall":        "Uninstall wizard coming in v0.6",
@@ -36,8 +37,12 @@ function platformOpenCommand(p: NodeJS.Platform): string {
   return "xdg-open";
 }
 
-export function StackDetail({ stack }: { stack: ScannedStack }) {
+export function StackDetail({ stack: initial }: { stack: ScannedStack }) {
   const nav = useNav();
+  // Re-resolve from the active scan so a rescan triggered by a child screen
+  // (e.g. CollectScreen flipping unmanaged → managed) updates the chip,
+  // action menu, and adapter list when this screen comes back into view.
+  const stack = useFreshStack(initial);
   const options: ListOption<ActionKey>[] = optionsForMenu(stack.kind).map((o) => ({
     value: o.value,
     label: o.label,
@@ -93,6 +98,7 @@ function handleAction(
   if (key === "back") { nav.pop(); return; }
   if (key === "validate") { nav.push(() => <ValidateScreen stack={stack} />); return; }
   if (key === "status-diff") { nav.push(() => <StatusDiffScreen stack={stack} />); return; }
+  if (key === "collect") { nav.push(() => <CollectScreen stack={stack} />); return; }
   if (key === "open") {
     // openFolder's 'error' event fires asynchronously — we can't know here
     // whether the launch actually succeeded. "Requested" means "asked the OS
