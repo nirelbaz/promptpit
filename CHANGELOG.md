@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.5.5 (2026-04-28)
+
+Three TUI wizards in one drop: **Uninstall**, **Collect drift**, and **Delete bundle**. Selecting any of these from a managed stack now opens an Ink wizard instead of flashing the v0.7 placeholder. Plus a new `pit delete` CLI command and a shared `ConfirmDestructive` typed-name confirm component for the high-stakes paths.
+
+### Added
+
+- **Uninstall wizard** (`src/tui/screens/uninstall-screen.tsx`) — state machine: `intro → configuring → confirming? → running → done | error`. Configuring exposes `Force` and `Dry run` toggles (`f` / `space`); the `Force` path routes through the typed-name confirm so a single Enter can't blow away modified artifacts. Done renders per-adapter removed counts plus shared / modified-skipped totals; dry-run additionally lists the planned files. `Uninstall for real` after a dry-run preserves the original `force` flag.
+- **Collect-drift wizard** (`src/tui/screens/collect-drift-screen.tsx`) — multi-select picker over drifted artifacts (`reconcileAll` is the source of truth). Default selection is "everything that drifted." `space` toggles, `a` toggles all, `d` toggles dry-run. Done card shows accepted / skipped counts and the bundle output path; planned bundle changes are listed under dry-run. `Accept for real` after dry-run reuses the same selection.
+- **Delete-bundle wizard** (`src/tui/screens/delete-bundle-screen.tsx`) — high-stakes destructive flow per spec §11. Configuring asks `Bundle only` vs `Bundle + uninstall`; both routes through typed-name confirm before the run. Bundle + uninstall runs uninstall first (while the manifest is still readable), then `rm -rf <root>/.promptpit/`. Path guard refuses any resolved path that doesn't end in `/.promptpit`.
+- **`ConfirmDestructive` component** (`src/tui/components/confirm-destructive.tsx`) — shared typed-name confirm used by both Uninstall (force path) and Delete bundle. TextInput with live echo, real-time match check, Enter only fires `onConfirm` when typed === expected. No "3 strikes" lockout — Esc cancels at any time. First entry under a new `src/tui/components/` directory; sister Install cluster's `lifecycle-consent` will land here too.
+- **`pit delete` CLI command** (alias `rm`) — parallels `pit uninstall`. Flags: `--also-uninstall`, `--force`, `--dry-run`. Validates the stack name against the bundle's `stack.json`, then removes `.promptpit/` (after running uninstall first when `--also-uninstall` is set). New file `src/commands/delete.ts` exporting `deleteBundle()` returning a structured `DeleteBundleResult`.
+- **`collectDriftBack(root, selection, opts)`** core function (`src/core/collect-drift.ts`) — pulls local edits to installed artifacts back into the bundle, scoped to the caller-selected subset. Reuses `reconcileAll` for drift detection, copies canonical skill content (with supporting files) from `.agents/skills/` into `.promptpit/skills/`, writes adapter-format content for rules / commands / agents directly to the bundle, merges per-server MCP changes into bundle's `mcp.json`, and rehashes matching `installed.json` entries so reconcile reads as `synced` after. Companion `listDriftCandidates(root)` returns a flat picker-friendly list.
+
+### Changed
+
+- **`uninstallStack` returns `UninstallResult`** instead of `void` — exposes `removed` (per-artifact entries with adapter id, path, kind), `skipped` (per-artifact with `"modified" | "shared"` reason), `manifestUpdated`, `manifestRemoved`, `dryRun`, and `perAdapterRemoved` (rollup map) plus `plannedFiles` on dry-run. Existing CLI caller and headless tests ignore the return value, so behavior is unchanged for `pit uninstall`. The Uninstall wizard reads counts and per-adapter rollups directly from the result.
+- **StackDetail dispatcher** (`src/tui/screens/stack-detail.tsx`) — `uninstall`, `collect-drift`, and `delete-bundle` keys are removed from the `COMING_SOON` map and routed to their wizards. `collect-drift` and `delete-bundle` show a Flash card on unmanaged stacks (these flows only apply to managed stacks).
+
+### Notes
+
+- **Multi-install per project is deferred.** When a project has multiple installed stacks, the scanner only exposes one row per stack root; the wizards in v0.5.5 handle single-install only. Reaching collect-drift / uninstall on a multi-install row works against the first stack's manifest entry; a follow-up will add an explicit install picker.
+
 ## 0.5.4 (2026-04-28)
 
 First Chunk 2 wizard — `Collect` is now wired into the TUI. Selecting **Collect…** on an unmanaged stack opens an Ink wizard that walks intro → configure (with a dry-run toggle) → run → summary, instead of flashing the v0.6 placeholder. Headless `pit collect` is unchanged; this is a new entry point built on top of it.
