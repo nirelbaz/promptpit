@@ -11,6 +11,9 @@ import type { ScannedStack } from "../../shared/schema.js";
 import { ValidateScreen } from "./validate-screen.js";
 import { StatusDiffScreen } from "./status-diff-screen.js";
 import { CollectScreen } from "./collect-screen.js";
+import { CollectDriftScreen } from "./collect-drift-screen.js";
+import { DeleteBundleScreen } from "./delete-bundle-screen.js";
+import { UninstallScreen } from "./uninstall-screen.js";
 import { Flash } from "./flash.js";
 
 // Actions not yet wired push a Flash that tells the user which release will
@@ -20,10 +23,7 @@ const COMING_SOON: Partial<Record<ActionKey, string>> = {
   "install-to":       "Install-to wizard coming in v0.6",
   "adapt":            "Adapt wizard coming in v0.6",
   "update":           "Update wizard coming in v0.6",
-  "collect-drift":    "Collect-drift coming in v0.6",
   "artifacts":        "Per-artifact drilldown coming in v0.7",
-  "uninstall":        "Uninstall wizard coming in v0.6",
-  "delete-bundle":    "Delete-bundle coming in v0.7",
   "delete-files":     "Delete-files coming in v0.7",
   "copy-to":          "Copy-to coming in v0.7",
   "resolve-conflicts":"Conflict resolution coming in v0.6",
@@ -99,6 +99,23 @@ function handleAction(
   if (key === "validate") { nav.push(() => <ValidateScreen stack={stack} />); return; }
   if (key === "status-diff") { nav.push(() => <StatusDiffScreen stack={stack} />); return; }
   if (key === "collect") { nav.push(() => <CollectScreen stack={stack} />); return; }
+  if (key === "uninstall") { nav.push(() => <UninstallScreen stack={stack} />); return; }
+  if (key === "collect-drift") {
+    if (stack.kind !== "managed") {
+      nav.push(() => <Flash message="Collect drift only applies to pit-managed stacks" tone="warn" crumbs={["Stacks", stack.name, "…"]} />);
+      return;
+    }
+    nav.push(() => <CollectDriftScreen stack={stack} />);
+    return;
+  }
+  if (key === "delete-bundle") {
+    if (stack.kind !== "managed") {
+      nav.push(() => <Flash message="Delete bundle only applies to pit-managed stacks" tone="warn" crumbs={["Stacks", stack.name, "…"]} />);
+      return;
+    }
+    nav.push(() => <DeleteBundleScreen stack={stack} />);
+    return;
+  }
   if (key === "open") {
     // openFolder's 'error' event fires asynchronously — we can't know here
     // whether the launch actually succeeded. "Requested" means "asked the OS
